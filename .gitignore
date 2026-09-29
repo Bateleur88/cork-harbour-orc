@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# INFOMAR rasters and archives (rasters live on E:\Infomar, never commit)
+*.tif
+*.zip
+
+# Office lock files
+~$*
+
+# macOS
+.DS_Store
