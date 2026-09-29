@@ -73,6 +73,21 @@ order. They are large and are not in the repository.
     Contains Irish Public Sector Data (Geological Survey Ireland & Marine
     Institute) licensed under CC BY 4.0.
 
+## Tests
+
+    tests/test_marks.py       Safety tests for pages/marks/marks.php.
+
+Runs `marks.php` unmodified as real CGI requests against a throwaway day file
+holding three races, and checks those races are intact after each case: a fix
+or course that cannot be JSON-encoded, a damaged day file, a write failing
+part-way, the RO page moving a fix (device and recorder must survive), and 60
+fixes, 10 courses and 30 reads arriving at once. Run it before uploading any
+change to `marks.php`.
+
+Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
+package on Linux), found on PATH or through the `PHP_CGI` environment variable.
+Tested with PHP 8.4 on Windows; the live host may differ.
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 14 checks.
