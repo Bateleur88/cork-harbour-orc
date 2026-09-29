@@ -31,8 +31,6 @@ FLAGS = {
     'Curlane': 'Laid mark, position approximate.',
     'Dutchman': 'Laid mark, position approximate.',
     'EF4': 'Laid or movable race mark, position approximate.',
-    'E4': 'Position from a single secondary source.',
-    'Dosco': 'Position from a Navionics chart reading; the SI position is 11 m away.',
     'Grassy Mid': 'Midpoint standing in for the Grassy Walk line, not a mark.',
 }
 
@@ -112,6 +110,8 @@ def main():
                 if isinstance(v, str) and v.strip() and not v.strip().replace('.', '').isdigit():
                     d.setdefault('cond', v.strip())
                     continue
+                if pd.isna(v):          # blank: a two-round course has no R3, so fall back to R2
+                    continue
                 try:
                     d['printed'] = float(v)
                     break
@@ -132,7 +132,7 @@ def main():
                                     'Marine Institute) licensed under CC BY 4.0'},
             'marks': marks, 'pairs': pj, 'courses': courses}
     with open(a.out, 'w') as fh:
-        json.dump(snap, fh, separators=(',', ':'))
+        json.dump(snap, fh, separators=(',', ':'), allow_nan=False)   # NaN is not JSON: fail rather than write it
     print(f"{len(marks)} marks, {len(pj)} pairs, {len(courses)} courses -> {a.out} "
           f"({len(json.dumps(snap, separators=(',', ':'))) // 1024} KB)")
 

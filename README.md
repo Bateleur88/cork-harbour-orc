@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_14_REFINERY_PASSAGES.xlsx` |
-| SHA-256 | `cd9d7303e1324c1dfe184d2e9cd421c99b925eefed2a85d4b0c3da551f3f56c3` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_15_E4_CONFIRMED.xlsx` |
+| SHA-256 | `194ede57e41c52ec2c02a21da784bd94c6eb2f97e82a614f62652ac419ab2f84` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
