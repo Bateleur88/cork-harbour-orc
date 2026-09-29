@@ -15,6 +15,10 @@ still present and unchanged:
   3  write      a write that fails part-way leaves the day file unchanged, no .tmp left behind
   4  moved      the RO page re-posting a fix to another race keeps its device and recorder
   5  parallel   60 fixes, 10 courses and 30 reads at once: nothing lost, no reader sees a partial day
+  6  key        a missing key.js, or one still holding the CHANGE_ME placeholder, refuses every request,
+                even one sending an empty key; a wrong key is refused
+
+Each throwaway folder gets its own key.js with a test key; the real key is never in this repository.
 
 Exits non-zero if any test fails.
 """
@@ -31,7 +35,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MARKS_PHP = os.path.join(ROOT, 'pages', 'marks', 'marks.php')
 PHPCGI = os.environ.get('PHP_CGI') or shutil.which('php-cgi')
 DAY = '2026-09-21'
-KEY = 'RCYC_2026'
+KEY = 'test-key-not-the-real-one'
 DEVICE = '55ac7020-9dbc-4c45-a094-364f1bee1890'
 WORK = tempfile.mkdtemp(prefix='marks-test-')
 
@@ -50,10 +54,12 @@ def fixture():
     return marks, courses
 
 
-def setup(name):
+def setup(name, key=KEY):
     d = os.path.join(WORK, name)
     os.makedirs(os.path.join(d, 'data'))
     shutil.copy(MARKS_PHP, os.path.join(d, 'marks.php'))
+    if key is not None:                     # key.js exactly as the pages load it
+        open(os.path.join(d, 'key.js'), 'w').write(f"window.RACE_KEY='{key}';\n")
     marks, courses = fixture()
     json.dump(marks, open(day_file(d), 'w', encoding='utf-8'))
     json.dump(courses, open(course_file(d), 'w', encoding='utf-8'))
@@ -68,11 +74,11 @@ def load(p): return json.load(open(p, encoding='utf-8'))
 def leftovers(d): return [f for f in os.listdir(os.path.join(d, 'data')) if f.endswith('.tmp')]
 
 
-def req(d, method='POST', body=None, query=''):
+def req(d, method='POST', body=None, query='', key=KEY):
     raw = body if isinstance(body, bytes) else (json.dumps(body) if body is not None else '').encode()
     env = dict(os.environ, REQUEST_METHOD=method, SCRIPT_FILENAME=os.path.join(d, 'marks.php'),
                REDIRECT_STATUS='1', CONTENT_TYPE='application/json', CONTENT_LENGTH=str(len(raw)),
-               QUERY_STRING=query, HTTP_X_RACE_KEY=KEY, GATEWAY_INTERFACE='CGI/1.1')
+               QUERY_STRING=query, HTTP_X_RACE_KEY=key, GATEWAY_INTERFACE='CGI/1.1')
     p = subprocess.run([PHPCGI], input=raw, env=env, capture_output=True, timeout=60)
     head, _, out = p.stdout.partition(b'\r\n\r\n')
     status = 200
@@ -208,12 +214,33 @@ def t5_concurrent(run):
            f'reads seeing a partial day {partial}/30; {detail}')
 
 
+def t6_key():
+    """No usable key.js must lock everything, including a request that sends an empty key."""
+    cases = []
+    for label, file_key in (('no key.js', None), ('CHANGE_ME placeholder', 'CHANGE_ME')):
+        d = setup('t6-' + label.split()[0], key=file_key)
+        before = sha(day_file(d))
+        for sent in (KEY, '', 'CHANGE_ME'):
+            s_get, _ = req(d, 'GET', query=f'date={DAY}', key=sent)
+            s_post, j = req(d, body=fix('keytest'), key=sent)
+            cases.append((label, sent or "''", s_get, s_post, j.get('error')))
+        cases.append((label, 'file untouched', sha(day_file(d)) == before, None, None))
+    d = setup('t6-wrong')
+    s_wrong, _ = req(d, 'GET', query=f'date={DAY}', key='wrong-key')
+    s_right, _ = req(d, 'GET', query=f'date={DAY}')
+    locked = all(c[2] == 500 and c[3] == 500 for c in cases if c[1] != 'file untouched')
+    untouched = all(c[2] for c in cases if c[1] == 'file untouched')
+    report('6 key configuration', locked and untouched and s_wrong == 403 and s_right == 200,
+           f'missing or placeholder key.js: every GET/POST refused 500 ({cases[0][4]!r}) incl. empty key; '
+           f'files untouched {untouched}; wrong key {s_wrong}; right key {s_right}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
         return 2
     try:
-        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved):
+        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

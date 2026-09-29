@@ -88,6 +88,22 @@ Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
 package on Linux), found on PATH or through the `PHP_CGI` environment variable.
 Tested with PHP 8.4 on Windows; the live host may differ.
 
+## Deploying the pages
+
+    pages/course/course_v8.html  ->  /course/index.html
+    pages/record/record.html     ->  /record/index.html
+    pages/marks/marks.php        ->  /marks/marks.php
+    pages/marks/key.js           ->  /marks/key.js      (not in the repository)
+
+The race key is kept out of this public repository. Copy `pages/marks/key.example.js`
+to `key.js`, set the key, and upload it next to `marks.php`: both pages load it and
+`marks.php` reads it, so the key is changed in one place. Without a usable `key.js`,
+`marks.php` refuses every request. Each phone remembers the last key it saw, so a
+`key.js` that fails to load mid-race does not stop uploads.
+
+`marks.php` keeps its data in `/marks/data/` and writes an `.htaccess` there that
+denies web access. That only works on Apache or LiteSpeed; check it on the live server.
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 14 checks.

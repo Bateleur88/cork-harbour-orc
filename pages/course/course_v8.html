@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Course plot – race officer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="/marks/key.js"></script>
+<style>
+#map{height:360px;border-radius:12px;overflow:hidden}
+/* the page-wide svg rule collapses Leaflet's vector overlay, so undo it inside the map */
+.leaflet-container svg,.leaflet-pane svg{display:inline;width:auto;height:auto;max-width:none}
+.leaflet-container img{max-width:none}
+.windbox{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:8px;padding:4px 7px;font-size:.8rem;color:var(--warn);text-align:center;font-weight:700}
+.windarrow{font-size:1.3rem;line-height:1}
+#mapWrap{margin-top:8px}
+.viewTabs{display:flex;gap:8px;margin:8px 0}
+.viewTabs button{flex:1}
+.viewTabs button[aria-pressed="true"]{background:var(--sea);color:#fff;border-color:var(--sea)}
+:root{--paper:#F5F8FA;--surface:#FFFFFF;--ink:#0F2940;--muted:#5B6B7A;--line:#D5DEE6;--buoy:#FFC21A;--buoy-ink:#1A1400;--sea:#1D5C8C;--warn:#B3261E;--ok:#1E7A45;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;color-scheme:dark}
+[hidden]{display:none!important}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:17px;line-height:1.4;-webkit-text-size-adjust:100%}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px 40px}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--sea);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+h1{font-size:1.5rem;margin:0 0 2px}
+.lede{color:var(--muted);font-size:.95rem;margin:0 0 18px}
+h2{font-size:1.1rem;margin:26px 0 8px;padding-top:14px;border-top:1px solid var(--line)}
+h2:first-of-type{border-top:none;padding-top:0}
+textarea{width:100%;min-height:110px;padding:12px;border-radius:12px;border:2px solid var(--line);background:var(--surface);font-size:.95rem}
+.act{display:block;width:100%;margin-top:10px;padding:16px;border-radius:14px;border:none;background:var(--buoy);color:var(--buoy-ink);font-size:1.1rem;font-weight:700;box-shadow:0 3px 0 #C99400}
+.act:active{transform:translateY(2px);box-shadow:0 1px 0 #C99400}
+.ghost{display:block;width:100%;margin-top:10px;padding:13px;border-radius:12px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
+.status{margin:10px 0 0;min-height:1.3em;font-size:.95rem}.status.err{color:var(--warn)}.status.ok{color:var(--ok)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.tabs button{padding:10px 18px;border-radius:12px;border:2px solid var(--ink);background:transparent;font-weight:700}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:2px solid var(--buoy);background:var(--surface);border-radius:999px;padding:9px 14px;font-size:.95rem;text-align:left}
+.chip small{display:block;color:var(--muted);font-size:.78rem}
+.chip.manual{border-color:var(--line)}
+.chip.card{border-color:var(--sea);border-style:dashed}
+.chip.card.flagged{border-color:var(--warn)}
+.chip.split{border-color:var(--warn)}
+.laidNote .note{margin:8px 0}
+.laidNote button{margin:6px 8px 0 0;padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
+.laidSel{display:inline-block;width:auto;margin:2px 4px;padding:4px 8px;font-size:.9rem}
+.cardnote{color:var(--muted);font-size:.85rem;margin:6px 0}
+.cardnote.flag{color:var(--warn)}
+.viaTxt{color:var(--muted);font-size:.8rem}
+ol.course{list-style:none;margin:12px 0 0;padding:0;border-top:1px solid var(--line)}
+ol.course li{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.disc{width:30px;height:30px;border-radius:50%;background:var(--buoy);color:var(--buoy-ink);display:grid;place-items:center;font-weight:700;font-size:.9rem}
+.acts button{min-width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+.empty{color:var(--muted);padding:12px 0;border-bottom:1px solid var(--line)}
+.fields{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
+.fields label{flex:1 1 130px;font-size:.85rem;color:var(--muted)}
+.fields input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.95rem}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tfoot td{font-weight:700;border-bottom:none}
+.note{margin:8px 0;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:.95rem}
+.note.flag{border-color:var(--warn);color:var(--warn)}
+.plot{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px}
+svg{display:block;width:100%;height:auto}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.btn{display:flex;align-items:center;justify-content:center;padding:14px;border-radius:14px;font-weight:700;text-decoration:none;border:2px solid var(--ink);background:transparent;color:var(--ink)}
+.btn.wa{grid-column:1/-1;background:#1F8A4C;border-color:#1F8A4C;color:#fff;padding:16px}
+.btn[aria-disabled="true"]{opacity:.4;pointer-events:none}
+pre#out{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
+details.backup{margin-top:12px}
+details.backup summary{cursor:pointer;color:var(--muted);padding:6px 0}
+.starts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.starts button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.9rem}
+.starts button[aria-pressed="true"]{background:var(--sea);color:var(--paper)}
+.starts button{text-align:left}
+.starts button small{display:block;opacity:.8;font-weight:400;font-size:.78rem}
+.classpick{margin:0 0 12px;padding:10px 12px;border:2px solid var(--sea);border-radius:12px;background:var(--surface)}
+.pickhead{margin:0 0 6px;font-weight:700}
+.pick{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.pick input{width:22px;height:22px}
+.pick.taken{color:var(--muted)}
+.pick small{margin-left:auto;font-size:.8rem}
+.classpick .done{margin-top:10px;width:100%;padding:12px;border-radius:10px;border:none;background:var(--sea);color:var(--paper);font-weight:700}
+.classpick .rm{margin-top:8px;width:100%;padding:8px;background:none;border:none;color:var(--warn);text-decoration:underline}
+.starts .edit{border-style:dashed;font-weight:400}
+.newer{margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(255,194,26,.18);border:1px solid var(--buoy);font-size:.88rem}
+.newer.during{background:transparent;border-color:var(--sea);color:var(--sea)}
+.newer button{margin-left:6px;padding:4px 10px;border-radius:8px;border:1px solid currentColor;background:var(--surface);font-size:.85rem;font-weight:700}
+.disc.line{background:var(--ink);color:var(--paper)}
+.warnTxt{color:var(--warn)!important}
+select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.endSel{display:inline-block;width:auto;margin:2px 4px;padding:4px 8px;font-size:.9rem}
+.movefix{margin:0 0 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:8px 12px}
+.movefix summary{cursor:pointer;color:var(--muted);font-size:.92rem}
+.moverow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.moverow small{color:var(--muted)}
+.moverow select{width:auto;margin:0;padding:8px}
+.moverow button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
+.clear{margin-top:24px;background:none;border:none;color:var(--warn);text-decoration:underline;padding:8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Course plot</h1>
+  <p class="lede">Get the marks from the RIBs, tap them in rounding order, and get the legs with bearings and distances.</p>
+
+  <h2>1 · Marks from the RIBs</h2>
+  <div class="fields" style="margin-top:0">
+    <label>Race day<input id="day" type="date"></label>
+  </div>
+  <button class="act" id="pull">Get latest marks</button>
+  <p class="hint" style="color:var(--muted);font-size:.85rem;margin:6px 0 0">After the first tap it refreshes by itself every 30 seconds.</p>
+  <p class="status" id="readStatus" role="status" aria-live="polite"></p>
+  <details class="backup">
+    <summary>Backup: paste a WhatsApp message instead</summary>
+    <textarea id="paste" placeholder="Paste one or more WhatsApp messages here, then tap Read marks." style="margin-top:10px"></textarea>
+    <button class="ghost" id="read">Read marks</button>
+  </details>
+  <button class="ghost" id="addManual">Add a mark by typing its position</button>
+
+  <button class="ghost" id="recCB">Record committee boat here</button>
+  <p class="status" id="cbStatus" role="status" aria-live="polite"></p>
+
+  <h2>2 · Import a harbour course</h2>
+  <p class="cardnote" id="cardSrc"></p>
+  <div class="fields">
+    <label>Course<select id="cardCourse"></select></label>
+  </div>
+  <div class="fields">
+    <label>Card start<select id="cardStart"></select></label>
+    <label>Card finish<select id="cardFinish"></select></label>
+  </div>
+  <div id="cardPreview"></div>
+  <button class="act" id="cardImport">Import this course</button>
+  <p class="status" id="cardStatus" role="status" aria-live="polite"></p>
+
+  <h2>3 · Build the course</h2>
+  <div class="tabs" id="tabs" role="group" aria-label="Race"></div>
+  <div class="starts" id="starts" role="group" aria-label="Start"></div>
+  <div class="classpick" id="classPick" hidden></div>
+  <div class="fields" style="margin:0 0 12px"><label>Start time for this start<input id="startTime" type="time"></label></div>
+  <button class="ghost" id="copyStart" hidden></button>
+  <div class="chips" id="bank"></div>
+  <details class="movefix" id="moveWrap"><summary>Fix recorded under the wrong race?</summary><div id="moveBox"></div></details>
+  <div class="laidNote" id="laidNote" role="status" aria-live="polite"></div>
+  <ol class="course" id="course"></ol>
+  <div class="fields">
+    <label>Finish<select id="finishSel"><option value="start">Start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
+  </div>
+  <div class="fields">
+    <label>Wind direction °M<input id="twd" type="number" min="0" max="359" inputmode="numeric" placeholder="optional"></label>
+    <label>Wind speed kn<input id="tws" type="number" min="0" step="0.5" inputmode="decimal" placeholder="optional"></label>
+  </div>
+
+  <h2>4 · Legs</h2>
+  <div id="legs"></div>
+  <div class="plot" id="plotWrap" hidden><div class="viewTabs"><button type="button" id="viewSketch" aria-pressed="true">Sketch</button><button type="button" id="viewChart" aria-pressed="false">Chart</button></div><div id="plot"></div><div id="mapWrap" hidden><div id="map"></div></div><p class="status" id="mapStatus" role="status" aria-live="polite"></p></div>
+
+  <h2>5 · Wind shift</h2>
+  <p class="lede">Enter the new wind direction to get the mark moves for a true beat.</p>
+  <div class="fields">
+    <label>New wind direction °M<input id="newWind" type="number" min="0" max="359" inputmode="numeric" placeholder="e.g. 215"></label>
+  </div>
+  <div id="shift"></div>
+  <div class="row" id="shiftSend" hidden>
+    <a class="btn wa" id="shiftWa" target="_blank" rel="noopener">Pick a chat in WhatsApp</a>
+    <button class="btn" id="shiftCopy" style="grid-column:1/-1">Copy move</button>
+  </div>
+
+  <h2>6 · Send</h2>
+  <pre id="out"></pre>
+  <div class="row">
+      <a class="btn wa" id="wa" target="_blank" rel="noopener">Pick a chat in WhatsApp</a>
+    <button class="btn" id="share">Share…</button>
+    <button class="btn" id="copy">Copy text</button>
+  </div>
+
+  <button class="clear" id="clear">Clear everything</button>
+</div>
+<script>
+(function(){
+/* ---------- always run the newest copy of this page ----------
+   Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
+   if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
+const PAGE_VERSION='2026-09-29.8';
+(async()=>{try{
+  const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
+  const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
+  if(m&&m[1]!==PAGE_VERSION){
+    let done=false;try{done=sessionStorage.getItem('pv-'+m[1])==='1';sessionStorage.setItem('pv-'+m[1],'1');}catch(_){}
+    if(!done)location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));
+  }
+}catch(_){}})();
+
+/* ---------- settings: must match marks.php ---------- */
+const ENDPOINT='/marks/marks.php';
+/* The race key comes from /marks/key.js, which is uploaded to the server but never committed (the repository is
+   public). The last key seen is kept on this phone, so a key.js that fails to load mid-race does not stop uploads. */
+const RACE_KEY=(()=>{let k=typeof window.RACE_KEY==='string'&&window.RACE_KEY!=='CHANGE_ME'?window.RACE_KEY:'';
+  try{if(k)localStorage.setItem('race-key',k);else k=localStorage.getItem('race-key')||'';}catch(e){}return k;})();
+const K='course-plot-v1';
+const $=id=>document.getElementById(id);
+const pad=(n,w)=>String(n).padStart(w,'0');
+function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,startClasses:[[],[],[]],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{}};}
+function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
+function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
+let S=load(),text='';
+
+
+/* ---------- geometry (rhumb line) ---------- */
+const R=6371000, rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
+function rhumb(a,b){
+  const f1=rad(a.lat), f2=rad(b.lat); let dl=rad(b.lon-a.lon);
+  if(Math.abs(dl)>Math.PI) dl-= (dl>0?2:-2)*Math.PI;
+  const df=f2-f1;
+  const dps=Math.log(Math.tan(Math.PI/4+f2/2)/Math.tan(Math.PI/4+f1/2));
+  const q=Math.abs(dps)>1e-12?df/dps:Math.cos(f1);
+  const d=Math.sqrt(df*df+q*q*dl*dl)*R;
+  let brg=deg(Math.atan2(dl,dps)); brg=(brg+360)%360;
+  return {m:d, nm:d/1852, brg};
+}
+function twa(brg,twd){let a=Math.abs(((brg-twd+540)%360)-180);return a;}
+function dest(a,brgT,d){
+  const f1=rad(a.lat), th=rad(brgT), df=d/R*Math.cos(th);
+  let f2=f1+df;
+  const dps=Math.log(Math.tan(Math.PI/4+f2/2)/Math.tan(Math.PI/4+f1/2));
+  const q=Math.abs(dps)>1e-12?df/dps:Math.cos(f1);
+  const dl=d/R*Math.sin(th)/q;
+  return {lat:deg(f2), lon:a.lon+deg(dl)};
+}
+function legType(a){return a<=50?'beat':a>=140?'run':'reach';}
+function ddm(v,isLat){const h=isLat?(v>=0?'N':'S'):(v>=0?'E':'W');const a=Math.abs(v);let d=Math.floor(a),ms=((a-d)*60).toFixed(3);if(ms==='60.000'){d++;ms='0.000';}return pad(d,isLat?2:3)+'°'+(parseFloat(ms)<10?'0':'')+ms+"'"+h;}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- parsing ---------- */
+function parsePos(str){
+  str=str.replace(/[–—]/g,'-').trim();
+  let m=str.match(/(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*'?\s*([NSns])[,\s]+(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*'?\s*([EWew])/);
+  if(m){const lat=(+m[1]+ +m[2]/60)*(/s/i.test(m[3])?-1:1), lon=(+m[4]+ +m[5]/60)*(/w/i.test(m[6])?-1:1);return{lat,lon};}
+  m=str.match(/(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/);
+  if(m)return{lat:+m[1],lon:+m[2]};
+  return null;
+}
+function readPaste(txt){
+  let race=1, added=0, title=S.title, date=S.date;
+  const hdr=txt.match(/^\s*\*(.+?)\s*[–-]\s*(.+?)\*/m);
+  if(hdr){title=hdr[1].trim();date=hdr[2].trim();}
+  txt.split(/\r?\n/).forEach(line=>{
+    line=line.trim(); if(!line||/^```/.test(line))return;
+    let m=line.match(/\*?Race\s+(\d+)/i);
+    if(m&&!/[NS]['\d]/.test(line)){race=+m[1];return;}
+    // CSV: race,"name",fix,lat,lon,acc,time
+    m=line.match(/^(\d+)\s*,\s*"?([^",]+)"?\s*,\s*(\d+)\s*,\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*,\s*(\d+)?\s*,\s*([\d:]+)?/);
+    if(m){push({race:+m[1],name:m[2].trim(),fix:+m[3],lat:+m[4],lon:+m[5],acc:m[6]?+m[6]:null,time:m[7]||''});added++;return;}
+    if(/^race\s*,\s*mark/i.test(line))return;
+    // text: Name – 53°08.728'N 007°00.705'W (±4 m, 19:15)
+    const pos=parsePos(line);
+    if(pos){
+      const nm=line.split(/\s[–-]\s/)[0].replace(/^\d+[.)]\s*/,'').trim();
+      const fixm=nm.match(/\(?moved,?\s*fix\s*(\d+)\)?/i)||line.match(/fix\s*(\d+)/i);
+      const t=line.match(/(\d{1,2}:\d{2})/);
+      const a=line.match(/±\s*(\d+)/);
+      push({race,name:nm.replace(/\s*\((moved[^)]*)\)/i,'').trim(),fix:fixm?+fixm[1]:1,lat:pos.lat,lon:pos.lon,acc:a?+a[1]:null,time:t?t[1]:''});
+      added++;
+    }
+  });
+  S.title=title;S.date=date;
+  return added;
+}
+function cardId(race,nm){return 'card|'+race+'|'+String(nm).toLowerCase();}
+function push(m){
+  // card marks get their own ids: a RIB fix of the same name must never overwrite one, nor be overwritten by it
+  m.id=m.card?cardId(m.race,m.card):m.race+'|'+m.name.toLowerCase()+'|'+m.fix;
+  const i=S.marks.findIndex(x=>x.id===m.id);
+  if(i>=0)S.marks[i]=m; else S.marks.push(m);
+}
+function races(){const mx=Math.max(3,...S.marks.map(m=>m.race));return Array.from({length:mx},(_,i)=>i+1);}
+function bank(){
+  // this race's fixes, plus the latest fix of any mark laid in an earlier race and not re-recorded since
+  const here=S.marks.filter(m=>m.race===S.race);
+  const names=new Set(here.map(m=>m.name.toLowerCase()));
+  const carried={};
+  S.marks.filter(m=>m.race<S.race).forEach(m=>{const k=m.name.toLowerCase();if(names.has(k))return;
+    const c=carried[k]; if(!c||m.race>c.race||(m.race===c.race&&m.fix>c.fix))carried[k]=m;});
+  return Object.values(carried).sort((a,b)=>a.race-b.race).concat(here);
+}
+const CLASSES=['Class 1 Spinnaker','Class 2 Spinnaker','Class 3 Spinnaker','Class 1 Non Spinnaker','Class 2 Non Spinnaker','Class 3 Non Spinnaker'];
+function shortClass(c){return c.replace('Class ','').replace(' Non Spinnaker',' NS').replace(' Spinnaker',' Spin');}
+if(!Array.isArray(S.startClasses)||!S.startClasses.length)S.startClasses=[[],[],[]];
+S.starts=S.startClasses.map((_,i)=>'Start '+(i+1));
+let classOpen=false;
+if(typeof S.start!=='number')S.start=0;
+Object.keys(S.courses||{}).forEach(k=>{if(!k.includes('|')){S.courses[k+'|0']=S.courses[k];delete S.courses[k];}});
+function ckey(r,st){return r+'|'+st;}
+function course(r,st){const k=ckey(r??S.race,st??S.start);if(!S.courses[k])S.courses[k]=[];
+  S.courses[k]=S.courses[k].map(e=>typeof e==='string'?{id:e,side:''}:e);
+  return S.courses[k];}
+if(!S.startTimes||typeof S.startTimes!=='object')S.startTimes={};
+Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).filter(e=>{const id=typeof e==='string'?e:e.id;const nm=(id.split('|')[1]||'');return !isLineMark(nm);});});
+// card marks imported before they had their own ids: move them, and the course entries pointing at them
+{let moved=false;
+ S.marks.forEach(m=>{if(!m.card||m.id.indexOf('card|')===0)return;const nid=cardId(m.race,m.card);
+  Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).map(e=>{const id=typeof e==='string'?e:e.id;
+    return id===m.id?{id:nid,side:typeof e==='string'?'':(e.side||'')}:e;});});
+  m.id=nid;moved=true;});
+ if(moved)save();}
+['laidSel','laidNo','laidAck'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+function startTime(){return S.startTimes[ckey(S.race,S.start)]||'';}
+function mins(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;}
+function newerFix(m){
+  if(!m||m.laidSt)return null;        // a laid mark follows its own fix choice, below
+  const k=m.name.toLowerCase(); let best=null;
+  S.marks.forEach(x=>{
+    if(x.name.toLowerCase()!==k||x.race>S.race||x.id===m.id)return;
+    const later=x.race>m.race||(x.race===m.race&&x.fix>m.fix);
+    if(!later)return;
+    if(!best||x.race>best.race||(x.race===best.race&&x.fix>best.fix))best=x;
+  });
+  return best;
+}
+function startName(){const c=S.startClasses[S.start]||[];return 'Start '+(S.start+1)+(c.length?' ('+c.join(', ')+')':'');}
+function markById(id){const m=S.marks.find(x=>x.id===id);return isLaidCard(m)?resolveLaid(m):m;}
+
+/* ---------- who recorded a fix ----------
+   Fixes from the RIB page carry device (a random id per phone) and recorder (a typed name, may be empty).
+   Older fixes, pasted ones and this page's own have no device: they are shown as unattributed, never guessed.
+   Two fixes of one mark in one race from different phones are two opinions of where it is, so they are flagged. */
+function whoOf(m){if(m.card||m.pending)return '';if(!m.device)return 'unattributed';return m.recorder||'unnamed phone';}
+function accOf(m){return typeof m.acc==='number'&&m.acc>0?'±'+Math.round(m.acc)+' m':'';}
+function sameMark(m){const k=m.name.toLowerCase();return S.marks.filter(x=>x.race===m.race&&!x.card&&x.name.toLowerCase()===k).sort((a,b)=>a.fix-b.fix);}
+function phoneCount(m){return new Set(sameMark(m).filter(x=>x.device).map(x=>x.device)).size;}
+
+/* ---------- club laid marks ----------
+   A laid mark (laid: true in the snapshot, from the workbook's Marks Type) is laid afresh each race day, so the
+   RIB's fix for the day takes precedence over the card position. Only a fix with exactly the mark's name is used
+   automatically (case, spaces and punctuation ignored). A near miss such as "Curlane Bank" is only suggested:
+   Curlane Bank is also a name of No.8 and No.10. The latest fix wins; the RO can pin another, or the card position.
+   Any change of position is shown with its effect on the course, never applied silently. */
+const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function isLaidCard(m){return !!(m&&m.card&&CARD.marks[m.card]&&CARD.marks[m.card].laid);}
+function laidNames(){return Object.keys(CARD.marks).filter(k=>CARD.marks[k].laid);}
+function fkey(x){return x.sid?'s:'+x.sid:'l:'+x.id;}
+function ribFix(x){return !x.card&&!x.pending&&!x.virtual&&x.acc!==0;}       // a position typed on this page (±0) is not a RIB fix
+function laterFix(a,b){return a.race!==b.race?a.race>b.race:(a.tms&&b.tms?a.tms>b.tms:a.fix>b.fix);}
+function lev(a,b){const d=Array.from({length:b.length+1},(_,j)=>j);
+  for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t;}}
+  return d[b.length];}
+function nearName(n,k){return !!n&&n!==k&&((n.length>=4&&(n.includes(k)||k.includes(n)))||lev(n,k)<=2);}
+function laidState(cm){
+  const race=cm.race, k=norm(cm.card), key=race+'|'+k, sel=S.laidSel[key]||'auto';
+  const others=laidNames().map(norm).filter(x=>x!==k);
+  const cand=S.marks.filter(x=>ribFix(x)&&x.race<=race).sort((a,b)=>laterFix(a,b)?1:-1);
+  const fixes=cand.filter(x=>norm(x.name)===k);
+  const near=cand.filter(x=>nearName(norm(x.name),k)&&!others.includes(norm(x.name)));
+  const latest=fixes[fixes.length-1]||null;
+  let use=latest, mode='auto';
+  if(sel==='card'){use=null;mode='card';}
+  else if(sel!=='auto'){const f=fixes.concat(near).find(x=>fkey(x)===sel);if(f){use=f;mode='pinned';}else mode='lost';}
+  const newer=mode!=='auto'&&latest&&latest!==use&&(!use||laterFix(latest,use))?latest:null;
+  const suggest=near.filter(x=>x!==use&&!(S.laidNo[key]||[]).includes(fkey(x)));
+  const phones=new Set(fixes.filter(x=>x.device&&(!use||x.race===use.race)).map(x=>x.device)).size;
+  return {key,sel,mode,use,latest,fixes,near,suggest,newer,phones};
+}
+function resolveLaid(cm){const st=laidState(cm),u=st.use;
+  return Object.assign({},cm,{lat:u?u.lat:cm.lat,lon:u?u.lon:cm.lon,acc:u?u.acc:null,atFix:!!u,laidSt:st});}
+function fixLabel(x,race){return [x.time,accOf(x),whoOf(x)].filter(Boolean).join(' · ')+(x.race<race?' (Race '+x.race+')':'');}
+function laidTag(m){return m&&m.laidSt?(m.atFix?' (RIB fix '+m.laidSt.use.time+')':' (planning position)'):'';}
+function laidSrc(m){const u=m.laidSt.use;return u?'RIB fix '+fixLabel(u,m.race):'planning position until laid';}
+function laidCur(m){const u=m.laidSt.use;
+  return {src:u?fkey(u):'card',lat:m.lat,lon:m.lon,label:u?'the RIB fix at '+fixLabel(u,m.race):'the card position'};}
+function laidPicker(m){
+  const st=m.laidSt, pool=st.fixes.concat(st.near.filter(x=>fkey(x)===st.sel));
+  const opt=(v,t)=>'<option value="'+esc(v)+'"'+(st.sel===v?' selected':'')+'>'+esc(t)+'</option>';
+  return 'Position <select class="laidSel" data-k="'+esc(st.key)+'" aria-label="'+esc(m.name)+' position">'+
+    opt('auto',st.latest?'auto (latest: '+fixLabel(st.latest,m.race)+')':'auto (no RIB fix yet)')+
+    pool.map(x=>opt(fkey(x),(norm(x.name)!==norm(m.card)?'"'+x.name+'" ':'')+fixLabel(x,m.race))).join('')+
+    opt('card','card position (planning only)')+'</select>';
+}
+/* one leg's geometry. Between two card marks the card's route is used; if either end is a laid mark at a RIB fix,
+   the route is kept and only the segment touching that mark is measured to the fix, which INFOMAR never checked. */
+function legGeom(a,b){
+  let r=rhumb(a,b), via='', fixNote='';
+  const p=a.card&&b.card?CARD.pairs[a.card+'|'+b.card]:null;
+  if(p){
+    if(p.segs.length>1)via=' via '+p.segs.slice(0,-1).map(s=>s.to).join(' → ');
+    if(!a.atFix&&!b.atFix)r={nm:p.nm,m:p.nm*1852,brg:p.segs[0].brg};
+    else{
+      const nodes=[a].concat(p.segs.slice(0,-1).map(s=>CARD.marks[s.to]),[b]);
+      if(nodes.every(Boolean)){let nm=0,brg=null;
+        p.segs.forEach((s,i)=>{const own=(i===0&&a.atFix)||(i===p.segs.length-1&&b.atFix);
+          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;});
+        r={nm,m:nm*1852,brg};}
+      fixNote='to RIB fix, not depth-checked';
+    }
+  }else if(a.atFix||b.atFix)fixNote='to RIB fix, not depth-checked';
+  return {r,via,fixNote};
+}
+let laidPending={};
+function laidNotice(pts,total){
+  const host=$('laidNote'); laidPending={};
+  const seen=new Set(), changed={}, sugg=[]; let dirty=false;
+  pts.forEach(p=>{const st=p.laidSt; if(!st||seen.has(st.key))return; seen.add(st.key);
+    const cur=laidCur(p), ack=S.laidAck[st.key];
+    if(!ack){S.laidAck[st.key]=cur;dirty=true;}
+    else if(ack.src!==cur.src||ack.lat!==cur.lat||ack.lon!==cur.lon){changed[st.key]={p,ack,cur};laidPending[st.key]=cur;}
+    st.suggest.forEach(x=>sugg.push({p,x}));});
+  if(dirty)save();
+  const bits=[], keys=Object.keys(changed);
+  if(keys.length){
+    const oldPts=pts.map(p=>{const c=p.laidSt&&changed[p.laidSt.key];return c?Object.assign({},p,{lat:c.ack.lat,lon:c.ack.lon,atFix:c.ack.src!=='card'}):p;});
+    let old=0; for(let i=0;i<oldPts.length-1;i++)old+=legGeom(oldPts[i],oldPts[i+1]).r.nm;
+    keys.forEach(k=>{const c=changed[k];
+      bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was '+esc(c.ack.label)+'. It has moved '+Math.round(rhumb(c.ack,c.cur).m)+' m, so the legs to and from it have changed.</p>');});
+    bits.push('<p class="note flag">Course '+old.toFixed(2)+' → '+total.toFixed(2)+' nm. <button data-a="ack">OK</button></p>');
+  }
+  sugg.forEach(({p,x})=>bits.push('<p class="note">Possible '+esc(p.card)+' fix: "'+esc(x.name)+'" '+esc(fixLabel(x,p.race))+
+    '. Not used, because the name is not exactly '+esc(p.card)+'.<br><button data-a="use" data-k="'+esc(p.laidSt.key)+'" data-f="'+esc(fkey(x))+'">Use this fix</button>'+
+    '<button data-a="no" data-k="'+esc(p.laidSt.key)+'" data-f="'+esc(fkey(x))+'">Not this mark</button></p>'));
+  host.innerHTML=bits.join('');
+}
+
+
+/* ---------- chart view: OpenStreetMap base + OpenSeaMap seamarks, as the Numbered Leg Verifier uses ---------- */
+let LMap=null, LRoute=null, LMarks=null, LWind=null, leafletTried=false, chartOn=false;
+function loadLeaflet(){
+  if(window.L)return Promise.resolve(true);
+  if(leafletTried&&!window.L)return Promise.resolve(false);
+  leafletTried=true;
+  return new Promise(res=>{
+    const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const sc=document.createElement('script');sc.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    sc.onload=()=>res(true);sc.onerror=()=>res(false);
+    document.head.appendChild(sc);
+  });
+}
+async function setView(chart){
+  chartOn=chart;
+  $('viewChart').setAttribute('aria-pressed',chart?'true':'false');
+  $('viewSketch').setAttribute('aria-pressed',chart?'false':'true');
+  $('plot').hidden=chart; $('mapWrap').hidden=!chart;
+  S.chart=chart; commit();
+  if(!chart)return;
+  $('mapStatus').className='status';
+  $('mapStatus').textContent='Loading chart…';
+  const ok=await loadLeaflet();
+  if(!ok){                                  /* no signal: fall back to the sketch rather than leave an empty box */
+    chartOn=false; S.chart=false; commit();
+    $('viewChart').setAttribute('aria-pressed','false'); $('viewSketch').setAttribute('aria-pressed','true');
+    $('plot').hidden=false; $('mapWrap').hidden=true;
+    $('mapStatus').className='status err';
+    $('mapStatus').textContent='The chart needs a data connection, so the sketch is shown instead.';
+    return;
+  }
+  if(!LMap){
+    LMap=L.map('map').setView([51.82,-8.27],13);
+    L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(LMap);
+    L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',{maxZoom:18,attribution:'OpenSeaMap'}).addTo(LMap);
+    LRoute=L.layerGroup().addTo(LMap); LMarks=L.layerGroup().addTo(LMap);
+  }
+  $('mapStatus').textContent='';
+  LMap.whenReady(()=>{LMap.invalidateSize();drawChart();});
+  setTimeout(()=>{LMap.invalidateSize();drawChart();},120);
+  setTimeout(()=>{LMap.invalidateSize();drawChart();},600);
+}
+/* the chart draws the physical route: card passages are shown leg by leg through their waypoints */
+function chartPath(cs){
+  const out=[];
+  for(let i=0;i<cs.length;i++){
+    out.push({lat:cs[i].lat,lon:cs[i].lon,name:cs[i].name,wp:false,atFix:!!cs[i].atFix});
+    const a=cs[i],b=cs[i+1];
+    if(b&&a.card&&b.card){
+      const p=CARD.pairs[a.card+'|'+b.card];
+      if(p&&p.segs.length>1)p.segs.slice(0,-1).forEach(sg=>{
+        const m=CARD.marks[sg.to];
+        if(m)out.push({lat:m.lat,lon:m.lon,name:sg.to,wp:true});
+      });
+    }
+  }
+  return out;
+}
+function drawChart(){
+  if(!LMap||!chartOn)return;
+  try{ drawChartInner(); }
+  catch(e){ $('mapStatus').className='status err'; $('mapStatus').textContent='Chart could not be drawn: '+e.message; }
+}
+function drawChartInner(){
+  LRoute.clearLayers(); LMarks.clearLayers();
+  if(LWind){LWind.remove();LWind=null;}
+  let cs=course().filter(e=>markById(e.id)).map(e=>markById(e.id));
+  if(!cs.length){$('mapStatus').textContent='Nothing to draw yet.';return;}
+  const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)], sl0=startLine(), fl0=finishLine();
+  const cardEnd=nm=>{const m=nm&&CARD.marks[nm];return m?{name:nm,lat:m.lat,lon:m.lon,card:nm}:null;};
+  if(!sl0&&ccfg&&cardEnd(ccfg.s))cs=[cardEnd(ccfg.s)].concat(cs);
+  if(!fl0&&ccfg&&cardEnd(ccfg.f))cs=cs.concat([cardEnd(ccfg.f)]);
+  const path=chartPath(cs).filter(p=>isFinite(p.lat)&&isFinite(p.lon)), pts=path.map(p=>[p.lat,p.lon]);
+  if(!pts.length){$('mapStatus').textContent='No positions to draw.';return;}
+  $('mapStatus').className='status'; $('mapStatus').textContent='';
+  if(pts.length>1)L.polyline(pts,{color:'#2458a6',weight:4,opacity:.9}).addTo(LRoute);
+  const sl=startLine(), fl=finishLine();
+  [sl,fl].forEach((ln,i)=>{ if(ln)L.polyline([[ln.cb.lat,ln.cb.lon],[ln.pin.lat,ln.pin.lon]],
+      {color:'#111',weight:2,dashArray:'6,5'}).bindTooltip(i?'Finish line':'Start line',{sticky:true}).addTo(LRoute); });
+  const seen=new Set();
+  path.forEach(p=>{
+    const key=p.name+'|'+p.lat.toFixed(5);
+    if(seen.has(key))return; seen.add(key);
+    const card=CARD.marks[p.name], flagged=card&&card.flag&&!p.atFix;
+    L.circleMarker([p.lat,p.lon],{radius:p.wp?4:6,color:p.wp?'#5b2ca3':(flagged?'#b26a00':'#2458a6'),
+      weight:2,fillOpacity:p.wp?.6:1})
+     .bindTooltip(p.name+(p.wp?' (routing waypoint)':'')+(p.atFix?' (RIB fix)':'')+(flagged?' ⚠ '+card.flag:''),{sticky:true})
+     .addTo(LMarks);
+  });
+  if(S.twd!==''){                                   /* wind arrow, same convention as the sketch: °M shown, arrow drawn true */
+    const tM=+S.twd, tT=((tM-varW())%360+360)%360;
+    const w=L.control({position:'topright'});
+    w.onAdd=function(){const d=L.DomUtil.create('div','windbox');
+      d.innerHTML='<div class="windarrow" style="transform:rotate('+((tT+180)%360)+'deg)">&#10148;</div><span>wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</span>';
+      return d;};
+    w.addTo(LMap); LWind=w;
+  }
+  const b=pts.concat(sl?[[sl.cb.lat,sl.cb.lon],[sl.pin.lat,sl.pin.lon]]:[]).concat(fl?[[fl.cb.lat,fl.cb.lon],[fl.pin.lat,fl.pin.lon]]:[]);
+  if(b.length)LMap.fitBounds(b,{padding:[35,35]});
+}
+
+/* ---------- harbour course card (imported from the ORC master workbook) ---------- */
+const CARD={"meta":{"source":"RCYC_Cork_Harbour_ORC_MASTER_v3_16_MARK_TYPES.xlsx","sha256":"3110fe964b2518c555824b8812c8b638a8ebddbfae69a7473ae6b5d94306211c","generated":"2026-09-29","criterion":"Physical legs validated against INFOMAR 2 m LAT grids, minimum 1.5 m at LAT","attribution":"Contains Irish Public Sector Data (Geological Survey Ireland & Marine Institute) licensed under CC BY 4.0"},"marks":{"White Bay":{"lat":51.80635,"lon":-8.254067,"full":"White Bay","type":"Club laid mark; laid afresh each race day, the RIB fix is authoritative","laid":true,"flag":"Club laid mark: the RIB's fix for the day takes precedence; this position is a planning approximation."},"Curlane":{"lat":51.8241,"lon":-8.287567,"full":"Curlane","type":"Club laid mark; laid afresh each race day, the RIB fix is authoritative (2026 RCYC Course Card, Course 72 note: \"'Curlane' will be a mark laid on the Curlane Bank\")","laid":true,"flag":"Club laid mark: the RIB's fix for the day takes precedence; this position is a planning approximation."},"E1":{"lat":51.794517,"lon":-8.258917,"full":"E1 / Chicago Knoll","type":"Starboard lateral"},"W1":{"lat":51.79515,"lon":-8.2678,"full":"W1","type":"Starboard lateral"},"E2":{"lat":51.79265,"lon":-8.261483,"full":"E2 / Outer Harbour Rock","type":"Port lateral"},"W2":{"lat":51.794867,"lon":-8.2723,"full":"W2","type":"Port lateral"},"No.3":{"lat":51.802167,"lon":-8.26025,"full":"No.3 / White Bay","type":"Starboard lateral"},"W4":{"lat":51.800517,"lon":-8.26565,"full":"W4 / No.4","type":"Port lateral"},"No.5":{"lat":51.8171,"lon":-8.270083,"full":"No.5 / Dogsnose Bank","type":"Starboard lateral"},"No.6":{"lat":51.805533,"lon":-8.265367,"full":"No.6 / Rams Head Bank","type":"Port lateral"},"No.7":{"lat":51.827067,"lon":-8.26755,"full":"No.7 / Corkbeg","type":"Starboard lateral"},"No.8":{"lat":51.821167,"lon":-8.277183,"full":"No.8 / Curlane Bank","type":"Port lateral"},"No.9":{"lat":51.837783,"lon":-8.257617,"full":"No.9 / East Channel","type":"Starboard lateral"},"No.10":{"lat":51.829383,"lon":-8.275317,"full":"No.10 / Curlane Bank","type":"Port lateral"},"No.11":{"lat":51.844033,"lon":-8.258717,"full":"No.11 / Fairway","type":"Starboard lateral"},"No.12":{"lat":51.8327,"lon":-8.269667,"full":"No.12 / Spike Island","type":"Port lateral"},"No.13":{"lat":51.849483,"lon":-8.26545,"full":"No.13 / Fairway","type":"Starboard lateral"},"No.14":{"lat":51.835417,"lon":-8.26735,"full":"No.14 / Spike Island","type":"Port lateral"},"No.16":{"lat":51.844883,"lon":-8.26425,"full":"No.16 / Fairway","type":"Port lateral"},"No.18":{"lat":51.848767,"lon":-8.27155,"full":"No.18 / Fairway","type":"Port lateral"},"No.20":{"lat":51.847133,"lon":-8.288083,"full":"No.20 / Cobh Road","type":"Port lateral"},"Cage":{"lat":51.813633,"lon":-8.283167,"full":"Cage / C1","type":"Starboard lateral"},"Harp":{"lat":51.786667,"lon":-8.238,"full":"Harp / Mark","type":"Permanently moored race mark (RCYC Keelboat Autumn League SI 2026, para 36: \"yellow permanently laid\"; the SI says the marks \"may be in these approximate locations\", so permanently moored describes the mooring, not the accuracy of the coordinate)","flag":"Two current 2026 RCYC documents give this mark 83 m apart; the Autumn League SI position is used."},"Ringabella":{"lat":51.773167,"lon":-8.296333,"full":"Ringabella / Mark","type":"Permanently moored race mark (RCYC Keelboat Autumn League SI 2026, para 36: \"yellow permanently laid\"; the SI says the marks \"may be in these approximate locations\", so permanently moored describes the mooring, not the accuracy of the coordinate)","flag":"Two current 2026 RCYC documents give this mark 408 m apart; the Autumn League SI position is used."},"Dutchman":{"lat":51.7847,"lon":-8.283133,"full":"Dutchman","type":"Club laid mark; laid afresh each race day, the RIB fix is authoritative","laid":true,"flag":"Club laid mark: the RIB's fix for the day takes precedence; this position is a planning approximation."},"EF2":{"lat":51.84385,"lon":-8.2373,"full":"EF2 / East Channel","type":"Port lateral"},"E4":{"lat":51.798842,"lon":-8.262568,"full":"E4 / North Cardinal","type":"North cardinal"},"Grassy Mid":{"lat":51.811908,"lon":-8.283267,"full":"Grassy Mid","type":"Start/finish modelling point","flag":"Midpoint standing in for the Grassy Walk line, not a mark."},"Dosco":{"lat":51.82085,"lon":-8.263683,"full":"Dosco","type":"Permanently moored race mark (RCYC Keelboat Autumn League SI 2026, para 36: \"yellow permanently laid\"; the SI says the marks \"may be in these approximate locations\", so permanently moored describes the mooring, not the accuracy of the coordinate; listed there as a Port of Cork laid race mark, Port ownership not established from a Port of Cork source)"},"EF4":{"lat":51.845333,"lon":-8.245667,"full":"EF4","type":"Permanently moored race mark (confirmed by Pat, 29 Sep 2026)","flag":"Permanently moored race mark; position from a published RCYC reference only."},"RW_Temblebreedy_Pier":{"lat":51.811033,"lon":-8.277067,"full":"RW_Temblebreedy_Pier","type":"Routing waypoint"},"RW_Rams_Head":{"lat":51.809117,"lon":-8.271883,"full":"RW_Rams_Head","type":"Routing waypoint"},"RW_clear_spit_bank":{"lat":51.847067,"lon":-8.2747,"full":"RW_clear_spit_bank","type":"Routing waypoint"},"RW_Roches_Point":{"lat":51.79105,"lon":-8.256017,"full":"RW_Roches_Point","type":"Routing waypoint"},"RW_Fort_Davis":{"lat":51.815183,"lon":-8.2654,"full":"RW_Fort_Davis","type":"Routing waypoint"},"RW_West_of_Refinery":{"lat":51.833933,"lon":-8.263467,"full":"RW_West_of_Refinery","type":"Routing mark"},"RW_Fort_Davis_South":{"lat":51.808067,"lon":-8.261217,"full":"RW_Fort_Davis_South","type":"Routing waypoint"},"RW_Refinery_North":{"lat":51.836233,"lon":-8.260417,"full":"RW_Refinery_North","type":"Routing waypoint"}},"pairs":{"Dosco|Ringabella":{"nm":3.176,"segs":[{"to":"W2","nm":1.594,"brg":191.6},{"to":"Ringabella","nm":1.582,"brg":214.5}]},"Ringabella|W2":{"nm":1.582,"segs":[{"to":"W2","nm":1.582,"brg":34.5}]},"W2|Cage":{"nm":1.356,"segs":[{"to":"RW_Rams_Head","nm":0.856,"brg":1.0},{"to":"Cage","nm":0.5,"brg":302.9}]},"Cage|No.7":{"nm":0.995,"segs":[{"to":"No.7","nm":0.995,"brg":35.8}]},"No.7|Cage":{"nm":0.995,"segs":[{"to":"Cage","nm":0.995,"brg":215.8}]},"Cage|Dosco":{"nm":0.845,"segs":[{"to":"Dosco","nm":0.845,"brg":59.1}]},"Dosco|Grassy Mid":{"nm":0.906,"segs":[{"to":"Grassy Mid","nm":0.906,"brg":233.6}]},"Dosco|No.8":{"nm":0.503,"segs":[{"to":"No.8","nm":0.503,"brg":272.2}]},"Grassy Mid|Ringabella":{"nm":2.9,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"W2","nm":0.856,"brg":181.0},{"to":"Ringabella","nm":1.582,"brg":214.5}]},"No.8|Ringabella":{"nm":3.188,"segs":[{"to":"RW_Rams_Head","nm":0.75,"brg":164.7},{"to":"W2","nm":0.856,"brg":181.0},{"to":"Ringabella","nm":1.582,"brg":214.5}]},"Dosco|E1":{"nm":1.611,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"E1","nm":1.265,"brg":169.0}]},"E1|Cage":{"nm":1.501,"segs":[{"to":"RW_Rams_Head","nm":1.001,"brg":331.2},{"to":"Cage","nm":0.5,"brg":302.9}]},"Cage|No.10":{"nm":0.99,"segs":[{"to":"No.10","nm":0.99,"brg":17.2}]},"No.10|Dosco":{"nm":0.671,"segs":[{"to":"Dosco","nm":0.671,"brg":139.8}]},"Dosco|Cage":{"nm":0.845,"segs":[{"to":"Cage","nm":0.845,"brg":239.1}]},"Cage|No.3":{"nm":1.102,"segs":[{"to":"RW_Rams_Head","nm":0.5,"brg":122.8},{"to":"No.3","nm":0.602,"brg":133.9}]},"No.3|No.10":{"nm":1.729,"segs":[{"to":"No.10","nm":1.729,"brg":341.1}]},"Grassy Mid|E1":{"nm":1.463,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"E1","nm":1.001,"brg":151.2}]},"No.8|E1":{"nm":1.74,"segs":[{"to":"E1","nm":1.74,"brg":157.0}]},"Dosco|E4":{"nm":1.333,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"E4","nm":0.987,"brg":173.9}]},"E4|Cage":{"nm":1.208,"segs":[{"to":"RW_Rams_Head","nm":0.708,"brg":330.7},{"to":"Cage","nm":0.5,"brg":302.9}]},"Cage|No.8":{"nm":0.504,"segs":[{"to":"No.8","nm":0.504,"brg":26.2}]},"No.8|No.3":{"nm":1.304,"segs":[{"to":"No.3","nm":1.304,"brg":151.1}]},"No.3|No.5":{"nm":0.969,"segs":[{"to":"No.5","nm":0.969,"brg":337.8}]},"No.5|Cage":{"nm":0.53,"segs":[{"to":"Cage","nm":0.53,"brg":246.9}]},"Grassy Mid|E4":{"nm":1.17,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"E4","nm":0.708,"brg":150.7}]},"No.8|E4":{"nm":1.447,"segs":[{"to":"E4","nm":1.447,"brg":157.9}]},"Dosco|E2":{"nm":1.708,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"E2","nm":1.362,"brg":173.8}]},"E2|No.14":{"nm":2.58,"segs":[{"to":"RW_Fort_Davis","nm":1.362,"brg":353.9},{"to":"No.14","nm":1.218,"brg":356.6}]},"No.14|Dosco":{"nm":0.886,"segs":[{"to":"Dosco","nm":0.886,"brg":171.1}]},"No.7|No.5":{"nm":0.606,"segs":[{"to":"No.5","nm":0.606,"brg":189.0}]},"No.10|Grassy Mid":{"nm":1.091,"segs":[{"to":"Grassy Mid","nm":1.091,"brg":195.7}]},"No.10|No.8":{"nm":0.499,"segs":[{"to":"No.8","nm":0.499,"brg":188.0}]},"Grassy Mid|E2":{"nm":1.524,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"E2","nm":1.062,"brg":158.6}]},"No.8|E2":{"nm":1.81,"segs":[{"to":"E2","nm":1.81,"brg":161.1}]},"Dosco|W1":{"nm":1.553,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"W1","nm":1.207,"brg":184.2}]},"W1|No.10":{"nm":2.076,"segs":[{"to":"No.10","nm":2.076,"brg":352.3}]},"No.10|Cage":{"nm":0.99,"segs":[{"to":"Cage","nm":0.99,"brg":197.2}]},"Cage|No.12":{"nm":1.251,"segs":[{"to":"No.12","nm":1.251,"brg":23.7}]},"No.12|No.6":{"nm":1.64,"segs":[{"to":"No.6","nm":1.64,"brg":174.4}]},"No.6|Dosco":{"nm":0.926,"segs":[{"to":"RW_Fort_Davis","nm":0.58,"brg":359.9},{"to":"Dosco","nm":0.346,"brg":10.6}]},"No.6|Grassy Mid":{"nm":0.786,"segs":[{"to":"RW_Rams_Head","nm":0.324,"brg":311.6},{"to":"RW_Temblebreedy_Pier","nm":0.225,"brg":300.8},{"to":"Grassy Mid","nm":0.237,"brg":282.8}]},"No.6|No.8":{"nm":1.037,"segs":[{"to":"No.8","nm":1.037,"brg":334.9}]},"Grassy Mid|W1":{"nm":1.315,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"W1","nm":0.853,"brg":169.7}]},"No.8|W1":{"nm":1.602,"segs":[{"to":"W1","nm":1.602,"brg":167.4}]},"Ringabella|Cage":{"nm":2.938,"segs":[{"to":"W2","nm":1.582,"brg":34.5},{"to":"RW_Rams_Head","nm":0.856,"brg":1.0},{"to":"Cage","nm":0.5,"brg":302.9}]},"No.10|No.5":{"nm":0.763,"segs":[{"to":"No.5","nm":0.763,"brg":165.2}]},"No.5|Dosco":{"nm":0.328,"segs":[{"to":"Dosco","nm":0.328,"brg":46.6}]},"No.5|Grassy Mid":{"nm":0.582,"segs":[{"to":"Grassy Mid","nm":0.582,"brg":237.6}]},"No.5|No.8":{"nm":0.36,"segs":[{"to":"No.8","nm":0.36,"brg":312.7}]},"No.7|No.13":{"nm":1.349,"segs":[{"to":"No.13","nm":1.349,"brg":3.3}]},"No.13|No.9":{"nm":0.761,"segs":[{"to":"No.9","nm":0.761,"brg":157.5}]},"No.9|Cage":{"nm":1.742,"segs":[{"to":"RW_Refinery_North","nm":0.14,"brg":228.2},{"to":"RW_West_of_Refinery","nm":0.179,"brg":219.4},{"to":"Cage","nm":1.423,"brg":211.0}]},"Grassy Mid|Dosco":{"nm":0.906,"segs":[{"to":"Dosco","nm":0.906,"brg":53.6}]},"No.8|Cage":{"nm":0.504,"segs":[{"to":"Cage","nm":0.504,"brg":206.2}]},"Cage|No.11":{"nm":2.041,"segs":[{"to":"No.11","nm":2.041,"brg":26.5}]},"No.11|Cage":{"nm":2.041,"segs":[{"to":"Cage","nm":2.041,"brg":206.5}]},"No.3|W2":{"nm":0.628,"segs":[{"to":"W2","nm":0.628,"brg":225.7}]},"W2|No.6":{"nm":0.691,"segs":[{"to":"No.6","nm":0.691,"brg":21.9}]},"No.6|Cage":{"nm":0.822,"segs":[{"to":"Cage","nm":0.822,"brg":306.3}]},"No.7|Dosco":{"nm":0.4,"segs":[{"to":"Dosco","nm":0.4,"brg":158.9}]},"Cage|No.9":{"nm":1.742,"segs":[{"to":"RW_West_of_Refinery","nm":1.423,"brg":31.0},{"to":"RW_Refinery_North","nm":0.179,"brg":39.4},{"to":"No.9","nm":0.14,"brg":48.2}]},"No.9|Dosco":{"nm":1.105,"segs":[{"to":"RW_Refinery_North","nm":0.14,"brg":228.2},{"to":"RW_West_of_Refinery","nm":0.179,"brg":219.4},{"to":"Dosco","nm":0.786,"brg":180.6}]},"No.9|Grassy Mid":{"nm":1.824,"segs":[{"to":"Grassy Mid","nm":1.824,"brg":211.6}]},"No.9|No.8":{"nm":1.236,"segs":[{"to":"No.8","nm":1.236,"brg":216.1}]},"No.9|No.5":{"nm":1.326,"segs":[{"to":"No.5","nm":1.326,"brg":200.5}]},"No.11|Dosco":{"nm":1.418,"segs":[{"to":"RW_West_of_Refinery","nm":0.632,"brg":196.2},{"to":"Dosco","nm":0.786,"brg":180.6}]},"No.11|Grassy Mid":{"nm":2.135,"segs":[{"to":"Grassy Mid","nm":2.135,"brg":205.3}]},"No.11|No.8":{"nm":1.536,"segs":[{"to":"No.8","nm":1.536,"brg":206.6}]},"Dosco|No.7":{"nm":0.4,"segs":[{"to":"No.7","nm":0.4,"brg":338.9}]},"No.7|Grassy Mid":{"nm":1.082,"segs":[{"to":"Grassy Mid","nm":1.082,"brg":212.7}]},"No.7|No.8":{"nm":0.504,"segs":[{"to":"No.8","nm":0.504,"brg":225.3}]},"Grassy Mid|No.7":{"nm":1.082,"segs":[{"to":"No.7","nm":1.082,"brg":32.7}]},"No.8|No.7":{"nm":0.504,"segs":[{"to":"No.7","nm":0.504,"brg":45.3}]},"Dosco|Dutchman":{"nm":2.326,"segs":[{"to":"W2","nm":1.594,"brg":191.6},{"to":"Dutchman","nm":0.732,"brg":213.5}]},"Dutchman|W2":{"nm":0.732,"segs":[{"to":"W2","nm":0.732,"brg":33.5}]},"Grassy Mid|Dutchman":{"nm":2.05,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"W2","nm":0.856,"brg":181.0},{"to":"Dutchman","nm":0.732,"brg":213.5}]},"No.8|Dutchman":{"nm":2.338,"segs":[{"to":"RW_Rams_Head","nm":0.75,"brg":164.7},{"to":"W2","nm":0.856,"brg":181.0},{"to":"Dutchman","nm":0.732,"brg":213.5}]},"No.8|No.10":{"nm":0.499,"segs":[{"to":"No.10","nm":0.499,"brg":8.0}]},"No.10|EF2":{"nm":1.665,"segs":[{"to":"RW_Refinery_North","nm":0.691,"brg":53.4},{"to":"EF2","nm":0.974,"brg":62.0}]},"EF2|No.20":{"nm":1.9,"segs":[{"to":"No.20","nm":1.9,"brg":276.0}]},"No.20|No.13":{"nm":0.854,"segs":[{"to":"No.13","nm":0.854,"brg":80.5}]},"No.13|Dosco":{"nm":1.721,"segs":[{"to":"Dosco","nm":1.721,"brg":177.8}]},"Cage|No.5":{"nm":0.53,"segs":[{"to":"No.5","nm":0.53,"brg":66.8}]},"No.8|No.5":{"nm":0.36,"segs":[{"to":"No.5","nm":0.36,"brg":132.7}]},"No.8|Dosco":{"nm":0.503,"segs":[{"to":"Dosco","nm":0.503,"brg":92.2}]},"Dosco|No.5":{"nm":0.328,"segs":[{"to":"No.5","nm":0.328,"brg":226.6}]},"No.10|No.7":{"nm":0.321,"segs":[{"to":"No.7","nm":0.321,"brg":115.7}]},"No.3|W4":{"nm":0.224,"segs":[{"to":"W4","nm":0.224,"brg":243.8}]},"W4|Cage":{"nm":1.066,"segs":[{"to":"RW_Rams_Head","nm":0.566,"brg":335.8},{"to":"Cage","nm":0.5,"brg":302.9}]},"Dosco|No.10":{"nm":0.671,"segs":[{"to":"No.10","nm":0.671,"brg":319.8}]},"No.10|No.9":{"nm":0.83,"segs":[{"to":"No.9","nm":0.83,"brg":52.5}]},"No.9|No.20":{"nm":1.344,"segs":[{"to":"RW_clear_spit_bank","nm":0.846,"brg":311.3},{"to":"No.20","nm":0.498,"brg":270.5}]},"No.3|Cage":{"nm":1.102,"segs":[{"to":"RW_Rams_Head","nm":0.602,"brg":313.9},{"to":"Cage","nm":0.5,"brg":302.9}]},"No.7|No.3":{"nm":1.523,"segs":[{"to":"RW_Fort_Davis","nm":0.718,"brg":173.6},{"to":"No.3","nm":0.805,"brg":166.2}]},"No.3|Dosco":{"nm":1.151,"segs":[{"to":"RW_Fort_Davis","nm":0.805,"brg":346.2},{"to":"Dosco","nm":0.346,"brg":10.6}]},"No.3|Grassy Mid":{"nm":1.064,"segs":[{"to":"RW_Rams_Head","nm":0.602,"brg":313.9},{"to":"RW_Temblebreedy_Pier","nm":0.225,"brg":300.8},{"to":"Grassy Mid","nm":0.237,"brg":282.8}]},"No.3|No.8":{"nm":1.304,"segs":[{"to":"No.8","nm":1.304,"brg":331.1}]},"Dosco|No.12":{"nm":0.746,"segs":[{"to":"No.12","nm":0.746,"brg":342.6}]},"No.12|E2":{"nm":2.425,"segs":[{"to":"E2","nm":2.425,"brg":172.8}]},"E2|No.8":{"nm":1.81,"segs":[{"to":"No.8","nm":1.81,"brg":341.2}]},"Cage|E4":{"nm":1.208,"segs":[{"to":"RW_Rams_Head","nm":0.5,"brg":122.8},{"to":"E4","nm":0.708,"brg":150.7}]},"Cage|W4":{"nm":1.066,"segs":[{"to":"RW_Rams_Head","nm":0.5,"brg":122.8},{"to":"W4","nm":0.566,"brg":155.8}]},"W4|Dosco":{"nm":1.227,"segs":[{"to":"RW_Fort_Davis","nm":0.881,"brg":0.6},{"to":"Dosco","nm":0.346,"brg":10.6}]},"W4|Grassy Mid":{"nm":1.028,"segs":[{"to":"RW_Rams_Head","nm":0.566,"brg":335.8},{"to":"RW_Temblebreedy_Pier","nm":0.225,"brg":300.8},{"to":"Grassy Mid","nm":0.237,"brg":282.8}]},"W4|No.8":{"nm":1.313,"segs":[{"to":"No.8","nm":1.313,"brg":340.9}]},"No.8|No.12":{"nm":0.747,"segs":[{"to":"No.12","nm":0.747,"brg":22.0}]},"Dosco|No.3":{"nm":1.151,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"No.3","nm":0.805,"brg":166.2}]},"Grassy Mid|No.3":{"nm":1.064,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"No.3","nm":0.602,"brg":133.9}]},"E1|No.6":{"nm":0.704,"segs":[{"to":"No.6","nm":0.704,"brg":340.1}]},"No.6|No.3":{"nm":0.278,"segs":[{"to":"No.3","nm":0.278,"brg":136.7}]},"No.5|No.10":{"nm":0.763,"segs":[{"to":"No.10","nm":0.763,"brg":345.2}]},"No.10|No.3":{"nm":1.729,"segs":[{"to":"No.3","nm":1.729,"brg":161.1}]},"Dosco|Harp":{"nm":2.558,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"RW_Roches_Point","nm":1.491,"brg":166.4},{"to":"Harp","nm":0.721,"brg":111.4}]},"Harp|E1":{"nm":0.956,"segs":[{"to":"RW_Roches_Point","nm":0.721,"brg":291.4},{"to":"E1","nm":0.235,"brg":332.6}]},"Grassy Mid|Harp":{"nm":2.419,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"RW_Roches_Point","nm":1.236,"brg":151.4},{"to":"Harp","nm":0.721,"brg":111.4}]},"No.8|Harp":{"nm":2.707,"segs":[{"to":"RW_Rams_Head","nm":0.75,"brg":164.7},{"to":"RW_Roches_Point","nm":1.236,"brg":151.4},{"to":"Harp","nm":0.721,"brg":111.4}]},"Dosco|No.13":{"nm":1.721,"segs":[{"to":"No.13","nm":1.721,"brg":357.8}]},"No.13|No.11":{"nm":0.412,"segs":[{"to":"No.11","nm":0.412,"brg":142.6}]},"No.11|No.10":{"nm":1.075,"segs":[{"to":"No.10","nm":1.075,"brg":215.1}]},"No.5|No.14":{"nm":1.105,"segs":[{"to":"No.14","nm":1.105,"brg":5.3}]},"No.8|No.13":{"nm":1.756,"segs":[{"to":"No.13","nm":1.756,"brg":14.4}]},"Dosco|W4":{"nm":1.227,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"W4","nm":0.881,"brg":180.6}]},"W4|No.10":{"nm":1.771,"segs":[{"to":"No.10","nm":1.771,"brg":348.3}]},"No.12|No.5":{"nm":0.937,"segs":[{"to":"No.5","nm":0.937,"brg":180.9}]},"Grassy Mid|W4":{"nm":1.028,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"W4","nm":0.566,"brg":155.8}]},"No.8|W4":{"nm":1.313,"segs":[{"to":"W4","nm":1.313,"brg":160.9}]},"No.7|No.10":{"nm":0.321,"segs":[{"to":"No.10","nm":0.321,"brg":295.7}]},"Dosco|No.11":{"nm":1.418,"segs":[{"to":"RW_West_of_Refinery","nm":0.786,"brg":0.6},{"to":"No.11","nm":0.632,"brg":16.2}]},"No.9|No.10":{"nm":0.83,"segs":[{"to":"No.10","nm":0.83,"brg":232.6}]},"Grassy Mid|No.11":{"nm":2.135,"segs":[{"to":"No.11","nm":2.135,"brg":25.3}]},"No.8|No.11":{"nm":1.536,"segs":[{"to":"No.11","nm":1.536,"brg":26.6}]},"No.10|EF4":{"nm":1.461,"segs":[{"to":"EF4","nm":1.461,"brg":49.0}]},"EF4|No.10":{"nm":1.461,"segs":[{"to":"No.10","nm":1.461,"brg":229.0}]},"Dosco|Curlane":{"nm":0.91,"segs":[{"to":"Curlane","nm":0.91,"brg":282.4}]},"Curlane|Cage":{"nm":0.65,"segs":[{"to":"Cage","nm":0.65,"brg":165.4}]},"Curlane|No.5":{"nm":0.775,"segs":[{"to":"No.5","nm":0.775,"brg":122.9}]},"No.8|Curlane":{"nm":0.425,"segs":[{"to":"Curlane","nm":0.425,"brg":294.5}]},"Dosco|White Bay":{"nm":1.087,"segs":[{"to":"RW_Fort_Davis","nm":0.346,"brg":190.6},{"to":"RW_Fort_Davis_South","nm":0.455,"brg":160.0},{"to":"White Bay","nm":0.286,"brg":111.2}]},"White Bay|Cage":{"nm":1.169,"segs":[{"to":"Cage","nm":1.169,"brg":292.0}]},"Cage|White Bay":{"nm":1.169,"segs":[{"to":"White Bay","nm":1.169,"brg":112.0}]},"White Bay|No.8":{"nm":1.272,"segs":[{"to":"RW_Fort_Davis_South","nm":0.286,"brg":291.2},{"to":"No.8","nm":0.986,"brg":322.9}]},"Grassy Mid|White Bay":{"nm":1.138,"segs":[{"to":"White Bay","nm":1.138,"brg":107.1}]},"No.8|White Bay":{"nm":1.272,"segs":[{"to":"RW_Fort_Davis_South","nm":0.986,"brg":142.9},{"to":"White Bay","nm":0.286,"brg":111.2}]},"Dosco|No.16":{"nm":1.444,"segs":[{"to":"No.16","nm":1.444,"brg":359.2}]},"No.16|No.6":{"nm":2.364,"segs":[{"to":"No.6","nm":2.364,"brg":181.0}]},"No.6|No.12":{"nm":1.64,"segs":[{"to":"No.12","nm":1.64,"brg":354.4}]},"No.12|Cage":{"nm":1.251,"segs":[{"to":"Cage","nm":1.251,"brg":203.7}]},"No.8|Grassy Mid":{"nm":0.601,"segs":[{"to":"Grassy Mid","nm":0.601,"brg":202.2}]},"Grassy Mid|No.16":{"nm":2.104,"segs":[{"to":"No.16","nm":2.104,"brg":19.7}]},"No.8|No.16":{"nm":2.917,"segs":[{"to":"RW_Rams_Head","nm":0.75,"brg":164.7},{"to":"No.16","nm":2.167,"brg":7.5}]},"Curlane|No.12":{"nm":0.843,"segs":[{"to":"No.12","nm":0.843,"brg":52.2}]},"No.12|No.8":{"nm":0.747,"segs":[{"to":"No.8","nm":0.747,"brg":202.0}]},"Curlane|No.10":{"nm":0.556,"segs":[{"to":"No.10","nm":0.556,"brg":55.2}]},"Cage|Curlane":{"nm":0.65,"segs":[{"to":"Curlane","nm":0.65,"brg":345.4}]},"Curlane|Dosco":{"nm":0.91,"segs":[{"to":"Dosco","nm":0.91,"brg":102.4}]},"Curlane|Grassy Mid":{"nm":0.75,"segs":[{"to":"Grassy Mid","nm":0.75,"brg":167.7}]},"Curlane|No.8":{"nm":0.425,"segs":[{"to":"No.8","nm":0.425,"brg":114.5}]},"Grassy Mid|No.8":{"nm":0.601,"segs":[{"to":"No.8","nm":0.601,"brg":22.2}]},"No.16|EF2":{"nm":1.005,"segs":[{"to":"EF2","nm":1.005,"brg":93.5}]},"EF2|No.11":{"nm":0.797,"segs":[{"to":"No.11","nm":0.797,"brg":270.8}]},"No.11|No.5":{"nm":1.672,"segs":[{"to":"No.5","nm":1.672,"brg":194.7}]},"Harp|No.3":{"nm":1.407,"segs":[{"to":"RW_Roches_Point","nm":0.721,"brg":291.4},{"to":"No.3","nm":0.686,"brg":346.7}]},"W4|No.14":{"nm":2.098,"segs":[{"to":"No.14","nm":2.098,"brg":358.3}]},"No.14|No.6":{"nm":1.797,"segs":[{"to":"No.6","nm":1.797,"brg":177.6}]},"No.6|No.10":{"nm":1.48,"segs":[{"to":"No.10","nm":1.48,"brg":345.5}]},"Dosco|W2":{"nm":1.594,"segs":[{"to":"W2","nm":1.594,"brg":191.6}]},"No.6|W2":{"nm":0.691,"segs":[{"to":"W2","nm":0.691,"brg":202.0}]},"Grassy Mid|W2":{"nm":1.318,"segs":[{"to":"RW_Temblebreedy_Pier","nm":0.237,"brg":102.8},{"to":"RW_Rams_Head","nm":0.225,"brg":120.8},{"to":"W2","nm":0.856,"brg":181.0}]},"No.8|W2":{"nm":1.606,"segs":[{"to":"RW_Rams_Head","nm":0.75,"brg":164.7},{"to":"W2","nm":0.856,"brg":181.0}]},"EF2|No.8":{"nm":2.073,"segs":[{"to":"RW_Refinery_North","nm":0.974,"brg":242.0},{"to":"No.8","nm":1.099,"brg":214.6}]},"Ringabella|No.6":{"nm":2.273,"segs":[{"to":"W2","nm":1.582,"brg":34.5},{"to":"No.6","nm":0.691,"brg":21.9}]},"Dosco|No.18":{"nm":1.703,"segs":[{"to":"No.18","nm":1.703,"brg":350.1}]},"No.18|No.20":{"nm":0.623,"segs":[{"to":"No.20","nm":0.623,"brg":260.9}]},"No.13|No.5":{"nm":1.953,"segs":[{"to":"No.5","nm":1.953,"brg":185.1}]},"W4|No.3":{"nm":0.224,"segs":[{"to":"No.3","nm":0.224,"brg":63.8}]},"No.8|No.18":{"nm":1.671,"segs":[{"to":"No.18","nm":1.671,"brg":7.2}]}},"courses":{"1":{"label":"Ringabella (P) \u2013 W2 (P) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Cage (P) \u00b7 Dosco (P) \u2013 Finish","rounds":["Ringabella (P) \u2013 W2 (P) \u2013 Cage (S)","No.7 (S) \u2013 Cage (P)","Dosco (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Ringabella","W2","Cage","No.7","Cage","Dosco"],"Dosco|Grassy Mid":["Dosco","Ringabella","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","Ringabella","W2","Cage","No.7","Cage","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Ringabella","W2","Cage","No.7","Cage","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Ringabella","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Ringabella","W2","Cage","No.7","Cage","Dosco","No.8"],"No.8|Dosco":["No.8","Ringabella","W2","Cage","No.7","Cage","Dosco"],"No.8|Grassy Mid":["No.8","Ringabella","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"No.8|No.8":["No.8","Ringabella","W2","Cage","No.7","Cage","Dosco","No.8"]},"card":[{"m":"Ringabella","s":"P"},{"m":"W2","s":"P"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"P"}],"printed":9.8},"10":{"label":"E1 (P) \u2013 Cage (S) \u00b7 No.10 (S) \u2013 Dosco (S) \u2013 Cage (P) \u00b7 No.3 (P) \u2013 No.10 (S) \u2013 Dosco (S) \u2013 Finish","rounds":["E1 (P) \u2013 Cage (S)","No.10 (S) \u2013 Dosco (S) \u2013 Cage (P)","No.3 (P) \u2013 No.10 (S) \u2013 Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco"],"Dosco|Grassy Mid":["Dosco","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","No.8"],"No.8|Dosco":["No.8","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco"],"No.8|Grassy Mid":["No.8","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","Grassy Mid"],"No.8|No.8":["No.8","E1","Cage","No.10","Dosco","Cage","No.3","No.10","Dosco","No.8"]},"card":[{"m":"E1","s":"P"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"P"},{"m":"No.3","s":"P"},{"m":"No.10","s":"S"},{"m":"Dosco","s":"S"}],"printed":9.5},"11":{"label":"E4 (P) \u2013 Cage (S) \u2013 No.10 (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.8 (S) \u2013 No.3 (S) \u2013 No.5 (P) \u2013 Cage (S) \u00b7 No.10 (S) \u2013 Dosco (S) \u2013 Finish","rounds":["E4 (P) \u2013 Cage (S) \u2013 No.10 (S) \u2013 Dosco (S) \u2013 Cage (S)","No.8 (S) \u2013 No.3 (S) \u2013 No.5 (P) \u2013 Cage (S)","No.10 (S) \u2013 Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco"],"Dosco|Grassy Mid":["Dosco","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","No.8"],"No.8|Dosco":["No.8","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco"],"No.8|Grassy Mid":["No.8","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","Grassy Mid"],"No.8|No.8":["No.8","E4","Cage","No.10","Dosco","Cage","No.8","No.3","No.5","Cage","No.10","Dosco","No.8"]},"card":[{"m":"E4","s":"P"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.8","s":"S"},{"m":"No.3","s":"S"},{"m":"No.5","s":"P"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"},{"m":"Dosco","s":"S"}],"printed":10.5},"12":{"label":"E2 (P) \u2013 No.14 (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 No.10 (P) \u2013 Finish","rounds":["E2 (P) \u2013 No.14 (S) \u2013 Dosco (S) \u2013 Cage (S)","No.7 (S) \u2013 No.5 (S) \u2013 Cage (S)","No.10 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Dosco"],"Dosco|Grassy Mid":["Dosco","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Grassy Mid"],"Dosco|No.8":["Dosco","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","No.8"],"Grassy Mid|Dosco":["Grassy Mid","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","No.8"],"No.8|Dosco":["No.8","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Dosco"],"No.8|Grassy Mid":["No.8","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","Grassy Mid"],"No.8|No.8":["No.8","E2","No.14","Dosco","Cage","No.7","No.5","Cage","No.10","No.8"]},"card":[{"m":"E2","s":"P"},{"m":"No.14","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"No.10","s":"P"}],"note":"Card prints Round Three cumulative distance as 3nm; retained verbatim for checking","printed":3.0},"13":{"label":"W1 (P) \u2013 No.10 (P) \u2013 Cage (S) \u00b7 No.12 (S) \u2013 No.6 (S) \u2013 Finish","rounds":["W1 (P) \u2013 No.10 (P) \u2013 Cage (S)","No.12 (S) \u2013 No.6 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","W1","No.10","Cage","No.12","No.6","Dosco"],"Dosco|Grassy Mid":["Dosco","W1","No.10","Cage","No.12","No.6","Grassy Mid"],"Dosco|No.8":["Dosco","W1","No.10","Cage","No.12","No.6","No.8"],"Grassy Mid|Dosco":["Grassy Mid","W1","No.10","Cage","No.12","No.6","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","W1","No.10","Cage","No.12","No.6","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","W1","No.10","Cage","No.12","No.6","No.8"],"No.8|Dosco":["No.8","W1","No.10","Cage","No.12","No.6","Dosco"],"No.8|Grassy Mid":["No.8","W1","No.10","Cage","No.12","No.6","Grassy Mid"],"No.8|No.8":["No.8","W1","No.10","Cage","No.12","No.6","No.8"]},"card":[{"m":"W1","s":"P"},{"m":"No.10","s":"P"},{"m":"Cage","s":"S"},{"m":"No.12","s":"S"},{"m":"No.6","s":"S"}],"printed":8.5},"14":{"label":"Ringabella (P) \u2013 Cage (S) \u00b7 No.10 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["Ringabella (P) \u2013 Cage (S)","No.10 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Ringabella","Cage","No.10","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","Ringabella","Cage","No.10","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","Ringabella","Cage","No.10","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Ringabella","Cage","No.10","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Ringabella","Cage","No.10","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Ringabella","Cage","No.10","No.5","No.8"],"No.8|Dosco":["No.8","Ringabella","Cage","No.10","No.5","Dosco"],"No.8|Grassy Mid":["No.8","Ringabella","Cage","No.10","No.5","Grassy Mid"],"No.8|No.8":["No.8","Ringabella","Cage","No.10","No.5","No.8"]},"card":[{"m":"Ringabella","s":"P"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"},{"m":"No.5","s":"S"}],"printed":7.8},"15":{"label":"Cage (S) \u2013 No.7 (P) \u2013 No.13 (S) \u2013 No.9 (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Cage (S) \u00b7 No.10 (S) \u2013 Finish","rounds":["Cage (S) \u2013 No.7 (P) \u2013 No.13 (S) \u2013 No.9 (S) \u2013 Cage (S)","No.7 (S) \u2013 Cage (S)","No.10 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Dosco"],"Dosco|Grassy Mid":["Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Grassy Mid"],"Dosco|No.8":["Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","No.8"],"No.8|Dosco":["No.8","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Dosco"],"No.8|Grassy Mid":["No.8","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","Grassy Mid"],"No.8|No.8":["No.8","Cage","No.7","No.13","No.9","Cage","No.7","Cage","No.10","No.8"]},"card":[{"m":"Cage","s":"S"},{"m":"No.7","s":"P"},{"m":"No.13","s":"S"},{"m":"No.9","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"}],"flag":"**","printed":9.0},"16":{"label":"Cage (S) \u2013 No.11 (S) \u2013 Cage (P) \u00b7 No.7 (S) \u2013 Cage (P) \u00b7 Dosco (S) \u2013 Finish","rounds":["Cage (S) \u2013 No.11 (S) \u2013 Cage (P)","No.7 (S) \u2013 Cage (P)","Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Cage","No.11","Cage","No.7","Cage","Dosco"],"Dosco|Grassy Mid":["Dosco","Cage","No.11","Cage","No.7","Cage","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","Cage","No.11","Cage","No.7","Cage","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Cage","No.11","Cage","No.7","Cage","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Cage","No.11","Cage","No.7","Cage","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Cage","No.11","Cage","No.7","Cage","Dosco","No.8"],"No.8|Dosco":["No.8","Cage","No.11","Cage","No.7","Cage","Dosco"],"No.8|Grassy Mid":["No.8","Cage","No.11","Cage","No.7","Cage","Dosco","Grassy Mid"],"No.8|No.8":["No.8","Cage","No.11","Cage","No.7","Cage","Dosco","No.8"]},"card":[{"m":"Cage","s":"S"},{"m":"No.11","s":"S"},{"m":"Cage","s":"P"},{"m":"No.7","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"S"}],"flag":"**","printed":9.8},"17":{"label":"Cage (P) \u2013 No.3 (S) \u2013 W2 (S) \u2013 No.6 (P) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.9 (S) \u2013 Finish","rounds":["Cage (P) \u2013 No.3 (S) \u2013 W2 (S) \u2013 No.6 (P) \u2013 Cage (S)","No.7 (S) \u2013 Dosco (S) \u2013 Cage (S)","No.9 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Dosco"],"Dosco|Grassy Mid":["Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Grassy Mid"],"Dosco|No.8":["Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","No.8"],"No.8|Dosco":["No.8","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Dosco"],"No.8|Grassy Mid":["No.8","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","Grassy Mid"],"No.8|No.8":["No.8","Cage","No.3","W2","No.6","Cage","No.7","Dosco","Cage","No.9","No.8"]},"card":[{"m":"Cage","s":"P"},{"m":"No.3","s":"S"},{"m":"W2","s":"S"},{"m":"No.6","s":"P"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.9","s":"S"}],"flag":"**","printed":10.6},"18":{"label":"Cage (P) \u2013 No.3 (S) \u2013 W2 (S) \u2013 No.6 (P) \u2013 Cage (S) \u00b7 No.9 (S) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 No.11 (P) \u2013 Finish","rounds":["Cage (P) \u2013 No.3 (S) \u2013 W2 (S) \u2013 No.6 (P) \u2013 Cage (S)","No.9 (S) \u2013 No.5 (S) \u2013 Cage (S)","No.11 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Dosco"],"Dosco|Grassy Mid":["Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Grassy Mid"],"Dosco|No.8":["Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","No.8"],"No.8|Dosco":["No.8","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Dosco"],"No.8|Grassy Mid":["No.8","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","Grassy Mid"],"No.8|No.8":["No.8","Cage","No.3","W2","No.6","Cage","No.9","No.5","Cage","No.11","No.8"]},"card":[{"m":"Cage","s":"P"},{"m":"No.3","s":"S"},{"m":"W2","s":"S"},{"m":"No.6","s":"P"},{"m":"Cage","s":"S"},{"m":"No.9","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"No.11","s":"P"}],"flag":"**","printed":12.8},"19":{"label":"No.7 (P) \u2013 Cage (S) \u2013 No.11 (S) \u2013 Cage (P) \u00b7 Dosco (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Finish","rounds":["No.7 (P) \u2013 Cage (S) \u2013 No.11 (S) \u2013 Cage (P)","Dosco (S) \u2013 Cage (S)","No.7 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Dosco"],"Dosco|Grassy Mid":["Dosco","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Grassy Mid"],"Dosco|No.8":["Dosco","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","No.8"],"No.8|Dosco":["No.8","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Dosco"],"No.8|Grassy Mid":["No.8","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","Grassy Mid"],"No.8|No.8":["No.8","No.7","Cage","No.11","Cage","Dosco","Cage","No.7","No.8"]},"card":[{"m":"No.7","s":"P"},{"m":"Cage","s":"S"},{"m":"No.11","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"}],"printed":12.0},"2":{"label":"Dutchman (P) \u2013 W2 (P) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Cage (P) \u00b7 Dosco (P) \u2013 Finish","rounds":["Dutchman (P) \u2013 W2 (P) \u2013 Cage (S)","No.7 (S) \u2013 Cage (P)","Dosco (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Dutchman","W2","Cage","No.7","Cage","Dosco"],"Dosco|Grassy Mid":["Dosco","Dutchman","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","Dutchman","W2","Cage","No.7","Cage","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dutchman","W2","Cage","No.7","Cage","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dutchman","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dutchman","W2","Cage","No.7","Cage","Dosco","No.8"],"No.8|Dosco":["No.8","Dutchman","W2","Cage","No.7","Cage","Dosco"],"No.8|Grassy Mid":["No.8","Dutchman","W2","Cage","No.7","Cage","Dosco","Grassy Mid"],"No.8|No.8":["No.8","Dutchman","W2","Cage","No.7","Cage","Dosco","No.8"]},"card":[{"m":"Dutchman","s":"P"},{"m":"W2","s":"P"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"P"}],"printed":8.0},"20":{"label":"No.8 (S) \u2013 No.10 (S) \u2013 EF2 (P) \u2013 No.20 (P) \u2013 No.13 (S) \u2013 Dosco (S) \u2013 Cage (P) \u00b7 Dosco (P) \u2013 Cage (S) \u00b7 No.5 (S) \u2013 Finish","rounds":["No.8 (S) \u2013 No.10 (S) \u2013 EF2 (P) \u2013 No.20 (P) \u2013 No.13 (S) \u2013 Dosco (S) \u2013 Cage (P)","Dosco (P) \u2013 Cage (S)","No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","No.8"],"No.8|Dosco":["No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.10","EF2","No.20","No.13","Dosco","Cage","Dosco","Cage","No.5","No.8"]},"card":[{"m":"No.8","s":"S"},{"m":"No.10","s":"S"},{"m":"EF2","s":"P"},{"m":"No.20","s":"P"},{"m":"No.13","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"P"},{"m":"Cage","s":"S"},{"m":"No.5","s":"S"}],"flag":"**","printed":13.5},"21":{"label":"Cage (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.8 (S) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 No.8 (S) \u2013 Dosco (S) \u2013 No.5 (S) \u2013 Finish","rounds":["Cage (S) \u2013 Dosco (S) \u2013 Cage (S)","No.8 (S) \u2013 No.5 (S) \u2013 Cage (S)","No.8 (S) \u2013 Dosco (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","No.8"],"No.8|Dosco":["No.8","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Dosco"],"No.8|Grassy Mid":["No.8","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","Grassy Mid"],"No.8|No.8":["No.8","Cage","Dosco","Cage","No.8","No.5","Cage","No.8","Dosco","No.5","No.8"]},"card":[{"m":"Cage","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.8","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"No.8","s":"S"},{"m":"Dosco","s":"S"},{"m":"No.5","s":"S"}],"flag":"**","printed":6.0},"22":{"label":"No.8 (S) \u2013 No.10 (S) \u2013 No.7 (S) \u2013 Dosco (S) \u00b7 Cage (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.8 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["No.8 (S) \u2013 No.10 (S) \u2013 No.7 (S) \u2013 Dosco (S)","Cage (S) \u2013 Dosco (S) \u2013 Cage (S)","No.8 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","No.8"],"No.8|Dosco":["No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.10","No.7","Dosco","Cage","Dosco","Cage","No.8","No.5","No.8"]},"card":[{"m":"No.8","s":"S"},{"m":"No.10","s":"S"},{"m":"No.7","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.8","s":"S"},{"m":"No.5","s":"S"}],"flag":"**","printed":6.7},"23":{"label":"No.8 (P) \u2013 No.3 (S) \u2013 W4 (S) \u2013 Cage (S) \u00b7 Dosco (P) \u2013 No.8 (P) \u2013 No.5 (S) \u2013 Finish","rounds":["No.8 (P) \u2013 No.3 (S) \u2013 W4 (S) \u2013 Cage (S)","Dosco (P) \u2013 No.8 (P) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.8","No.3","W4","Cage","Dosco","No.8","No.5","No.8"],"No.8|Dosco":["No.8","No.3","W4","Cage","Dosco","No.8","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.3","W4","Cage","Dosco","No.8","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.3","W4","Cage","Dosco","No.8","No.5","No.8"]},"card":[{"m":"No.8","s":"P"},{"m":"No.3","s":"S"},{"m":"W4","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"P"},{"m":"No.8","s":"P"},{"m":"No.5","s":"S"}],"flag":"**","cond":"No cumulative distances printed on card"},"24":{"label":"No.10 (S) \u2013 No.9 (P) \u2013 No.20 (S) \u2013 No.13 (S) \u2013 Dosco (S) \u2013 Cage (P) \u00b7 No.3 (P) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 No.3 (S) \u2013 Finish","rounds":["No.10 (S) \u2013 No.9 (P) \u2013 No.20 (S) \u2013 No.13 (S) \u2013 Dosco (S) \u2013 Cage (P)","No.3 (P) \u2013 Cage (S)","No.7 (S) \u2013 No.3 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Dosco"],"Dosco|Grassy Mid":["Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Grassy Mid"],"Dosco|No.8":["Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","No.8"],"No.8|Dosco":["No.8","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Dosco"],"No.8|Grassy Mid":["No.8","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","Grassy Mid"],"No.8|No.8":["No.8","No.10","No.9","No.20","No.13","Dosco","Cage","No.3","Cage","No.7","No.3","No.8"]},"card":[{"m":"No.10","s":"S"},{"m":"No.9","s":"P"},{"m":"No.20","s":"S"},{"m":"No.13","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"P"},{"m":"No.3","s":"P"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"No.3","s":"S"}],"flag":"**","printed":12.3},"25":{"label":"No.12 (P) \u2013 E2 (S) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Cage (P) \u00b7 E4 (P) \u2013 Cage (P) \u00b7 W4 (P) \u2013 Finish","rounds":["No.12 (P) \u2013 E2 (S) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Cage (P)","E4 (P) \u2013 Cage (P)","W4 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Dosco"],"Dosco|Grassy Mid":["Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Grassy Mid"],"Dosco|No.8":["Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","No.8"],"No.8|Dosco":["No.8","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Dosco"],"No.8|Grassy Mid":["No.8","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","Grassy Mid"],"No.8|No.8":["No.8","No.12","E2","No.8","No.5","Cage","E4","Cage","W4","No.8"]},"card":[{"m":"No.12","s":"P"},{"m":"E2","s":"S"},{"m":"No.8","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"P"},{"m":"E4","s":"P"},{"m":"Cage","s":"P"},{"m":"W4","s":"P"}],"flag":"**","printed":11.0},"26":{"label":"No.3 (P) \u2013 No.10 (S) \u2013 No.5 (S) \u2013 Cage (P) \u00b7 No.3 (P) \u2013 No.8 (S) \u2013 Dosco (S) \u2013 Finish","rounds":["No.3 (P) \u2013 No.10 (S) \u2013 No.5 (S) \u2013 Cage (P)","No.3 (P) \u2013 No.8 (S) \u2013 Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.3","No.10","No.5","Cage","No.3","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.3","No.10","No.5","Cage","No.3","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","No.8"],"No.8|Dosco":["No.8","No.3","No.10","No.5","Cage","No.3","No.8","Dosco"],"No.8|Grassy Mid":["No.8","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","Grassy Mid"],"No.8|No.8":["No.8","No.3","No.10","No.5","Cage","No.3","No.8","Dosco","No.8"]},"card":[{"m":"No.3","s":"P"},{"m":"No.10","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"P"},{"m":"No.3","s":"P"},{"m":"No.8","s":"S"},{"m":"Dosco","s":"S"}],"printed":7.9},"27":{"label":"E1 (P) \u2013 No.6 (S) \u2013 No.3 (P) \u2013 Cage (S) \u00b7 No.5 (P) \u2013 No.10 (S) \u2013 No.3 (S) \u2013 Finish","rounds":["E1 (P) \u2013 No.6 (S) \u2013 No.3 (P) \u2013 Cage (S)","No.5 (P) \u2013 No.10 (S) \u2013 No.3 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","E1","No.6","No.3","Cage","No.5","No.10","No.3","Dosco"],"Dosco|Grassy Mid":["Dosco","E1","No.6","No.3","Cage","No.5","No.10","No.3","Grassy Mid"],"Dosco|No.8":["Dosco","E1","No.6","No.3","Cage","No.5","No.10","No.3","No.8"],"Grassy Mid|Dosco":["Grassy Mid","E1","No.6","No.3","Cage","No.5","No.10","No.3","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","E1","No.6","No.3","Cage","No.5","No.10","No.3","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","E1","No.6","No.3","Cage","No.5","No.10","No.3","No.8"],"No.8|Dosco":["No.8","E1","No.6","No.3","Cage","No.5","No.10","No.3","Dosco"],"No.8|Grassy Mid":["No.8","E1","No.6","No.3","Cage","No.5","No.10","No.3","Grassy Mid"],"No.8|No.8":["No.8","E1","No.6","No.3","Cage","No.5","No.10","No.3","No.8"]},"card":[{"m":"E1","s":"P"},{"m":"No.6","s":"S"},{"m":"No.3","s":"P"},{"m":"Cage","s":"S"},{"m":"No.5","s":"P"},{"m":"No.10","s":"S"},{"m":"No.3","s":"S"}],"printed":8.4},"3":{"label":"Harp (P) \u2013 E1 (P) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Cage (P) \u00b7 Dosco (P) \u2013 Finish","rounds":["Harp (P) \u2013 E1 (P) \u2013 Cage (S)","No.7 (S) \u2013 Cage (P)","Dosco (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Harp","E1","Cage","No.7","Cage","Dosco"],"Dosco|Grassy Mid":["Dosco","Harp","E1","Cage","No.7","Cage","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","Harp","E1","Cage","No.7","Cage","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Harp","E1","Cage","No.7","Cage","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Harp","E1","Cage","No.7","Cage","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Harp","E1","Cage","No.7","Cage","Dosco","No.8"],"No.8|Dosco":["No.8","Harp","E1","Cage","No.7","Cage","Dosco"],"No.8|Grassy Mid":["No.8","Harp","E1","Cage","No.7","Cage","Dosco","Grassy Mid"],"No.8|No.8":["No.8","Harp","E1","Cage","No.7","Cage","Dosco","No.8"]},"card":[{"m":"Harp","s":"P"},{"m":"E1","s":"P"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"P"}],"printed":12.0},"4":{"label":"No.13 (S) \u2013 No.11 (S) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (P) \u00b7 W4 (S) \u2013 Cage (S) \u00b7 No.5 (P) \u2013 No.14 (S) \u2013 Dosco (S) \u2013 Finish","rounds":["No.13 (S) \u2013 No.11 (S) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (P)","W4 (S) \u2013 Cage (S)","No.5 (P) \u2013 No.14 (S) \u2013 Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco"],"Dosco|Grassy Mid":["Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","No.8"],"No.8|Dosco":["No.8","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco"],"No.8|Grassy Mid":["No.8","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","Grassy Mid"],"No.8|No.8":["No.8","No.13","No.11","No.10","Dosco","Cage","W4","Cage","No.5","No.14","Dosco","No.8"]},"card":[{"m":"No.13","s":"S"},{"m":"No.11","s":"S"},{"m":"No.10","s":"P"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"P"},{"m":"W4","s":"S"},{"m":"Cage","s":"S"},{"m":"No.5","s":"P"},{"m":"No.14","s":"S"},{"m":"Dosco","s":"S"}],"flag":"**","printed":11.0},"5":{"label":"W4 (P) \u2013 No.10 (S) \u2013 No.7 (S) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.12 (S) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 No.10 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["W4 (P) \u2013 No.10 (S) \u2013 No.7 (S) \u2013 Dosco (S) \u2013 Cage (S)","No.12 (S) \u2013 No.5 (S) \u2013 Cage (S)","No.10 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","No.8"],"No.8|Dosco":["No.8","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Dosco"],"No.8|Grassy Mid":["No.8","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","Grassy Mid"],"No.8|No.8":["No.8","W4","No.10","No.7","Dosco","Cage","No.12","No.5","Cage","No.10","No.5","No.8"]},"card":[{"m":"W4","s":"P"},{"m":"No.10","s":"S"},{"m":"No.7","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.12","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"No.10","s":"S"},{"m":"No.5","s":"S"}],"printed":9.4},"6":{"label":"No.7 (P) \u2013 No.10 (P) \u2013 Cage (P) \u2013 No.7 (S) \u2013 Cage (S) \u00b7 No.9 (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 Dosco (S) \u2013 Finish","rounds":["No.7 (P) \u2013 No.10 (P) \u2013 Cage (P) \u2013 No.7 (S) \u2013 Cage (S)","No.9 (S) \u2013 Cage (S)","No.7 (S) \u2013 Dosco (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco"],"Dosco|Grassy Mid":["Dosco","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","Grassy Mid"],"Dosco|No.8":["Dosco","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","No.8"],"No.8|Dosco":["No.8","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco"],"No.8|Grassy Mid":["No.8","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","Grassy Mid"],"No.8|No.8":["No.8","No.7","No.10","Cage","No.7","Cage","No.9","Cage","No.7","Dosco","No.8"]},"card":[{"m":"No.7","s":"P"},{"m":"No.10","s":"P"},{"m":"Cage","s":"P"},{"m":"No.7","s":"S"},{"m":"Cage","s":"S"},{"m":"No.9","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"Dosco","s":"S"}],"printed":10.0},"7":{"label":"No.11 (P) \u2013 Cage (P) \u00b7 No.9 (P) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["No.11 (P) \u2013 Cage (P)","No.9 (P) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (S)","No.7 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","No.8"],"No.8|Dosco":["No.8","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.11","Cage","No.9","No.10","Dosco","Cage","No.7","No.5","No.8"]},"card":[{"m":"No.11","s":"P"},{"m":"Cage","s":"P"},{"m":"No.9","s":"P"},{"m":"No.10","s":"P"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"No.5","s":"S"}],"printed":10.0},"71":{"label":"No.7 (P) \u2013 No.10 (S) \u2013 EF4 (S) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 No.7 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["No.7 (P) \u2013 No.10 (S) \u2013 EF4 (S) \u2013 No.10 (P) \u2013 Dosco (S) \u2013 Cage (S)","No.7 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","No.8"],"No.8|Dosco":["No.8","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.7","No.10","EF4","No.10","Dosco","Cage","No.7","No.5","No.8"]},"card":[{"m":"No.7","s":"P"},{"m":"No.10","s":"S"},{"m":"EF4","s":"S"},{"m":"No.10","s":"P"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"No.7","s":"S"},{"m":"No.5","s":"S"}],"cond":"\u226490 min before HW; Grassy Walk; consider laid ODM west of Cage","printed":8.4},"72":{"label":"Curlane (P) \u2013 Cage (P) \u2013 Dosco (P) \u2013 Curlane (P) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 Dosco (P) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["Curlane (P) \u2013 Cage (P) \u2013 Dosco (P) \u2013 Curlane (P) \u2013 No.5 (S) \u2013 Cage (S)","Dosco (P) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","No.8"],"No.8|Dosco":["No.8","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Dosco"],"No.8|Grassy Mid":["No.8","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","Grassy Mid"],"No.8|No.8":["No.8","Curlane","Cage","Dosco","Curlane","No.5","Cage","Dosco","No.8","No.5","No.8"]},"card":[{"m":"Curlane","s":"P"},{"m":"Cage","s":"P"},{"m":"Dosco","s":"P"},{"m":"Curlane","s":"P"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"P"},{"m":"No.8","s":"S"},{"m":"No.5","s":"S"}],"flag":"**","cond":"\u226490 min before HW; Curlane laid on Curlane Bank","printed":7.8},"73":{"label":"White Bay (P) \u2013 Cage (S) \u2013 Dosco (S) \u2013 White Bay (S) \u2013 Cage (S) \u00b7 White Bay (P) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Finish","rounds":["White Bay (P) \u2013 Cage (S) \u2013 Dosco (S) \u2013 White Bay (S) \u2013 Cage (S)","White Bay (P) \u2013 No.8 (S) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","No.8"],"No.8|Dosco":["No.8","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Dosco"],"No.8|Grassy Mid":["No.8","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","Grassy Mid"],"No.8|No.8":["No.8","White Bay","Cage","Dosco","White Bay","Cage","White Bay","No.8","No.5","No.8"]},"card":[{"m":"White Bay","s":"P"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"S"},{"m":"White Bay","s":"S"},{"m":"Cage","s":"S"},{"m":"White Bay","s":"P"},{"m":"No.8","s":"S"},{"m":"No.5","s":"S"}],"printed":7.9},"74":{"label":"No.16 (P) \u2013 No.6 (P) \u2013 No.12 (P) \u2013 Cage (P) \u00b7 No.10 (P) \u2013 Cage (P) \u2013 No.8 (P) \u2013 Finish","rounds":["No.16 (P) \u2013 No.6 (P) \u2013 No.12 (P) \u2013 Cage (P)","No.10 (P) \u2013 Cage (P) \u2013 No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","No.16","No.6","No.12","Cage","No.10","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.16","No.6","No.12","Cage","No.10","Cage","No.8"],"No.8|Dosco":["No.8","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","No.16","No.6","No.12","Cage","No.10","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","No.16","No.6","No.12","Cage","No.10","Cage","No.8"]},"card":[{"m":"No.16","s":"P"},{"m":"No.6","s":"P"},{"m":"No.12","s":"P"},{"m":"Cage","s":"P"},{"m":"No.10","s":"P"},{"m":"Cage","s":"P"},{"m":"No.8","s":"P"}],"flag":"*","printed":10.4},"75":{"label":"No.8 (P) \u2013 Curlane (S) \u2013 No.12 (S) \u2013 No.8 (S) \u2013 Curlane (S) \u2013 No.10 (S) \u2013 Cage (S) \u00b7 Curlane (S) \u2013 Finish","rounds":["No.8 (P) \u2013 Curlane (S) \u2013 No.12 (S) \u2013 No.8 (S) \u2013 Curlane (S) \u2013 No.10 (S) \u2013 Cage (S)","Curlane (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"Dosco|Grassy Mid":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"Dosco|No.8":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"],"No.8|Dosco":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"No.8|Grassy Mid":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"No.8|No.8":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"]},"card":[{"m":"No.8","s":"P"},{"m":"Curlane","s":"S"},{"m":"No.12","s":"S"},{"m":"No.8","s":"S"},{"m":"Curlane","s":"S"},{"m":"No.10","s":"S"},{"m":"Cage","s":"S"},{"m":"Curlane","s":"S"}],"flag":"*","cond":"Spring HW only","printed":6.2},"76":{"label":"No.16 (S) \u2013 EF2 (P) \u2013 No.11 (P) \u2013 No.5 (P) \u2013 Finish Cage \u00b7 No.8 (P) \u2013 Finish","rounds":["No.16 (S) \u2013 EF2 (P) \u2013 No.11 (P) \u2013 No.5 (P) \u2013 Finish Cage","No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8"],"No.8|Dosco":["No.8","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","No.16","EF2","No.11","No.5","Cage","No.8"]},"card":[{"m":"No.16","s":"S"},{"m":"EF2","s":"P"},{"m":"No.11","s":"P"},{"m":"No.5","s":"P"},{"m":"No.8","s":"P"}],"flag":"*","printed":7.0},"77":{"label":"Harp (P) \u2013 No.3 (P) \u2013 Cage (S) \u00b7 No.8 (P) \u2013 Finish","rounds":["Harp (P) \u2013 No.3 (P) \u2013 Cage (S)","No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Harp","No.3","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","Harp","No.3","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","Harp","No.3","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Harp","No.3","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Harp","No.3","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Harp","No.3","Cage","No.8"],"No.8|Dosco":["No.8","Harp","No.3","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","Harp","No.3","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","Harp","No.3","Cage","No.8"]},"card":[{"m":"Harp","s":"P"},{"m":"No.3","s":"P"},{"m":"Cage","s":"S"},{"m":"No.8","s":"P"}],"flag":"*","printed":6.0},"78":{"label":"W4 (P) \u2013 No.14 (P) \u2013 No.6 (P) \u2013 No.10 (P) \u2013 Cage (P) \u00b7 No.8 (P) \u2013 Finish","rounds":["W4 (P) \u2013 No.14 (P) \u2013 No.6 (P) \u2013 No.10 (P) \u2013 Cage (P)","No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","W4","No.14","No.6","No.10","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","W4","No.14","No.6","No.10","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","W4","No.14","No.6","No.10","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","W4","No.14","No.6","No.10","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","W4","No.14","No.6","No.10","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","W4","No.14","No.6","No.10","Cage","No.8"],"No.8|Dosco":["No.8","W4","No.14","No.6","No.10","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","W4","No.14","No.6","No.10","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","W4","No.14","No.6","No.10","Cage","No.8"]},"card":[{"m":"W4","s":"P"},{"m":"No.14","s":"P"},{"m":"No.6","s":"P"},{"m":"No.10","s":"P"},{"m":"Cage","s":"P"},{"m":"No.8","s":"P"}],"flag":"*","printed":9.2},"79":{"label":"W2 (P) \u2013 No.6 (P) \u2013 W2 (P) \u2013 Cage (S) \u00b7 No.8 (P) \u2013 Finish","rounds":["W2 (P) \u2013 No.6 (P) \u2013 W2 (P) \u2013 Cage (S)","No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","W2","No.6","W2","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","W2","No.6","W2","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","W2","No.6","W2","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","W2","No.6","W2","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","W2","No.6","W2","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","W2","No.6","W2","Cage","No.8"],"No.8|Dosco":["No.8","W2","No.6","W2","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","W2","No.6","W2","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","W2","No.6","W2","Cage","No.8"]},"card":[{"m":"W2","s":"P"},{"m":"No.6","s":"P"},{"m":"W2","s":"P"},{"m":"Cage","s":"S"},{"m":"No.8","s":"P"}],"flag":"*","printed":5.0},"8":{"label":"No.10 (S) \u2013 EF2 (S) \u2013 No.8 (P) \u2013 Dosco (S) \u2013 Cage (S) \u00b7 Dosco (S) \u2013 Cage (S) \u00b7 Dosco (P) \u2013 No.8 (P) \u2013 No.5 (S) \u2013 Finish","rounds":["No.10 (S) \u2013 EF2 (S) \u2013 No.8 (P) \u2013 Dosco (S) \u2013 Cage (S)","Dosco (S) \u2013 Cage (S)","Dosco (P) \u2013 No.8 (P) \u2013 No.5 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Dosco"],"Dosco|Grassy Mid":["Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Grassy Mid"],"Dosco|No.8":["Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","No.8"],"No.8|Dosco":["No.8","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Dosco"],"No.8|Grassy Mid":["No.8","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","Grassy Mid"],"No.8|No.8":["No.8","No.10","EF2","No.8","Dosco","Cage","Dosco","Cage","Dosco","No.8","No.5","No.8"]},"card":[{"m":"No.10","s":"S"},{"m":"EF2","s":"S"},{"m":"No.8","s":"P"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"P"},{"m":"No.8","s":"P"},{"m":"No.5","s":"S"}],"flag":"**","printed":10.2},"80":{"label":"Ringabella (P) \u2013 No.6 (P) \u2013 Cage (S) \u00b7 No.8 (P) \u2013 Finish","rounds":["Ringabella (P) \u2013 No.6 (P) \u2013 Cage (S)","No.8 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Ringabella","No.6","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","Ringabella","No.6","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","Ringabella","No.6","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Ringabella","No.6","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Ringabella","No.6","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Ringabella","No.6","Cage","No.8"],"No.8|Dosco":["No.8","Ringabella","No.6","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","Ringabella","No.6","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","Ringabella","No.6","Cage","No.8"]},"card":[{"m":"Ringabella","s":"P"},{"m":"No.6","s":"P"},{"m":"Cage","s":"S"},{"m":"No.8","s":"P"}],"flag":"*","cond":"Card note: consider dropping Dutchman if wind light/non-spinnaker; printed course itself contains no Dutchman","printed":6.4},"81":{"label":"No.16 (S) \u2013 EF2 (S) \u2013 No.11 (P) \u2013 No.5 (S) \u2013 Finish Cage \u00b7 No.8 (S) \u2013 Finish","rounds":["No.16 (S) \u2013 EF2 (S) \u2013 No.11 (P) \u2013 No.5 (S) \u2013 Finish Cage","No.8 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","No.16","EF2","No.11","No.5","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.16","EF2","No.11","No.5","Cage","No.8"],"No.8|Dosco":["No.8","No.16","EF2","No.11","No.5","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","No.16","EF2","No.11","No.5","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","No.16","EF2","No.11","No.5","Cage","No.8"]},"card":[{"m":"No.16","s":"S"},{"m":"EF2","s":"S"},{"m":"No.11","s":"P"},{"m":"No.5","s":"S"},{"m":"No.8","s":"S"}],"flag":"*","printed":6.8},"82":{"label":"Harp (P) \u2013 No.3 (P) \u2013 Cage (S) \u00b7 No.8 (S) \u2013 Finish","rounds":["Harp (P) \u2013 No.3 (P) \u2013 Cage (S)","No.8 (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","Harp","No.3","Cage","No.8","Dosco"],"Dosco|Grassy Mid":["Dosco","Harp","No.3","Cage","No.8","Grassy Mid"],"Dosco|No.8":["Dosco","Harp","No.3","Cage","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Harp","No.3","Cage","No.8","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Harp","No.3","Cage","No.8","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Harp","No.3","Cage","No.8"],"No.8|Dosco":["No.8","Harp","No.3","Cage","No.8","Dosco"],"No.8|Grassy Mid":["No.8","Harp","No.3","Cage","No.8","Grassy Mid"],"No.8|No.8":["No.8","Harp","No.3","Cage","No.8"]},"card":[{"m":"Harp","s":"P"},{"m":"No.3","s":"P"},{"m":"Cage","s":"S"},{"m":"No.8","s":"S"}],"flag":"*","printed":6.0},"83":{"label":"No.8 (P) \u2013 Curlane (S) \u2013 No.12 (S) \u2013 No.8 (S) \u2013 Curlane (S) \u2013 No.10 (S) \u2013 Cage (S) \u00b7 Curlane (S) \u2013 Finish","rounds":["No.8 (P) \u2013 Curlane (S) \u2013 No.12 (S) \u2013 No.8 (S) \u2013 Curlane (S) \u2013 No.10 (S) \u2013 Cage (S)","Curlane (S) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"Dosco|Grassy Mid":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"Dosco|No.8":["Dosco","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"],"Grassy Mid|Dosco":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"],"No.8|Dosco":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Dosco"],"No.8|Grassy Mid":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","Grassy Mid"],"No.8|No.8":["No.8","Curlane","No.12","No.8","Curlane","No.10","Cage","Curlane","No.8"]},"card":[{"m":"No.8","s":"P"},{"m":"Curlane","s":"S"},{"m":"No.12","s":"S"},{"m":"No.8","s":"S"},{"m":"Curlane","s":"S"},{"m":"No.10","s":"S"},{"m":"Cage","s":"S"},{"m":"Curlane","s":"S"}],"flag":"*","cond":"Spring HW only","printed":6.2},"9":{"label":"No.18 (P) \u2013 No.20 (P) \u2013 No.13 (S) \u2013 No.5 (S) \u2013 Cage (S) \u00b7 Dosco (P) \u2013 Cage (P) \u00b7 W4 (P) \u2013 No.3 (P) \u2013 Finish","rounds":["No.18 (P) \u2013 No.20 (P) \u2013 No.13 (S) \u2013 No.5 (S) \u2013 Cage (S)","Dosco (P) \u2013 Cage (P)","W4 (P) \u2013 No.3 (P) \u2013 Finish"],"cfg":{"Dosco|Dosco":["Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Dosco"],"Dosco|Grassy Mid":["Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Grassy Mid"],"Dosco|No.8":["Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","No.8"],"Grassy Mid|Dosco":["Grassy Mid","Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Dosco"],"Grassy Mid|Grassy Mid":["Grassy Mid","Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Grassy Mid"],"Grassy Mid|No.8":["Grassy Mid","Dosco","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","No.8"],"No.8|Dosco":["No.8","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Dosco"],"No.8|Grassy Mid":["No.8","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","Grassy Mid"],"No.8|No.8":["No.8","No.18","No.20","No.13","No.5","Cage","Dosco","Cage","W4","No.3","No.8"]},"card":[{"m":"No.18","s":"P"},{"m":"No.20","s":"P"},{"m":"No.13","s":"S"},{"m":"No.5","s":"S"},{"m":"Cage","s":"S"},{"m":"Dosco","s":"P"},{"m":"Cage","s":"P"},{"m":"W4","s":"P"},{"m":"No.3","s":"P"}],"flag":"**","printed":10.3}}};
+const CARD_STARTS=['Grassy Mid','No.8','Dosco'];
+function cardMarkName(id){return id;}
+function cardCourseIds(){return Object.keys(CARD.courses).sort((a,b)=>+a-+b);}
+function cardSel(){return {c:$('cardCourse').value,s:$('cardStart').value,f:$('cardFinish').value};}
+function cardSeq(){const{c,s,f}=cardSel();const d=CARD.courses[c];return d&&d.cfg[s+'|'+f]||null;}
+function cardInit(){
+  $('cardSrc').textContent='Course card from '+CARD.meta.source+' ('+CARD.meta.generated+'), '+Object.keys(CARD.courses).length+' courses. Positions and distances are as held in the workbook; this page does not recalculate them.';
+  const cc=$('cardCourse');
+  cc.innerHTML=cardCourseIds().map(id=>'<option value="'+id+'">Course '+id+' — '+esc(CARD.courses[id].label||'')+'</option>').join('');
+  $('cardStart').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  $('cardFinish').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  ['cardCourse','cardStart','cardFinish'].forEach(id=>$(id).onchange=cardPreview);
+  cardPreview();
+}
+function cardRounding(seq){return seq.slice(1,seq.length-1);}
+function cardPreview(){
+  const {c}=cardSel(), d=CARD.courses[c], seq=cardSeq(), host=$('cardPreview');
+  if(!d||!seq){host.innerHTML='<p class="cardnote flag">That start and finish combination is not in the workbook.</p>';return;}
+  const marks=cardRounding(seq);
+  let total=0, gaps=[];
+  for(let i=0;i<seq.length-1;i++){const p=CARD.pairs[seq[i]+'|'+seq[i+1]];if(p)total+=p.nm;else gaps.push(seq[i]+' → '+seq[i+1]);}
+  const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag);
+  const bits=[];
+  (d.rounds||[]).forEach((r,i)=>bits.push('<p class="cardnote">Round '+(i+1)+': '+esc(r)+'</p>'));
+  bits.push('<p class="cardnote">Rounding marks in order: '+esc(marks.join(' – '))+'</p>');
+  bits.push('<p class="cardnote">Workbook route '+total.toFixed(2)+' nm, measured from the card\'s '+cardSel().s+' start to its '+cardSel().f+' finish'+(d.printed?'. The card prints '+d.printed+' nm, an estimate that is not recalculated when a course changes':'')+'. The legs below will measure from your own recorded lines instead, so the total will differ.</p>');
+  if(d.cond)bits.push('<p class="cardnote flag">Card condition: '+esc(d.cond)+'</p>');
+  if(d.flag==='**')bits.push('<p class="cardnote">Card marks this course **: Dosco is inserted as Mark 1 when the Grassy Walk Line is in use. The workbook sequence above already does that.</p>');
+  if(gaps.length)bits.push('<p class="cardnote flag">No workbook geometry for: '+esc(gaps.join(', '))+'</p>');
+  flags.forEach(m=>bits.push('<p class="cardnote flag">'+esc(m)+': '+esc(CARD.marks[m].flag)+'</p>'));
+  bits.push('<p class="cardnote">The card start and finish choose the configuration. Legs to and from the line still use the committee boat and pin you have recorded.</p>');
+  host.innerHTML=bits.join('');
+}
+function cardImport(){
+  const {c}=cardSel(), d=CARD.courses[c], seq=cardSeq();
+  if(!d||!seq)return;
+  if(course().length&&!confirm('Replace the course already built for Race '+S.race+', '+startName()+'?'))return;
+  const marks=cardRounding(seq);
+  // sides from the printed card, matched in order
+  const sides=(d.card||[]); const ents=[]; let ptr=0;
+  if(sides.length&&marks.length&&sides[0].m!==marks[0]&&sides[0].m===cardSel().s)ptr=1;  /* the card's first mark is the start line itself */
+  marks.forEach(nm=>{
+    const m=CARD.marks[nm];
+    if(!m)return;
+    push({race:S.race,name:nm,fix:1,lat:m.lat,lon:m.lon,acc:null,time:'',card:nm,flag:m.flag||'',cardType:m.type||''});
+    let side='';
+    if(sides[ptr]&&sides[ptr].m===nm){side=sides[ptr].s||'';ptr++;}   /* in step with the printed card */
+    ents.push({id:cardId(S.race,nm),side});            /* out of step (e.g. the ** Dosco inserted as Mark 1): leave the side blank rather than borrow another mark's */
+  });
+  S.courses[ckey(S.race,S.start)]=ents;
+  S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f};
+  const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag&&!CARD.marks[m].laid);
+  // laid marks: say which position each uses, and take that as seen, so only a later change raises a notice
+  const laid=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].laid).map(nm=>{const lm=markById(cardId(S.race,nm));
+    S.laidAck[lm.laidSt.key]=laidCur(lm);return {nm,lm};});
+  $('cardStatus').className='status '+(flags.length||d.cond||laid.some(l=>!l.lm.atFix)?'err':'ok');
+  $('cardStatus').textContent='Course '+c+' imported into Race '+S.race+', '+startName()+'.'+
+    (d.cond?' Condition: '+d.cond+'.':'')+(flags.length?' Check position: '+flags.join(', ')+'.':'')+
+    laid.map(l=>' '+l.nm+(l.lm.atFix?' uses the RIB fix at '+fixLabel(l.lm.laidSt.use,S.race)+'.':' is a planning position until laid.')).join('');
+  commit();
+}
+
+
+/* ---------- render ---------- */
+function render(){
+  if(!S.winds||typeof S.winds!=='object')S.winds={};
+  {const w=S.winds[ckey(S.race,S.start)]||{};S.twd=w.twd||'';S.tws=w.tws||'';}
+  $('twd').value=S.twd;$('tws').value=S.tws;
+  const tabs=$('tabs');tabs.innerHTML='';
+  races().forEach(r=>{const b=document.createElement('button');b.textContent='Race '+r;b.setAttribute('aria-pressed',r===S.race);
+    b.onclick=()=>{S.race=r;commit();};tabs.appendChild(b);});
+  if(S.start>=S.starts.length)S.start=0;
+  $('startTime').value=startTime();
+  const st=$('starts');st.innerHTML='';
+  S.starts=S.startClasses.map((_,i)=>'Start '+(i+1));
+  S.starts.forEach((n,i)=>{const b=document.createElement('button');b.setAttribute('aria-pressed',i===S.start);
+    const cl=S.startClasses[i]||[];
+    b.innerHTML=esc(n)+'<small>'+(cl.length?esc(cl.map(shortClass).join(' · ')):'choose classes')+'</small>';
+    b.onclick=()=>{if(S.start===i){classOpen=!classOpen;}else{S.start=i;classOpen=!(S.startClasses[i]||[]).length;}commit();};
+    st.appendChild(b);});
+  const ad=document.createElement('button');ad.className='edit';ad.textContent='+ Start';ad.setAttribute('aria-label','Add a start');
+  ad.onclick=()=>{S.startClasses.push([]);S.start=S.startClasses.length-1;classOpen=true;commit();};
+  st.appendChild(ad);
+  const pk=$('classPick');
+  if(classOpen){
+    const mine=S.startClasses[S.start]||[];
+    pk.hidden=false;
+    pk.innerHTML='<p class="pickhead">Classes in Start '+(S.start+1)+'</p>'+CLASSES.map(c=>{
+      const other=S.startClasses.findIndex((l,i)=>i!==S.start&&l.includes(c));
+      return '<label class="pick'+(other>=0?' taken':'')+'"><input type="checkbox" value="'+esc(c)+'"'+(mine.includes(c)?' checked':'')+(other>=0?' disabled':'')+'> '+esc(c)+(other>=0?' <small>in Start '+(other+1)+'</small>':'')+'</label>';
+    }).join('')+'<button class="done" id="classDone">Done</button>'+
+      (S.startClasses.length>1&&!mine.length?'<button class="rm" id="classRm">Remove Start '+(S.start+1)+'</button>':'');
+    pk.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
+      const l=S.startClasses[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{S.startClasses[S.start]=l.filter(x=>x!==cb.value);}
+      S.startClasses[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
+    $('classDone').onclick=()=>{classOpen=false;commit();};
+    const rm=$('classRm'); if(rm)rm.onclick=()=>{S.startClasses.splice(S.start,1);
+      Object.keys(S.courses).forEach(k=>{const [r,st]=k.split('|').map(Number);if(st===S.start)delete S.courses[k];else if(st>S.start){S.courses[r+'|'+(st-1)]=S.courses[k];delete S.courses[k];}});
+      S.start=0;classOpen=false;commit();};
+  }else pk.hidden=true;
+  const cp=$('copyStart'), src=S.starts.findIndex((n,i)=>i!==S.start&&course(S.race,i).length);
+  if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));commit();};}
+  else cp.hidden=true;
+  const bk=$('bank');bk.innerHTML='';
+  const bm=bank().filter(m=>!isLineMark(m.name));
+  if(!bank().length)bk.innerHTML='<p class="empty">No marks for Race '+S.race+' yet.</p>';
+  bm.forEach(m=>{const lm=isLaidCard(m)?resolveLaid(m):null, phones=lm?lm.laidSt.phones:(m.card?0:phoneCount(m));
+    const b=document.createElement('button');b.className='chip'+(m.manual?' manual':'')+(m.card?' card':'')+(m.card&&m.flag&&!(lm&&lm.atFix)?' flagged':'')+(phones>1?' split':'');
+    if(m.card&&m.flag&&!(lm&&lm.atFix))b.title=m.flag;
+    if(phones>1)b.title=(lm?lm.laidSt.fixes:sameMark(m)).map(x=>'Fix '+x.fix+': '+[x.time,accOf(x),whoOf(x)].filter(Boolean).join(', ')).join('\n');
+    const info=lm?[m.race<S.race?'from Race '+m.race:'',laidSrc(lm)]:
+      [m.race<S.race?'from Race '+m.race:'',m.card?(m.flag?'course card ⚠':'course card'):(m.pending?'waiting to send':(m.time||'typed')),accOf(m),whoOf(m)];
+    b.innerHTML=esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
+      (phones>1?'<small class="warnTxt">⚠ fixes from '+phones+' phones</small>':'')+
+      (lm&&lm.laidSt.suggest.length?'<small class="warnTxt">Possible fix: '+lm.laidSt.suggest.map(x=>'"'+esc(x.name)+'" '+esc(x.time)).join(', ')+'</small>':'');
+    b.onclick=()=>{course().push({id:m.id,side:''});commit();};bk.appendChild(b);});
+  renderMover();
+  const ol=$('course');ol.innerHTML='';const cs=course();
+  const sl0=startLine();
+  const pins=fixesOf(isStartPin), cbs=fixesOf(isCB), stm=mins(startTime());
+  const later=[...pins,...cbs].filter(m=>stm!==null&&mins(m.time)!==null&&mins(m.time)>stm);
+  // with no line recorded, an imported card course measures from the card's own start (same test as buildLegs)
+  const ccfg0=(S.cardCfg||{})[ckey(S.race,S.start)];
+  const cardS=!sl0&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
+  const cardF=cardS&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
+  const ends=cardS&&!pins.length&&!cbs.length?'':
+    '<div class="meta">'+endPicker('Committee boat',isCB,'cb',!!cardS)+' ↔ '+endPicker('Start Pin',isStartPin,'pin',!!cardS)+'</div>';
+  ol.innerHTML='<li class="lineRow"><div class="disc line">S</div><div><b>Start line</b>'+ends+
+    (later.length?'<div class="meta" style="color:var(--muted);font-size:.85rem">'+later.map(m=>esc(m.name)+' fix at '+esc(m.time)).join(', ')+' is after this start, so it isn\'t used automatically.</div>':'')+
+    (sl0?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
+        (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
+        '. Record the committee boat and pin to measure the real line and its bias.</div>'
+      :'<div class="meta warnTxt">Record the missing end to get the line and bias.</div>')+
+    '</div><div></div></li>';
+  if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
+  cs.forEach((e,i)=>{const m=markById(e.id);if(!m)return;
+    const li=document.createElement('li');
+    const nw=newerFix(m), stm=mins(startTime());
+    let flag='';
+    const laterUsesNew=nw&&cs.some((x,j)=>j>i&&x.id===nw.id);
+    if(nw&&!(laterUsesNew&&stm!==null&&mins(nw.time)>stm)){const during=stm!==null&&mins(nw.time)!==null&&mins(nw.time)>stm;
+      flag='<div class="newer'+(during?' during':'')+'">'+(during?'Moved during the race at ':'Newer fix at ')+esc(nw.time||'?')+
+        ' <button data-a="newer" data-i="'+i+'">'+(during?'Use moved position':'Tap to use')+'</button></div>';}
+    let laid='';
+    if(m.laidSt){const st=m.laidSt;
+      laid='<div class="meta">'+laidPicker(m)+'</div>'+
+        (st.use?(st.phones>1?'<div class="meta warnTxt">⚠ fixes from '+st.phones+' phones; '+(st.mode==='auto'?'the latest is used':'your choice is used')+'</div>':'')
+               :'<div class="meta warnTxt">Planning position until laid</div>')+
+        (st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
+          ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></div>':'')+
+        (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
+    li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+'</b>'+
+      (m.race<S.race?'<div class="meta" style="color:var(--muted);font-size:.85rem">from Race '+m.race+'</div>':'')+flag+laid+'</div>'+
+      '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>'+
+      '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
+    ol.appendChild(li);});
+  $('finishSel').value=finishMode();
+  buildLegs();
+}
+function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
+
+const BOAT_M=10;
+/* Magnetic variation (°W), worked out silently for Irish waters from the marks' position and today's date.
+   Fitted to WMM values for 2026 (Dublin 1.55°W, Cork 1.88°W), easing about 0.2° a year. Good to about ±0.5°. */
+function varW(){
+  const ms=S.marks.length?S.marks:[{lat:51.8,lon:-8.3}];
+  const lon=ms.reduce((a,m)=>a+m.lon,0)/ms.length;
+  const now=new Date(), yr=now.getFullYear()+now.getMonth()/12;
+  return Math.max(0,1.55+0.15*(-6.26-lon)-0.2*(yr-2026));
+}
+function magOf(brgT){return Math.round(brgT+varW()+360)%360;}
+function isCB(n){return /committee/i.test(n);}
+function isStartPin(n){return /pin/i.test(n)&&!/finish/i.test(n);}
+function abbr(n){const s=n.trim();
+  if(/^windward$/i.test(s))return 'W'; if(/^leeward$/i.test(s))return 'L';
+  if(/^offset$/i.test(s))return 'O'; if(/^gybe$/i.test(s))return 'G';
+  return s.length<=2?s.toUpperCase():s;}
+function isFinishPin(n){return /finish/i.test(n)&&/pin/i.test(n);}
+function isLineMark(n){return isCB(n)||isStartPin(n)||isFinishPin(n);}
+function latest(test){let b=null;bank().forEach(m=>{if(test(m.name)&&(!b||m.race>b.race||(m.race===b.race&&m.fix>b.fix)))b=m;});return b;}
+function mkLine(a,b){return a&&b?{cb:a,pin:b,mid:{lat:(a.lat+b.lat)/2,lon:(a.lon+b.lon)/2}}:null;}
+if(!S.lineSel||typeof S.lineSel!=='object')S.lineSel={};
+function fixesOf(test){return bank().filter(m=>test(m.name)).sort((a,b)=>a.race-b.race||a.fix-b.fix);}
+// automatic choice: the latest fix at or before this start's start time (or the latest overall if no start time is set)
+function autoPick(test){
+  const list=fixesOf(test); if(!list.length)return null;
+  const st=mins(startTime()); if(st===null)return list[list.length-1];
+  const before=list.filter(m=>mins(m.time)!==null&&mins(m.time)<=st);
+  return before.length?before[before.length-1]:list[0];
+}
+function pick(test,which){
+  const sel=(S.lineSel[ckey(S.race,S.start)]||{})[which];
+  if(sel&&sel!=='auto'){const m=markById(sel);if(m&&test(m.name))return m;}
+  return autoPick(test);
+}
+function startLine(){return mkLine(pick(isCB,'cb'),pick(isStartPin,'pin'));}
+if(!S.finishes||typeof S.finishes!=='object')S.finishes={};
+function finishMode(){return S.finishes[ckey(S.race,S.start)]||'start';}
+function finishLine(){const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(pick(isCB,'cb'),pick(isFinishPin,'fpin'));return startLine();}
+function endPicker(label,test,which,cardStandIn){
+  const list=fixesOf(test), cur=pick(test,which), sel=(S.lineSel[ckey(S.race,S.start)]||{})[which]||'auto';
+  if(!list.length)return cardStandIn?'<span style="color:var(--muted)">'+label+' not recorded</span>':'<span class="warnTxt">'+label+' missing</span>';
+  const who=m=>whoOf(m)?' · '+esc(whoOf(m)):'', phones=phoneCount(cur);
+  const split=phones>1?' <span class="warnTxt">⚠ fixes from '+phones+' phones</span>':'';
+  if(list.length===1)return esc(label)+' '+esc(cur.time||'')+who(cur)+split;
+  const auto=autoPick(test);
+  return esc(label)+' <select class="endSel" data-w="'+which+'" aria-label="'+esc(label)+' fix">'+
+    '<option value="auto"'+(sel==='auto'?' selected':'')+'>auto ('+esc(auto.time||'?')+who(auto)+')</option>'+
+    list.map(m=>'<option value="'+esc(m.id)+'"'+(sel===m.id?' selected':'')+'>'+esc(m.time||'typed')+(m.race<S.race?' (R'+m.race+')':'')+who(m)+'</option>').join('')+'</select>'+split;
+}
+function card(ents){
+  const out=['Start'];
+  ents.forEach(e=>{const n=markById(e.id).name;out.push(abbr(n)+(e.side?'('+e.side+')':''));});
+  if(finishMode()!=='last')out.push('Finish'); else if(out.length>1)out[out.length-1]+=' (finish)';
+  return out.join(' – ');
+}
+function analysis(cs,twdT){
+  const bits=[],txt=[];
+  const sl=startLine();
+  if(sl){
+    const r=rhumb(sl.cb,sl.pin);
+    if(twdT===null){
+      bits.push('<p class="note">Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M. Enter the wind direction for bias.</p>');
+    }else{
+      const up=r.m*Math.cos(rad(((r.brg-twdT)+360)%360)); // +ve: pin further upwind
+      const fav=up>0?'pin':'boat';
+      const off=Math.abs(90-Math.abs(((r.brg-twdT+360)%360)>180?360-((r.brg-twdT+360)%360):((r.brg-twdT+360)%360)));
+      const line='Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
+        (off<=2?' · no end favoured':' · '+fav+' end favoured by '+(Math.abs(up)<1?'under 1 m':Math.round(Math.abs(up))+' m (~'+(Math.abs(up)/BOAT_M).toFixed(1)+' boat lengths)'));
+      bits.push('<p class="note'+(off>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
+    }
+  }
+  const w=cs.find(m=>/windward/i.test(m.name));
+  if(w&&twdT!==null){
+    const from=sl?sl.mid:cs[0];
+    const r=rhumb(from,w);
+    let d=((r.brg-twdT+540)%360)-180; // +ve: mark right of square
+    const across=Math.abs(r.m*Math.sin(rad(d)));
+    const dir=(twdT+(d>0?-90:90)+360)%360;
+    const line=Math.abs(d)<1?'Windward mark square with the wind, '+r.nm.toFixed(2)+' nm':
+      'Windward mark '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir),3)+'°M to square it';
+    bits.push('<p class="note'+(Math.abs(d)>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
+  }
+  return {html:bits.join(''),txt};
+}
+function checks(ents,cs){
+  const out=[];
+  for(let i=1;i<cs.length;i++) if(cs[i].id===cs[i-1].id) out.push('Same mark twice in a row at position '+(i+1)+' ('+cs[i].name+').');
+  cs.forEach(m=>{if(m.acc!==null&&m.acc>10&&!out.some(o=>o.includes(m.name+' fix')))out.push(m.name+' fix is only ±'+m.acc+' m.');});
+  return out;
+}
+let shiftText='';
+function buildShift(cs){
+  const host=$('shift'), box=$('shiftSend');
+  const v=varW();
+  const nm=$('newWind').value;
+  if(nm===''||cs.length<2){host.innerHTML='';box.hidden=true;shiftText='';return;}
+  const newT=((+nm-v)%360+360)%360;
+  const sl=startLine();
+  const w=cs.find(m=>/windward/i.test(m.name));
+  const lee=cs.find(m=>/leeward/i.test(m.name));
+  const ref=sl?sl.mid:(lee||cs[0]);
+  const refName=sl?'the start line':(lee?'the leeward mark':cs[0].name);
+  if(!w){host.innerHTML='<p class="note">No windward mark in this course, so there is nothing to reset.</p>';box.hidden=true;shiftText='';return;}
+  const cur=rhumb(ref,w);
+  const np=dest(ref,newT,cur.m);
+  const mv=rhumb(w,np);
+  const out=[], html=[];
+  html.push('<p class="note">Beat measured from '+esc(refName)+', length kept at '+cur.nm.toFixed(2)+' nm. Old beat '+pad(magOf(cur.brg),3)+'°M, new beat '+pad(Math.round(+nm),3)+'°M.</p>');
+  const l1='Windward: move '+Math.round(mv.m)+' m towards '+pad(magOf(mv.brg),3)+'°M → '+ddm(np.lat,true)+' '+ddm(np.lon,false);
+  out.push(l1); html.push('<p class="note flag">'+esc(l1)+'</p>');
+  const off=cs.find(m=>/offset/i.test(m.name));
+  if(off){const op={lat:off.lat+(np.lat-w.lat),lon:off.lon+(np.lon-w.lon)};const omv=rhumb(off,op);
+    const l='Offset: move '+Math.round(omv.m)+' m towards '+pad(magOf(omv.brg),3)+'°M → '+ddm(op.lat,true)+' '+ddm(op.lon,false);
+    out.push(l); html.push('<p class="note">'+esc(l)+'</p>');}
+  if(sl){
+    const lineLen=rhumb(sl.cb,sl.pin).m, curBrg=rhumb(sl.cb,sl.pin).brg;
+    const opt=[(newT+90)%360,(newT+270)%360];
+    const pick=Math.abs(((opt[0]-curBrg+540)%360)-180)<=Math.abs(((opt[1]-curBrg+540)%360)-180)?opt[0]:opt[1];
+    const npin=dest(sl.cb,pick,lineLen), pmv=rhumb(sl.pin,npin);
+    const l=pmv.m<5?'Start line stays square within 5 m.':'Start Pin: move '+Math.round(pmv.m)+' m towards '+pad(magOf(pmv.brg),3)+'°M → '+ddm(npin.lat,true)+' '+ddm(npin.lon,false)+' (squares the line)';
+    out.push(l); html.push('<p class="note">'+esc(l)+'</p>');
+  }
+  host.innerHTML=html.join('');
+  shiftText='*Mark moves – new wind '+pad(Math.round(+nm),3)+'°M*\n'+out.join('\n');
+  box.hidden=false;
+  $('shiftWa').href='https://wa.me/?text='+encodeURIComponent(shiftText);
+}
+function buildLegs(){
+  const ents=course().filter(e=>markById(e.id));const cs=ents.map(e=>markById(e.id));
+  const vr=varW();
+  const twdM=S.twd===''?null:+S.twd;
+  const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
+  const twsv=S.tws===''?null:+S.tws;
+  const host=$('legs');
+  const sl=startLine(), fl=finishLine();
+  /* with no committee boat recorded, fall back to the card's own start and finish marks */
+  const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)];
+  const cardEnd=(nm,label)=>{const m=nm&&CARD.marks[nm];return m?{id:'_c'+label,name:label+' ('+nm+')',lat:m.lat,lon:m.lon,virtual:true,card:nm}:null;};
+  const sPt=sl?{id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.s,'Start'):null);
+  const fPt=fl?{id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.f,'Finish'):null);
+  const cardEnds=!sl&&!!sPt;
+  const pts=(sPt?[sPt]:[]).concat(cs, fPt?[fPt]:[]);
+  if(pts.length<2||!cs.length){$('laidNote').innerHTML='';host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
+  let rows='',total=0,lines=[];
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i],b=pts[i+1];
+    const {r,via,fixNote}=legGeom(a,b);
+    total+=r.nm;
+    const isLine=false;
+    const brgT=Math.round(r.brg)%360;
+    const brgM=magOf(r.brg);
+    const ang=twdv===null?null:Math.round(twa(r.brg,twdv));
+    rows+='<tr><td>'+(isLine?'Line':'Leg '+(i+1))+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+(via?'<br><span class="viaTxt">card route'+esc(via)+'</span>':'')+(fixNote?'<br><span class="viaTxt warnTxt">'+esc(fixNote)+'</span>':'')+'</td>'+
+      '<td class="n">'+pad(brgM,3)+'°M<br><span style="color:var(--muted)">'+pad(brgT,3)+'°T</span></td>'+
+      '<td class="n">'+r.nm.toFixed(2)+'<br><span style="color:var(--muted)">'+Math.round(r.m)+' m</span></td>'+
+      '<td class="n">'+(ang===null?'–':ang+'°<br><span style="color:var(--muted)">'+legType(ang)+'</span>')+'</td></tr>';
+    lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+(via?' ('+via.trim()+')':'')+(fixNote?' ['+fixNote+']':'')+' · '+pad(brgM,3)+'°M ('+pad(brgT,3)+'°T) · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
+  }
+  laidNotice(pts,total);
+  const an=analysis(cs,twdv), warn=checks(ents,cs);
+  host.innerHTML=(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p>'+
+    '<table><thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
+    '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
+  plot(pts,[sl&&{a:sl.cb,b:sl.pin},fl&&fl!==sl&&{a:fl.cb,b:fl.pin}].filter(Boolean));
+  buildShift(cs);
+  const head=(S.title||'Course')+(S.date?' – '+S.date:'');
+  setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(ents)+'\n'+ents.map((e,i)=>{const m=markById(e.id);return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
+    '\nTotal '+total.toFixed(2)+' nm'+(an.txt.length?'\n'+an.txt.join('\n'):'')+(twdM===null?'':'\nWind '+pad(twdM,3)+'°M'+(twsv===null?'':' '+twsv+' kn'))+'\n\n'+
+    [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+laidTag(m)+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
+}
+function setOut(t){
+  text=t;$('out').textContent=t||'Build a course to get the summary.';
+  const wa=$('wa');
+  if(t){wa.href='https://wa.me/?text='+encodeURIComponent(t);wa.removeAttribute('aria-disabled');}
+  else{wa.removeAttribute('href');wa.setAttribute('aria-disabled','true');}
+  $('share').style.display=navigator.share?'':'none';$('copy').style.gridColumn=navigator.share?'':'1/-1';
+}
+function plot(cs,segs){
+  segs=segs||[];
+  const W=340,H=380,P=34;
+  const all=cs.concat(...segs.map(g=>[g.a,g.b]));
+  const lat0=all.reduce((s,m)=>s+m.lat,0)/all.length, k=Math.cos(rad(lat0));
+  const xs=all.map(m=>m.lon*k), ys=all.map(m=>m.lat);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const sx=(x1-x0)||1e-6, sy=(y1-y0)||1e-6, s=Math.min((W-2*P)/sx,(H-2*P)/sy);
+  const cx=(x0+x1)/2, cy=(y0+y1)/2;
+  const px=m=>W/2+(m.lon*k-cx)*s, py=m=>H/2-(m.lat-cy)*s;
+  let g='';
+  for(let i=0;i<cs.length-1;i++)
+    g+='<line x1="'+px(cs[i]).toFixed(1)+'" y1="'+py(cs[i]).toFixed(1)+'" x2="'+px(cs[i+1]).toFixed(1)+'" y2="'+py(cs[i+1]).toFixed(1)+'" stroke="var(--sea)" stroke-width="2" marker-end="url(#ah)"/>';
+  segs.forEach(sg=>{g+='<line x1="'+px(sg.a).toFixed(1)+'" y1="'+py(sg.a).toFixed(1)+'" x2="'+px(sg.b).toFixed(1)+'" y2="'+py(sg.b).toFixed(1)+'" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 4"/>';});
+  const seen=new Set();
+  const marks=cs.filter(m=>!m.virtual).concat(...segs.map(g=>[g.a,g.b]));
+  const nameCount={}; [...new Map(marks.map(m=>[m.id,m])).values()].forEach(m=>{const k=m.name.toLowerCase();nameCount[k]=(nameCount[k]||0)+1;});
+  const label=m=>m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'');
+  marks.forEach((m,i)=>{
+    if(seen.has(m.id))return; seen.add(m.id);
+    const x=px(m),y=py(m);
+    g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="7" fill="var(--buoy)" stroke="var(--ink)" stroke-width="1.5"/>'+
+       (x>W*0.62?'<text x="'+(x-11).toFixed(1)+'" y="'+(y+4).toFixed(1)+'" font-size="12" text-anchor="end" fill="var(--ink)">'
+                 :'<text x="'+(x+11).toFixed(1)+'" y="'+(y+4).toFixed(1)+'" font-size="12" fill="var(--ink)">')+esc(label(m))+'</text>';
+  });
+  // scale bar
+  const oneNm=1852*s/(111320); // degrees lat per metre -> px
+  let barNm=1; while(oneNm*barNm>W*0.45)barNm/=2; while(oneNm*barNm<W*0.15)barNm*=2;
+  const bw=oneNm*barNm;
+  g+='<g stroke="var(--ink)" stroke-width="2"><line x1="14" y1="'+(H-16)+'" x2="'+(14+bw).toFixed(1)+'" y2="'+(H-16)+'"/><line x1="14" y1="'+(H-21)+'" x2="14" y2="'+(H-11)+'"/><line x1="'+(14+bw).toFixed(1)+'" y1="'+(H-21)+'" x2="'+(14+bw).toFixed(1)+'" y2="'+(H-11)+'"/></g>'+
+    '<text x="14" y="'+(H-24)+'" font-size="11" fill="var(--muted)">'+(barNm<1?barNm.toFixed(2):barNm)+' nm</text>';
+  // north arrow
+  g+='<g transform="translate('+(W-24)+',26)"><line x1="0" y1="14" x2="0" y2="-10" stroke="var(--ink)" stroke-width="2" marker-end="url(#ah)"/><text x="4" y="-6" font-size="12" fill="var(--ink)">N</text></g>';
+  if(S.twd!==''){const vr=varW(), tM=+S.twd, tT=((tM-vr)%360+360)%360;
+    g+='<g transform="translate(26,'+(H-70)+') rotate('+(tT%360)+')"><line x1="0" y1="-16" x2="0" y2="16" stroke="var(--warn)" stroke-width="2" marker-end="url(#aw)"/></g>'+
+    '<text x="6" y="'+(H-44)+'" font-size="11" fill="var(--warn)">wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</text>';}
+  $('plot').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Course plan, north up">'+
+    '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--sea)"/></marker>'+
+    '<marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/></marker></defs>'+g+'</svg>';
+  $('plotWrap').hidden=false;
+  $('plot').hidden=!!chartOn;
+  if(chartOn)drawChart();
+}
+
+/* ---------- pull from server ---------- */
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2);}
+function hhmm(t){const d=new Date(t);return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2);}
+function longDate(iso){try{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-IE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}catch(e){return iso;}}
+let pullOk=false;
+async function pull(quiet){
+  const day=$('day').value||todayISO(), st=$('readStatus');
+  if(!quiet){st.textContent='Fetching…'; st.className='status';}
+  try{
+    const r=await fetch(ENDPOINT+'?date='+encodeURIComponent(day),{headers:{'X-Race-Key':RACE_KEY},cache:'no-store'});
+    const j=await r.json();
+    if(!r.ok||!j.ok)throw new Error(j.error||('server '+r.status));
+    const list=j.marks.slice().sort((a,b)=>a.time-b.time);
+    if(day!==S.pulledDay){await saveCourses(true);   // don't lose unsent course edits for the day being left
+      S.courses={};S.startTimes={};S.finishes={};S.lineSel={};S.winds={};S.synced={};S.race=1;S.marks=S.marks.filter(m=>m.pending);
+      S.laidSel={};S.laidNo={};S.laidAck={};}  // new race day: start clean (laid marks are laid afresh too)
+    S.marks=S.marks.filter(m=>!m.server);
+    const n={};
+    list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
+      push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,server:true,sid:m.id,
+        device:typeof m.device==='string'?m.device:'',recorder:typeof m.recorder==='string'?m.recorder:''});});
+    if(list.length){S.title=list[list.length-1].series||S.title;S.date=longDate(day);}
+    S.pulledDay=day;
+    const rs=races(); if(!rs.includes(S.race))S.race=rs[0];
+    st.textContent=list.length?list.length+' fix'+(list.length>1?'es':'')+' for '+longDate(day)+' · updated '+hhmm(Date.now()):'No marks recorded yet for '+longDate(day)+'.';
+    st.className='status '+(list.length?'ok':'');
+    try{
+      const rc=await fetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{headers:{'X-Race-Key':RACE_KEY},cache:'no-store'});
+      const jc=await rc.json(); if(rc.ok&&jc.ok)applyServerCourses(jc.courses);
+    }catch(_){}
+    pullOk=true; commit();
+  }catch(e){
+    pullOk=false; if(quiet)return;
+    st.textContent=/key|403/i.test(e.message)?'Server refused the key. Check the settings match marks.php.':'Could not reach the server. Check signal and try again.';
+    st.className='status err';
+  }
+}
+$('day').value=todayISO();
+$('pull').onclick=()=>pull(false);
+setInterval(()=>{if(!document.hidden&&pullOk&&$('day').value===todayISO())pull(true);},30000);
+
+/* ---------- move a fix that was recorded under the wrong race ---------- */
+function renderMover(){
+  const box=$('moveBox'), wrap=$('moveWrap');
+  const here=S.marks.filter(m=>m.race===S.race&&m.sid);
+  if(!here.length){wrap.hidden=true;box.innerHTML='';return;}
+  wrap.hidden=false;
+  const races=[1,2,3].concat(S.race>3?[S.race]:[]).filter((v,i,a)=>a.indexOf(v)===i);
+  box.innerHTML='<p class="hint" style="margin:8px 0">Moving a fix changes the race it belongs to, for everyone. The position and time stay as recorded.</p>'+
+    here.map(m=>'<div class="moverow"><span>'+esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+' <small>'+esc(m.time||'')+'</small></span>'+
+      '<select data-sid="'+esc(m.sid)+'">'+races.map(r=>'<option value="'+r+'"'+(r===m.race?' selected':'')+'>Race '+r+'</option>').join('')+
+      '</select><button data-move="'+esc(m.sid)+'">Move</button></div>').join('');
+  box.querySelectorAll('button[data-move]').forEach(b=>b.onclick=()=>moveFix(b.dataset.move,+box.querySelector('select[data-sid="'+b.dataset.move+'"]').value));
+}
+async function moveFix(sid,newRace){
+  const m=S.marks.find(x=>x.sid===sid); if(!m||newRace===m.race)return;
+  const st=$('readStatus');
+  st.textContent='Moving '+m.name+' to Race '+newRace+'…'; st.className='status';
+  const day=$('day').value||todayISO();
+  const t=m.tms||Date.now();
+  try{
+    await postFix({action:'add',id:sid,series:S.title||'',date:day,race:newRace,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc||0,time:t});
+    const oldIds=new Map(S.marks.filter(x=>x.sid).map(x=>[x.id,x.sid]));
+    await pull(true);
+    // keep any course entries pointing at this fix
+    Object.keys(S.courses).forEach(k=>{(S.courses[k]||[]).forEach(e=>{
+      if(markById(e.id))return; const sd=oldIds.get(e.id); if(!sd)return;
+      const nm=S.marks.find(x=>x.sid===sd); if(nm)e.id=nm.id;});});
+    st.textContent=m.name+' moved to Race '+newRace+'.'; st.className='status ok';
+    commit();
+  }catch(e){st.textContent='Could not move that fix. Check signal and try again.'; st.className='status err';}
+}
+
+/* ---------- built courses saved on the server ---------- */
+if(!S.synced||typeof S.synced!=='object')S.synced={};
+function refOf(id){const m=markById(id);return m&&m.sid?'s:'+m.sid:'l:'+id;}
+function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===r.slice(2));return m?m.id:null;}return r.slice(2);}
+function recordFor(k){
+  if(k==='_starts')return {classes:S.startClasses};
+  const ls=S.lineSel[k]||{}, lsr={};
+  Object.keys(ls).forEach(w=>{lsr[w]=ls[w]==='auto'?'auto':refOf(ls[w]);});
+  return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
+          startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
+          wind:(S.winds&&S.winds[k])||{twd:'',tws:''}};
+}
+function isEmptyRec(k,r){return k==='_starts'?!r.classes.some(l=>l.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws);}
+function allKeys(){return [...new Set(['_starts'].concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
+function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
+let savingC=false, saveTimer=null;
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
+async function saveCourses(force){
+  // only save after this session has loaded the day's marks from the server (or when forced on a day change)
+  if(savingC||!S.pulledDay||(!pullOk&&!force))return;
+  const ks=allKeys().filter(isDirty); if(!ks.length)return; savingC=true;
+  try{
+    for(const k of ks){const rec=recordFor(k), js=JSON.stringify(rec);
+      await postFix({action:'course',date:S.pulledDay,key:k,data:rec}); S.synced[k]=js; save();}
+  }catch(e){}
+  savingC=false;
+}
+function applyServerCourses(obj){
+  Object.keys(obj||{}).forEach(k=>{
+    const rec=obj[k]&&obj[k].data; if(!rec)return;
+    // a device that has never synced this course takes the server's version; otherwise unsent local edits win until saved
+    if(S.synced[k]!==undefined&&isDirty(k))return;
+    if(k==='_starts'){if(Array.isArray(rec.classes)&&rec.classes.length)S.startClasses=rec.classes;}
+    else{
+      S.courses[k]=(rec.entries||[]).map(e=>({id:resolveRef(e.ref),side:e.side||''})).filter(e=>e.id);
+      if(rec.startTime)S.startTimes[k]=rec.startTime; else delete S.startTimes[k];
+      S.finishes[k]=rec.finish||'start';
+      const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=v==='auto'?'auto':(resolveRef(v)||'auto');}); S.lineSel[k]=ls;
+      if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
+    }
+    S.synced[k]=JSON.stringify(recordFor(k));
+  });
+}
+
+/* ---------- committee boat fix from this phone ---------- */
+if(!Array.isArray(S.outbox))S.outbox=[];
+function cbLabel(){return 'Record committee boat here – Race '+S.race;}
+async function postFix(body){
+  const r=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Race-Key':RACE_KEY},body:JSON.stringify(body),cache:'no-store'});
+  if(!r.ok)throw new Error('server '+r.status);
+}
+let sending=false;
+async function sendOutbox(){
+  if(sending||!S.outbox.length)return; sending=true;
+  try{
+    while(S.outbox.length){
+      const f=S.outbox[0]; await postFix(f);
+      S.outbox.shift(); S.marks=S.marks.filter(m=>m.pid!==f.id); save();
+    }
+    $('cbStatus').textContent='Committee boat sent.'; $('cbStatus').className='status ok';
+    await pull(true);
+  }catch(e){
+    $('cbStatus').textContent='Committee boat fix saved on this phone – will send when there is signal.'; $('cbStatus').className='status';
+  }
+  sending=false;
+}
+var cbWatch=null;
+$('recCB').onclick=()=>{
+  if(cbWatch!==null)return;
+  if(!('geolocation' in navigator)){$('cbStatus').textContent='No location access in this browser.';$('cbStatus').className='status err';return;}
+  let best=null; const t0=Date.now(), btn=$('recCB');
+  btn.textContent='Getting fix…';
+  const done=()=>{navigator.geolocation.clearWatch(cbWatch);cbWatch=null;clearTimeout(tm);btn.textContent=cbLabel();
+    if(!best){$('cbStatus').textContent='No fix received. Check location is allowed for this page.';$('cbStatus').className='status err';return;}
+    const c=best.coords, day=$('day').value||todayISO();
+    const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+    const fix=1+S.marks.filter(m=>m.race===S.race&&/^committee boat$/i.test(m.name)).length;
+    S.outbox.push({action:'add',id,series:S.title||'',date:day,race:S.race,name:'Committee boat',lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now()});
+    push({race:S.race,name:'Committee boat',fix,lat:c.latitude,lon:c.longitude,acc:Math.round(c.accuracy),time:hhmm(Date.now()),pending:true,pid:id});
+    $('cbStatus').textContent='Committee boat recorded for Race '+S.race+', ±'+Math.round(c.accuracy)+' m. Sending…';$('cbStatus').className='status ok';
+    commit(); sendOutbox();};
+  cbWatch=navigator.geolocation.watchPosition(p=>{
+    if(!best||p.coords.accuracy<best.coords.accuracy)best=p;
+    btn.textContent='Fix ±'+Math.round(best.coords.accuracy)+' m…';
+    if(best.coords.accuracy<=5||Date.now()-t0>10000)done();
+  },()=>{if(cbWatch!==null)done();},{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  const tm=setTimeout(done,12000);
+};
+setInterval(()=>{sendOutbox();saveCourses();},15000);
+window.addEventListener('online',sendOutbox);
+
+/* ---------- events ---------- */
+$('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(!t)return;
+  const k=ckey(S.race,S.start); S.lineSel[k]=S.lineSel[k]||{}; S.lineSel[k][t.dataset.w]=t.value; commit();});
+$('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;commit();});
+$('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+  if(b.dataset.a==='ack')Object.assign(S.laidAck,laidPending);
+  if(b.dataset.a==='use')S.laidSel[b.dataset.k]=b.dataset.f;
+  if(b.dataset.a==='no')S.laidNo[b.dataset.k]=(S.laidNo[b.dataset.k]||[]).concat(b.dataset.f);
+  commit();};
+$('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;commit();};
+$('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;commit();};
+$('read').onclick=()=>{
+  const t=$('paste').value;
+  if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
+  const n=readPaste(t);
+  $('readStatus').textContent=n?n+' mark fix'+(n>1?'es':'')+' read.':'No positions found. Check the message was pasted whole.';
+  $('readStatus').className='status '+(n?'ok':'err');
+  if(n){$('paste').value='';const r=races();if(!r.includes(S.race))S.race=r[0];}
+  commit();
+};
+cardInit();
+$('cardImport').onclick=cardImport;
+$('viewSketch').onclick=()=>setView(false);
+$('viewChart').onclick=()=>setView(true);
+if(S.chart)setView(true);
+$('addManual').onclick=()=>{
+  const name=prompt('Mark name');if(!name)return;
+  const pos=prompt('Position — e.g. 51 49.123 N 008 17.456 W, or 51.818717 -8.290933');if(!pos)return;
+  const p=parsePos(pos);
+  if(!p){$('readStatus').textContent='Could not read that position.';$('readStatus').className='status err';return;}
+  const nm=name.trim(), fix=1+S.marks.filter(m=>m.race===S.race&&m.name.toLowerCase()===nm.toLowerCase()).length;
+  const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  S.outbox.push({action:'add',id,series:S.title||'',date:$('day').value||todayISO(),race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:Date.now()});
+  push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(Date.now()),pending:true,pid:id});
+  $('readStatus').textContent=nm+' added. Sending…';$('readStatus').className='status ok';commit();sendOutbox();
+};
+$('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+  const i=+b.dataset.i,cs=course();
+  if(b.dataset.a==='up'&&i>0){[cs[i-1],cs[i]]=[cs[i],cs[i-1]];}
+  if(b.dataset.a==='newer'){const nw=newerFix(markById(cs[i].id));if(nw){
+    const old=cs[i].id, stm=mins(startTime()), during=stm!==null&&mins(nw.time)!==null&&mins(nw.time)>stm;
+    // before the start: the mark was re-laid, so every rounding uses the new position.
+    // during the race: only this rounding and the ones after it; earlier roundings keep the old position.
+    cs.forEach((e,j)=>{if(e.id===old&&(!during||j>=i))e.id=nw.id;});}}
+  if(b.dataset.a==='laidnewest')S.laidSel[b.dataset.k]='auto';
+  if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
+  if(b.dataset.a==='del')cs.splice(i,1);
+  commit();};
+function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};save();buildLegs();scheduleSave();}
+$('twd').oninput=e=>{S.twd=e.target.value;saveWind();};
+$('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
+function plotRefresh(){}
+$('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
+$('shiftCopy').onclick=async()=>{if(!shiftText)return;try{await navigator.clipboard.writeText(shiftText);$('shiftCopy').textContent='Copied';setTimeout(()=>$('shiftCopy').textContent='Copy move',1500);}catch(e){}};
+$('share').onclick=async()=>{if(!text)return;try{await navigator.share({text});}catch(e){}};
+$('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
+let armed=false;
+$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
+  S=fresh();armed=false;classOpen=false;$('clear').textContent='Clear everything';
+  ['readStatus','cbStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
+  $('newWind').value='';$('paste').value='';
+  commit();
+  $('readStatus').textContent='Cleared from this device. Marks and courses saved on the server come back with Get latest marks.';};
+render();
+$('recCB').textContent=cbLabel();
+sendOutbox();
+})();
+</script>
+</body>
+</html>
