@@ -105,7 +105,7 @@ details.backup summary{cursor:pointer;color:var(--muted)}
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-29.3';
+const PAGE_VERSION='2026-09-29.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -119,8 +119,26 @@ const PAGE_VERSION='2026-09-29.3';
 const ENDPOINT='/marks/marks.php';
 /* The race key comes from /marks/key.js, which is uploaded to the server but never committed (the repository is
    public). The last key seen is kept on this phone, so a key.js that fails to load mid-race does not stop uploads. */
-const RACE_KEY=(()=>{let k=typeof window.RACE_KEY==='string'&&window.RACE_KEY!=='CHANGE_ME'?window.RACE_KEY:'';
+let RACE_KEY=(()=>{let k=typeof window.RACE_KEY==='string'&&window.RACE_KEY!=='CHANGE_ME'?window.RACE_KEY:'';
   try{if(k)localStorage.setItem('race-key',k);else k=localStorage.getItem('race-key')||'';}catch(e){}return k;})();
+/* With no key (a phone that has never seen one, whose key.js did not load) every request first tries key.js again,
+   so signal returning clears it without a reload. A refused key is re-read once, in case it was changed on the server. */
+const KEY_URL=ENDPOINT.replace(/[^/]*$/,'key.js');
+async function ensureKey(){
+  if(RACE_KEY)return true;
+  try{const r=await fetch(KEY_URL+'?t='+Date.now(),{cache:'no-store'});
+    const m=r.ok&&(await r.text()).match(/RACE_KEY\s*=\s*'([^'\\]{6,})'/);
+    if(m&&m[1]!=='CHANGE_ME'){RACE_KEY=m[1];try{localStorage.setItem('race-key',RACE_KEY);}catch(e){}}}catch(e){}
+  return !!RACE_KEY;
+}
+async function keyFetch(url,opts){
+  if(!(await ensureKey()))throw new Error('no race key');
+  const go=()=>fetch(url,Object.assign({},opts,{headers:Object.assign({},opts.headers,{'X-Race-Key':RACE_KEY}),cache:'no-store'}));
+  let r=await go();
+  if(r.status===403){const old=RACE_KEY;RACE_KEY='';
+    if(await ensureKey()&&RACE_KEY!==old)r=await go(); else RACE_KEY=RACE_KEY||old;}
+  return r;
+}
 
 const K='laid-mark-log-v4';
 const PRESETS=['Committee boat','Start Pin','Windward','Leeward','Offset','Gybe','Finish Pin','A','B','C','D',
@@ -168,7 +186,7 @@ function fmtDate(iso){try{const[y,m,d]=iso.split('-').map(Number);return new Dat
 /* ---------- upload queue ---------- */
 let busy=false,lastErr='';
 async function post(body){
-  const r=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Race-Key':RACE_KEY},body:JSON.stringify(body),cache:'no-store'});
+  const r=await keyFetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok){let e='server '+r.status;try{e=(await r.json()).error||e;}catch(_){}throw new Error(e);}
 }
 async function sync(){
@@ -191,9 +209,10 @@ function renderSync(){
   const el=$('sync'),t=$('syncText');
   if(!S.marks.length&&!n){el.className='sync';t.textContent='Nothing recorded yet';return;}
   if(!n){el.className='sync';t.textContent='All fixes sent to the RO and scorer';return;}
-  const bad=/key|403/i.test(lastErr);
+  const nokey=lastErr==='no race key', bad=!nokey&&/key|403/i.test(lastErr);
   el.className='sync '+(bad?'err':'wait');
-  t.textContent=bad?'Upload refused ('+lastErr+'). Tell the scorer.':n+' waiting to send'+(lastErr?' – will retry when there is signal':'…');
+  t.textContent=bad?'Upload refused ('+lastErr+'). Tell the scorer.':
+    n+' waiting to send'+(nokey?' – race key not loaded yet, will retry when there is signal':lastErr?' – will retry when there is signal':'…');
 }
 setInterval(()=>{if(S.marks.some(m=>!m.sent)||S.deletes.length)sync();},15000);
 window.addEventListener('online',sync);

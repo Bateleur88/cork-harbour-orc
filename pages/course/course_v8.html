@@ -191,7 +191,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-29.8';
+const PAGE_VERSION='2026-09-29.9';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -205,8 +205,26 @@ const PAGE_VERSION='2026-09-29.8';
 const ENDPOINT='/marks/marks.php';
 /* The race key comes from /marks/key.js, which is uploaded to the server but never committed (the repository is
    public). The last key seen is kept on this phone, so a key.js that fails to load mid-race does not stop uploads. */
-const RACE_KEY=(()=>{let k=typeof window.RACE_KEY==='string'&&window.RACE_KEY!=='CHANGE_ME'?window.RACE_KEY:'';
+let RACE_KEY=(()=>{let k=typeof window.RACE_KEY==='string'&&window.RACE_KEY!=='CHANGE_ME'?window.RACE_KEY:'';
   try{if(k)localStorage.setItem('race-key',k);else k=localStorage.getItem('race-key')||'';}catch(e){}return k;})();
+/* With no key (a phone that has never seen one, whose key.js did not load) every request first tries key.js again,
+   so signal returning clears it without a reload. A refused key is re-read once, in case it was changed on the server. */
+const KEY_URL=ENDPOINT.replace(/[^/]*$/,'key.js');
+async function ensureKey(){
+  if(RACE_KEY)return true;
+  try{const r=await fetch(KEY_URL+'?t='+Date.now(),{cache:'no-store'});
+    const m=r.ok&&(await r.text()).match(/RACE_KEY\s*=\s*'([^'\\]{6,})'/);
+    if(m&&m[1]!=='CHANGE_ME'){RACE_KEY=m[1];try{localStorage.setItem('race-key',RACE_KEY);}catch(e){}}}catch(e){}
+  return !!RACE_KEY;
+}
+async function keyFetch(url,opts){
+  if(!(await ensureKey()))throw new Error('no race key');
+  const go=()=>fetch(url,Object.assign({},opts,{headers:Object.assign({},opts.headers,{'X-Race-Key':RACE_KEY}),cache:'no-store'}));
+  let r=await go();
+  if(r.status===403){const old=RACE_KEY;RACE_KEY='';
+    if(await ensureKey()&&RACE_KEY!==old)r=await go(); else RACE_KEY=RACE_KEY||old;}
+  return r;
+}
 const K='course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
@@ -924,7 +942,7 @@ async function pull(quiet){
   const day=$('day').value||todayISO(), st=$('readStatus');
   if(!quiet){st.textContent='Fetching…'; st.className='status';}
   try{
-    const r=await fetch(ENDPOINT+'?date='+encodeURIComponent(day),{headers:{'X-Race-Key':RACE_KEY},cache:'no-store'});
+    const r=await keyFetch(ENDPOINT+'?date='+encodeURIComponent(day),{});
     const j=await r.json();
     if(!r.ok||!j.ok)throw new Error(j.error||('server '+r.status));
     const list=j.marks.slice().sort((a,b)=>a.time-b.time);
@@ -942,13 +960,14 @@ async function pull(quiet){
     st.textContent=list.length?list.length+' fix'+(list.length>1?'es':'')+' for '+longDate(day)+' · updated '+hhmm(Date.now()):'No marks recorded yet for '+longDate(day)+'.';
     st.className='status '+(list.length?'ok':'');
     try{
-      const rc=await fetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{headers:{'X-Race-Key':RACE_KEY},cache:'no-store'});
+      const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok)applyServerCourses(jc.courses);
     }catch(_){}
     pullOk=true; commit();
   }catch(e){
     pullOk=false; if(quiet)return;
-    st.textContent=/key|403/i.test(e.message)?'Server refused the key. Check the settings match marks.php.':'Could not reach the server. Check signal and try again.';
+    st.textContent=e.message==='no race key'?'Race key not loaded yet. Check signal and tap Get latest marks again.':
+      /key|403/i.test(e.message)?'Server refused the key. Check key.js on the server matches the one the pages load.':'Could not reach the server. Check signal and try again.';
     st.className='status err';
   }
 }
@@ -1036,7 +1055,7 @@ function applyServerCourses(obj){
 if(!Array.isArray(S.outbox))S.outbox=[];
 function cbLabel(){return 'Record committee boat here – Race '+S.race;}
 async function postFix(body){
-  const r=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Race-Key':RACE_KEY},body:JSON.stringify(body),cache:'no-store'});
+  const r=await keyFetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('server '+r.status);
 }
 let sending=false;
