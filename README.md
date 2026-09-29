@@ -120,3 +120,16 @@ development test log · `Numbered Legs` the physical legs, the routing authority
 numeric evidence per chord. `Course Legs`, `ORC Export`, `Issues Audit` and
 `Resolution Priority` are stale v2.76-era sheets kept for history; do not read
 them as current.
+
+## Licence
+
+The licence is split by what the material is:
+
+- **Scripts and page code** (`scripts/`, and the race officer and mark-logging
+  pages): MIT, copyright 2026 Pat Tanner. See `LICENSE`.
+- **INFOMAR bathymetry**: Irish Public Sector Data (Geological Survey Ireland &
+  Marine Institute), licensed under CC BY 4.0. It is not redistributed here; the
+  scripts read rasters you download yourself.
+- **RCYC course card and Sailing Instruction content**: the club's. It is
+  reproduced in the workbook as data for scoring purposes and is not covered by
+  the MIT licence.
