@@ -10,7 +10,8 @@ and rebuild the page.
 
 Structure:
   meta     source, sha256, generated, criterion, attribution
-  marks    id -> lat, lon, full name, type, flag (uncertain position, shown in red)
+  marks    id -> lat, lon, full name, type, flag (uncertain position, shown in red),
+           laid (true for a club laid mark: the RIB's fix for the day takes precedence)
   pairs    "A|B" -> total nm and the physical segments, so the page never
            recomputes geometry and never invents a route
   courses  number -> printed rounds, sides from the card, condition, printed
@@ -27,12 +28,13 @@ import pandas as pd
 FLAGS = {
     'Ringabella': 'Two current 2026 RCYC documents give this mark 408 m apart; the Autumn League SI position is used.',
     'Harp': 'Two current 2026 RCYC documents give this mark 83 m apart; the Autumn League SI position is used.',
-    'White Bay': 'Laid mark, position approximate.',
-    'Curlane': 'Laid mark, position approximate.',
-    'Dutchman': 'Laid mark, position approximate.',
-    'EF4': 'Laid or movable race mark, position approximate.',
+    'EF4': 'Permanently moored race mark; position from a published RCYC reference only.',
     'Grassy Mid': 'Midpoint standing in for the Grassy Walk line, not a mark.',
 }
+# Club laid marks are laid afresh each race day. Which marks they are comes from the Marks sheet Type,
+# never from a list here; each is flagged, and carries laid: true for the page.
+LAID_TYPE = 'Club laid mark'
+LAID_FLAG = "Club laid mark: the RIB's fix for the day takes precedence; this position is a planning approximation."
 
 
 def main():
@@ -58,7 +60,10 @@ def main():
         seen.add(sid)
         marks[sid] = {'lat': round(float(r['Decimal Lat']), 6), 'lon': round(float(r['Decimal Lon']), 6),
                       'full': str(r['Mark']), 'type': str(r['Type'])}
-        if sid in FLAGS:
+        if str(r['Type']).startswith(LAID_TYPE):
+            marks[sid]['laid'] = True
+            marks[sid]['flag'] = LAID_FLAG
+        elif sid in FLAGS:
             marks[sid]['flag'] = FLAGS[sid]
 
     pairs, courses = {}, {}

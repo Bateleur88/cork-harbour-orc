@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_15_E4_CONFIRMED.xlsx` |
-| SHA-256 | `194ede57e41c52ec2c02a21da784bd94c6eb2f97e82a614f62652ac419ab2f84` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_16_MARK_TYPES.xlsx` |
+| SHA-256 | `3110fe964b2518c555824b8812c8b638a8ebddbfae69a7473ae6b5d94306211c` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
@@ -114,8 +114,11 @@ result recorded long before these scripts existed.
    Autumn League SIs (para 36, September) publish Ringabella 408 m apart and Harp
    83 m apart. The workbook follows the later document. RCYC has not been asked to
    resolve it.
-2. **Laid marks.** White Bay, Curlane, Dutchman and EF4 are approximate by nature.
-   A GPS fix from a RIB is the only real fix; the mark-logging page already does this.
+2. **Laid marks.** White Bay, Curlane and Dutchman are club laid marks, laid afresh
+   each race day: the stored position is a planning approximation and the RIB's fix
+   for the day is authoritative; the mark-logging page records it. Harp, Ringabella,
+   Dosco and EF4 are permanently moored; only their published coordinates are in
+   question. The Marks sheet Type says which is which, and `make_snapshot.py` reads it.
 3. **EF2 and Cage.** Carried on the club's word. The Port publishes no positions
    and refers mariners to BA 1765, 1773 and 1777.
 4. **No.6 to Cage** has a 29.9 m unsurveyed run near Cage. Deliberately retained at
