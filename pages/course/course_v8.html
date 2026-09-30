@@ -221,7 +221,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.1';
+const PAGE_VERSION='2026-09-30.2';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -631,7 +631,7 @@ function cardImport(){
     ents.push({id:cardId(S.race,nm),side});            /* out of step (e.g. the ** Dosco inserted as Mark 1): leave the side blank rather than borrow another mark's */
   });
   S.courses[ckey(S.race,S.start)]=ents;
-  S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f};
+  S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f}; stamp();
   const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag&&!CARD.marks[m].laid);
   // laid marks: say which position each uses, and take that as seen, so only a later change raises a notice
   const laid=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].laid).map(nm=>{const lm=markById(cardId(S.race,nm));
@@ -682,7 +682,7 @@ function render(){
       S.start=0;classOpen=false;commit();};
   }else pk.hidden=true;
   const cp=$('copyStart'), src=S.starts.findIndex((n,i)=>i!==S.start&&course(S.race,i).length);
-  if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));commit();};}
+  if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));stamp();commit();};}
   else cp.hidden=true;
   const bk=$('bank');bk.innerHTML='';
   const bm=bank().filter(m=>!isLineMark(m.name));
@@ -696,7 +696,7 @@ function render(){
     b.innerHTML=esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
       (phones>1?'<small class="warnTxt">⚠ fixes from '+phones+' phones</small>':'')+
       (lm&&lm.laidSt.suggest.length?'<small class="warnTxt">Possible fix: '+lm.laidSt.suggest.map(x=>'"'+esc(x.name)+'" '+esc(x.time)).join(', ')+'</small>':'');
-    b.onclick=()=>{course().push({id:m.id,side:''});commit();};bk.appendChild(b);});
+    b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};bk.appendChild(b);});
   renderMover();
   const ol=$('course');ol.innerHTML='';const cs=course();
   const sl0=startLine();
@@ -742,6 +742,8 @@ function render(){
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts();
 }
+// which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
+function stamp(k){S.courseDay=S.courseDay||{};S.courseDay[k||ckey(S.race,S.start)]=$('day').value||todayISO();}
 function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
 
 /* ---------- Setup and Race views ----------
@@ -1028,9 +1030,22 @@ async function pull(quiet){
     const j=await r.json();
     if(!r.ok||!j.ok)throw new Error(j.error||('server '+r.status));
     const list=j.marks.slice().sort((a,b)=>a.time-b.time);
-    if(day!==S.pulledDay){await saveCourses(true);   // don't lose unsent course edits for the day being left
-      S.courses={};S.startTimes={};S.finishes={};S.lineSel={};S.winds={};S.synced={};S.race=1;S.marks=S.marks.filter(m=>m.pending);
-      S.laidSel={};S.laidNo={};S.laidAck={};}  // new race day: start clean (laid marks are laid afresh too)
+    if(day!==S.pulledDay){
+      /* A different day is being loaded. Clear only what belongs to another day: a course built for this day before it
+         could be loaded (imported at the dock, before signal) is kept, on a new phone or one last used on another day.
+         Unsent edits to the old day's courses are saved to the old day first; this day's are not, they go to this day. */
+      const cd=S.courseDay||{}, mine=k=>cd[k]===day;
+      await saveCourses(true,k=>!mine(k));
+      ['courses','startTimes','finishes','lineSel','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
+      S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
+      const kept=new Set(Object.keys(S.courses).filter(k=>(S.courses[k]||[]).length).map(k=>+k.split('|')[0]));
+      // courses kept for this day have never been sent to this day's server file: mark them unsent, so they win over
+      // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
+      S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';});
+      S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
+      ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
+      if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;
+    }
     S.marks=S.marks.filter(m=>!m.server);
     const n={};
     list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
@@ -1106,13 +1121,17 @@ function allKeys(){return [...new Set(['_starts'].concat(Object.keys(S.courses||
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
-async function saveCourses(force){
+async function saveCourses(force,only){
   // only save after this session has loaded the day's marks from the server (or when forced on a day change)
   if(savingC||!S.pulledDay||(!pullOk&&!force))return;
-  const ks=allKeys().filter(isDirty); if(!ks.length)return; savingC=true;
+  // a course is only ever sent to the file of the day it was built for; one built for another day waits for that day
+  const day=S.pulledDay, cd=S.courseDay||{};
+  const ks=allKeys().filter(isDirty).filter(k=>!cd[k]||cd[k]===day).filter(only||(()=>true)); if(!ks.length)return; savingC=true;
   try{
-    for(const k of ks){const rec=recordFor(k), js=JSON.stringify(rec);
-      await postFix({action:'course',date:S.pulledDay,key:k,data:rec}); S.synced[k]=js; save();}
+    for(const k of ks){if(S.pulledDay!==day)break;           // the day changed while saving: stop, and let the new day save its own
+      const rec=recordFor(k), js=JSON.stringify(rec);
+      await postFix({action:'course',date:day,key:k,data:rec});
+      if(S.pulledDay===day){S.synced[k]=js; save();}}
   }catch(e){}
   savingC=false;
 }
@@ -1128,6 +1147,7 @@ function applyServerCourses(obj){
       S.finishes[k]=rec.finish||'start';
       const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=v==='auto'?'auto':(resolveRef(v)||'auto');}); S.lineSel[k]=ls;
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
+      S.courseDay=S.courseDay||{}; S.courseDay[k]=S.pulledDay;   // a course from the server belongs to the day it came from
     }
     S.synced[k]=JSON.stringify(recordFor(k));
   });
@@ -1182,15 +1202,15 @@ window.addEventListener('online',sendOutbox);
 
 /* ---------- events ---------- */
 $('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(!t)return;
-  const k=ckey(S.race,S.start); S.lineSel[k]=S.lineSel[k]||{}; S.lineSel[k][t.dataset.w]=t.value; commit();});
+  const k=ckey(S.race,S.start); S.lineSel[k]=S.lineSel[k]||{}; S.lineSel[k][t.dataset.w]=t.value; stamp(k); commit();});
 $('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;commit();});
 $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='ack')Object.assign(S.laidAck,laidPending);
   if(b.dataset.a==='use')S.laidSel[b.dataset.k]=b.dataset.f;
   if(b.dataset.a==='no')S.laidNo[b.dataset.k]=(S.laidNo[b.dataset.k]||[]).concat(b.dataset.f);
   commit();};
-$('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;commit();};
-$('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;commit();};
+$('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
+$('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
 $('read').onclick=()=>{
   const t=$('paste').value;
   if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
@@ -1228,7 +1248,7 @@ function courseAct(b){
   if(b.dataset.a==='laidnewest')S.laidSel[b.dataset.k]='auto';
   if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
   if(b.dataset.a==='del')cs.splice(i,1);
-  commit();}
+  stamp();commit();}
 $('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(b)courseAct(b);};
 $('raceAlertList').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='repull'){pull(false);return;}
@@ -1237,7 +1257,7 @@ document.querySelectorAll('.modebar button').forEach(b=>b.onclick=()=>setMode(b.
 $('toRace').onclick=()=>setMode('race');
 $('rRace').onchange=e=>{S.race=+e.target.value;commit();};
 $('rStart').onchange=e=>{S.start=+e.target.value;commit();};
-function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};save();buildLegs();scheduleSave();}
+function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};stamp();save();buildLegs();scheduleSave();}
 $('twd').oninput=e=>{S.twd=e.target.value;saveWind();};
 $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
 function plotRefresh(){}
