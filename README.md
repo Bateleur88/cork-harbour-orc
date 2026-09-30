@@ -122,6 +122,22 @@ Offline-first: the course card snapshot from the workbook is embedded in the pag
 - *Legs*: between two card marks the card's own route is used, passages included,
   with distances and bearings from the workbook; the page never searches for a
   route.
+- *Starts and finishes of a card course are deliberately not mirror images* — do
+  not "fix" one into the other:
+  - **Finish:** the card's Finish decides. Grassy Mid stands for the Grassy Walk
+    line: the recorded start line, or Grassy Mid standing in until it is recorded.
+    **No.8 or Dosco is the mark itself:** boats finish as they round or pass it and
+    the committee boat positions itself to time them, so a recorded line is not
+    used for the finish. The workbook ends such a route at the mark (a final
+    rounding of Dosco becomes the finish; there is no zero-length leg).
+  - **Start:** a recorded committee boat and pin always win. The Autumn League SI
+    2026 has committee boat starts in the area of Cage (C1), No.8 or Dosco, so a
+    No.8 or Dosco card start is a committee boat line near that mark, never the
+    mark itself. The card start only picks the workbook configuration and stands
+    in when nothing is recorded.
+  - The Finish selector in section 3 (start line, committee boat and Finish Pin, or
+    at the last mark) is for hand-built courses only; for a card course it is
+    replaced by a statement of the card's finish.
 - *Laid marks* (Curlane, Dutchman, White Bay, from the Marks sheet Type): the
   latest RIB fix of the day with exactly the mark's name is used; with none, the
   card position, flagged as a planning position until laid. A near miss such as

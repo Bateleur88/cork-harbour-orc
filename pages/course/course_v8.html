@@ -190,7 +190,8 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <details class="movefix" id="moveWrap"><summary>Fix recorded under the wrong race?</summary><div id="moveBox"></div></details>
   <div class="laidNote" id="laidNote" role="status" aria-live="polite"></div>
   <ol class="course" id="course"></ol>
-  <div class="fields">
+  <p class="cardnote" id="finishCard" hidden></p>
+  <div class="fields" id="finishFields">
     <label>Finish<select id="finishSel"><option value="start">Start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
   </div>
   <div class="fields" id="windFields">
@@ -240,7 +241,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.9';
+const PAGE_VERSION='2026-09-30.10';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -740,14 +741,15 @@ function render(){
   // with no line recorded, an imported card course measures from the card's own start (same test as buildLegs)
   const ccfg0=(S.cardCfg||{})[ckey(S.race,S.start)];
   const cardS=!sl0&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
-  const cardF=cardS&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
+  const cardF=cardS&&!finishIsCardMark()&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
   const ends=cardS&&!pins.length&&!cbs.length?'':
     '<div class="meta">'+endPicker('Committee boat',isCB,'cb',!!cardS)+' ↔ '+endPicker('Start Pin',isStartPin,'pin',!!cardS)+'</div>';
   ol.innerHTML='<li class="lineRow"><div class="disc line">S</div><div><b>Start line</b>'+ends+
     (later.length?'<div class="meta" style="color:var(--muted);font-size:.85rem">'+later.map(m=>esc(m.name)+' fix at '+esc(m.time)).join(', ')+' is after this start, so it isn\'t used automatically.</div>':'')+
     (sl0?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
-        '. Record the committee boat and pin to measure the real line and its bias.</div>'
+        '. Record the committee boat and pin to measure the real line and its bias.'+
+        (CARD.marks[cardS].type!=='Start/finish modelling point'?' A '+esc(cardS)+' start is a committee boat line near the mark, not the mark itself.':'')+'</div>'
       :'<div class="meta warnTxt">Record the missing end to get the line and bias.</div>')+
     '</div><div></div></li>';
   if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
@@ -773,6 +775,11 @@ function render(){
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
   $('finishSel').value=finishMode();
+  // a card course takes its finish from the card, so the hand-built Finish selector gives way to a plain statement
+  {const c=cardCfgNow(); $('finishFields').hidden=!!c; $('finishCard').hidden=!c;
+   if(c)$('finishCard').textContent=finishIsCardMark()
+     ?'Finish: '+c.f+', the mark itself (from the card). Boats finish as they round or pass it; the committee boat positions itself to time them. Starts are different: a No.8 or Dosco start is a committee boat line near the mark, so a recorded line is always used for the start.'
+     :'Finish: the Grassy Walk line (from the card): the recorded start line, or Grassy Mid standing in until the committee boat and pin are recorded. To finish elsewhere, choose another Card finish in section 2.';}
   $('toRace').hidden=!cs.length;
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum();
@@ -886,7 +893,19 @@ function pick(test,which){
 function startLine(){return mkLine(pick(isCB,'cb'),pick(isStartPin,'pin'));}
 if(!S.finishes||typeof S.finishes!=='object')S.finishes={};
 function finishMode(){return S.finishes[ckey(S.race,S.start)]||'start';}
-function finishLine(){const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(pick(isCB,'cb'),pick(isFinishPin,'fpin'));return startLine();}
+/* Finishes and starts of a card course are deliberately NOT mirror images. Do not "fix" one into the other.
+   - Finish: the card's Finish decides. Grassy Mid stands for the Grassy Walk line: the recorded start line if there
+     is one, otherwise Grassy Mid stands in. No.8 or Dosco is the mark itself: boats finish as they round or pass it,
+     and the committee boat positions itself to time them, so a recorded line is not used for the finish.
+   - Start: a recorded committee boat and pin always win. The Autumn League SI 2026 has committee boat starts in the
+     area of Cage (C1), No.8 or Dosco, so a No.8 or Dosco card start is a line near that mark, never the mark itself;
+     the card start only picks the configuration and stands in when nothing is recorded.
+   The Finish selector (start line / finish pin / last mark) is for hand-built courses only. */
+function cardCfgNow(){return (S.cardCfg||{})[ckey(S.race,S.start)];}
+function finishIsCardMark(){const c=cardCfgNow(),m=c&&CARD.marks[c.f];return !!(m&&m.type!=='Start/finish modelling point');}
+function finishLine(){
+  if(cardCfgNow())return finishIsCardMark()?null:startLine();
+  const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(pick(isCB,'cb'),pick(isFinishPin,'fpin'));return startLine();}
 function endPicker(label,test,which,cardStandIn){
   const list=fixesOf(test), cur=pick(test,which), sel=(S.lineSel[ckey(S.race,S.start)]||{})[which]||'auto';
   if(!list.length)return cardStandIn?'<span style="color:var(--muted)">'+label+' not recorded</span>':'<span class="warnTxt">'+label+' missing</span>';
@@ -1019,9 +1038,12 @@ function buildLegs(){
   }
   laidNotice(pts,total); lastTotal=total;
   const from=sl?'from the midpoint of the recorded start line (committee boat and pin)':
-    sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded':'from the first mark (no start point)';
-  const to=fl?(finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
-    fPt?'at the card\'s '+ccfg.f+' finish, standing in because no finish line is recorded':'at the last mark (no finish point)';
+    sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
+      (CARD.marks[ccfg.s]&&CARD.marks[ccfg.s].type!=='Start/finish modelling point'?' (a '+ccfg.s+' start is a committee boat line near the mark, not the mark itself)':''):
+    'from the first mark (no start point)';
+  const to=ccfg&&finishIsCardMark()?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
+    fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
+    fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).',total,pts.length-1);
   const an=analysis(cs,twdv), warn=checks(ents,cs);
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
