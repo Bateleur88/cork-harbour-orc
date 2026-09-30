@@ -96,7 +96,8 @@ svg{display:block;width:100%;height:auto}
 .btn{display:flex;align-items:center;justify-content:center;padding:14px;border-radius:14px;font-weight:700;text-decoration:none;border:2px solid var(--ink);background:transparent;color:var(--ink)}
 .btn.wa{grid-column:1/-1;background:#1F8A4C;border-color:#1F8A4C;color:#fff;padding:16px}
 .btn[aria-disabled="true"]{opacity:.4;pointer-events:none}
-pre#out{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
+.ssHead{font-size:1rem;margin:22px 0 4px}
+pre#out,pre#ssOut{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
 details.backup{margin-top:12px}
 details.backup summary{cursor:pointer;color:var(--muted);padding:6px 0}
 .starts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
@@ -219,6 +220,10 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
     <button class="btn" id="share">Share…</button>
     <button class="btn" id="copy">Copy text</button>
   </div>
+  <h3 class="ssHead">Leg table for SailScoring</h3>
+  <p class="cardnote" id="ssNote"></p>
+  <pre id="ssOut" class="setupOnly"></pre>
+  <div class="row"><button class="btn" id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button></div>
 
   <div class="raceOnly" id="slotCB"></div>
 
@@ -229,7 +234,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.5';
+const PAGE_VERSION='2026-09-30.6';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -444,21 +449,22 @@ function laidPicker(m){
 /* one leg's geometry. Between two card marks the card's route is used; if either end is a laid mark at a RIB fix,
    the route is kept and only the segment touching that mark is measured to the fix, which INFOMAR never checked. */
 function legGeom(a,b){
-  let r=rhumb(a,b), via='', fixNote='';
+  // parts: the physical legs actually sailed, one per passage segment (a direct leg is one part)
+  let r=rhumb(a,b), via='', fixNote='', parts=null;
   const p=a.card&&b.card?CARD.pairs[a.card+'|'+b.card]:null;
   if(p){
     if(p.segs.length>1)via=' via '+p.segs.slice(0,-1).map(s=>s.to).join(' → ');
-    if(!a.atFix&&!b.atFix)r={nm:p.nm,m:p.nm*1852,brg:p.segs[0].brg};
+    if(!a.atFix&&!b.atFix){r={nm:p.nm,m:p.nm*1852,brg:p.segs[0].brg};parts=p.segs.map(s=>({nm:s.nm,brg:s.brg}));}
     else{
       const nodes=[a].concat(p.segs.slice(0,-1).map(s=>CARD.marks[s.to]),[b]);
-      if(nodes.every(Boolean)){let nm=0,brg=null;
+      if(nodes.every(Boolean)){let nm=0,brg=null;parts=[];
         p.segs.forEach((s,i)=>{const own=(i===0&&a.atFix)||(i===p.segs.length-1&&b.atFix);
-          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;});
+          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;parts.push({nm:g.nm,brg:g.brg});});
         r={nm,m:nm*1852,brg};}
       fixNote='to RIB fix, not depth-checked';
     }
   }else if(a.atFix||b.atFix)fixNote='to RIB fix, not depth-checked';
-  return {r,via,fixNote};
+  return {r,via,fixNote,parts:parts||[{nm:r.nm,brg:r.brg}]};
 }
 let laidPending={}, lastTotal=0, lastPullAt=0;
 function laidNotice(pts,total){
@@ -976,11 +982,12 @@ function buildLegs(){
   const fPt=fl?{id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.f,'Finish'):null);
   const cardEnds=!sl&&!!sPt;
   const pts=(sPt?[sPt]:[]).concat(cs, fPt?[fPt]:[]);
-  if(pts.length<2||!cs.length){$('laidNote').innerHTML='';lastTotal=0;host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
-  let rows='',total=0,lines=[];
+  if(pts.length<2||!cs.length){$('laidNote').innerHTML='';lastTotal=0;setSS([],'');host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
+  let rows='',total=0,lines=[],ss=[];
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i],b=pts[i+1];
-    const {r,via,fixNote}=legGeom(a,b);
+    const g=legGeom(a,b), {r,via,fixNote}=g;
+    g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg),3)));   // SailScoring: "nm °M", one line per physical leg
     total+=r.nm;
     const isLine=false;
     const brgT=Math.round(r.brg)%360;
@@ -993,6 +1000,11 @@ function buildLegs(){
     lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+(via?' ('+via.trim()+')':'')+(fixNote?' ['+fixNote+']':'')+' · '+pad(brgM,3)+'°M ('+pad(brgT,3)+'°T) · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
   }
   laidNotice(pts,total); lastTotal=total;
+  const from=sl?'from the midpoint of the recorded start line (committee boat and pin)':
+    sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded':'from the first mark (no start point)';
+  const to=fl?(finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
+    fPt?'at the card\'s '+ccfg.f+' finish, standing in because no finish line is recorded':'at the last mark (no finish point)';
+  setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).');
   const an=analysis(cs,twdv), warn=checks(ents,cs);
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
@@ -1003,6 +1015,15 @@ function buildLegs(){
   setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(ents)+'\n'+ents.map((e,i)=>{const m=markById(e.id);return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
     '\nTotal '+total.toFixed(2)+' nm'+(an.txt.length?'\n'+an.txt.join('\n'):'')+(twdM===null?'':'\nWind '+pad(twdM,3)+'°M'+(twsv===null?'':' '+twsv+' kn'))+'\n\n'+
     [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+laidTag(m)+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
+}
+/* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
+   The note is shown above the block and is not part of what is copied. */
+let ssText='';
+function setSS(lines,note){
+  ssText=lines.join('\n');
+  $('ssNote').textContent=note;
+  $('ssOut').textContent=ssText||'Build a course to get the leg table.';
+  $('ssCopy').disabled=!ssText;
 }
 function setOut(t){
   text=t;$('out').textContent=t||'Build a course to get the summary.';
@@ -1303,6 +1324,9 @@ function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
 $('shiftCopy').onclick=async()=>{if(!shiftText)return;try{await navigator.clipboard.writeText(shiftText);$('shiftCopy').textContent='Copied';setTimeout(()=>$('shiftCopy').textContent='Copy move',1500);}catch(e){}};
 $('share').onclick=async()=>{if(!text)return;try{await navigator.share({text});}catch(e){}};
+$('ssCopy').onclick=async()=>{if(!ssText)return;
+  try{await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);}
+  catch(e){const r=document.createRange();r.selectNodeContents($('ssOut'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 $('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 let armed=false;
 $('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
