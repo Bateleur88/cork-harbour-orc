@@ -65,6 +65,11 @@ body:not(.race) .raceOnly{display:none!important}
 .info .note{margin:0;padding:5px 0;border:none;border-radius:0;background:none}
 .info .note+.note{border-top:1px solid var(--line)}
 .laidNote .note{margin:8px 0}
+.cardsum{padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:.95rem}
+.cardsum.flag{border-color:var(--warn)}
+.cardsum button{display:block;margin-top:8px;padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
+.chip .plus{font-weight:700;color:var(--sea)}
+.chip .used{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--ink);color:var(--paper);font-size:.75rem;font-weight:700}
 .laidNote button{margin:6px 8px 0 0;padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
 .laidSel{display:inline-block;width:auto;margin:2px 4px;padding:4px 8px;font-size:.9rem}
 .cardnote{color:var(--muted);font-size:.85rem;margin:6px 0}
@@ -144,17 +149,19 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <button class="act" id="pull">Get latest marks</button>
   <p class="hint" style="color:var(--muted);font-size:.85rem;margin:6px 0 0">After the first tap it refreshes by itself every 30 seconds.</p>
   <p class="status" id="readStatus" role="status" aria-live="polite"></p>
-  <details class="backup">
-    <summary>Backup: paste a WhatsApp message instead</summary>
-    <textarea id="paste" placeholder="Paste one or more WhatsApp messages here, then tap Read marks." style="margin-top:10px"></textarea>
-    <button class="ghost" id="read">Read marks</button>
-  </details>
-  <button class="ghost" id="addManual">Add a mark by typing its position</button>
-
   <button class="ghost" id="recCB">Record committee boat here</button>
   <p class="status" id="cbStatus" role="status" aria-live="polite"></p>
+  <details class="backup">
+    <summary>Other ways to add a mark</summary>
+    <textarea id="paste" placeholder="Paste one or more WhatsApp messages here, then tap Read marks." style="margin-top:10px"></textarea>
+    <button class="ghost" id="read">Read marks from a WhatsApp message</button>
+    <button class="ghost" id="addManual">Add a mark by typing its position</button>
+  </details>
 
   <h2>2 · Import a harbour course</h2>
+  <!-- once a course is imported for this race and start, the section shrinks to one line; the button reopens it -->
+  <div class="cardsum" id="cardSum" hidden><span id="cardSumText"></span><button type="button" id="cardReopen">Choose another course</button></div>
+  <div id="cardBody">
   <p class="cardnote" id="cardSrc"></p>
   <div class="fields">
     <label>Course<select id="cardCourse"></select></label>
@@ -166,6 +173,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <div id="cardPreview"></div>
   <button class="act" id="cardImport">Import this course</button>
   <p class="status" id="cardStatus" role="status" aria-live="polite"></p>
+  </div>
 
   <h2>3 · Build the course</h2>
   <div class="tabs" id="tabs" role="group" aria-label="Race"></div>
@@ -221,7 +229,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.2';
+const PAGE_VERSION='2026-09-30.3';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -630,7 +638,7 @@ function cardImport(){
     if(sides[ptr]&&sides[ptr].m===nm){side=sides[ptr].s||'';ptr++;}   /* in step with the printed card */
     ents.push({id:cardId(S.race,nm),side});            /* out of step (e.g. the ** Dosco inserted as Mark 1): leave the side blank rather than borrow another mark's */
   });
-  S.courses[ckey(S.race,S.start)]=ents;
+  S.courses[ckey(S.race,S.start)]=ents; cardOpen=false;
   S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f}; stamp();
   const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag&&!CARD.marks[m].laid);
   // laid marks: say which position each uses, and take that as seen, so only a later change raises a notice
@@ -693,7 +701,11 @@ function render(){
     if(phones>1)b.title=(lm?lm.laidSt.fixes:sameMark(m)).map(x=>'Fix '+x.fix+': '+[x.time,accOf(x),whoOf(x)].filter(Boolean).join(', ')).join('\n');
     const info=lm?[m.race<S.race?'from Race '+m.race:'',laidSrc(lm)]:
       [m.race<S.race?'from Race '+m.race:'',m.card?(m.flag?'course card ⚠':'course card'):(m.pending?'waiting to send':(m.time||'typed')),accOf(m),whoOf(m)];
-    b.innerHTML=esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
+    // a chip adds a mark to the course: "+" says so, and the badge counts how often it is already in (a mark can be rounded twice)
+    const used=course().filter(e=>e.id===m.id).length;
+    b.setAttribute('aria-label','Add '+m.name+(used?', already in the course '+used+(used>1?' times':' time'):''));
+    b.innerHTML='<span class="plus" aria-hidden="true">+</span> '+esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+
+      (used?'<span class="used" aria-hidden="true">×'+used+'</span>':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
       (phones>1?'<small class="warnTxt">⚠ fixes from '+phones+' phones</small>':'')+
       (lm&&lm.laidSt.suggest.length?'<small class="warnTxt">Possible fix: '+lm.laidSt.suggest.map(x=>'"'+esc(x.name)+'" '+esc(x.time)).join(', ')+'</small>':'');
     b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};bk.appendChild(b);});
@@ -740,7 +752,25 @@ function render(){
   $('finishSel').value=finishMode();
   $('toRace').hidden=!cs.length;
   buildLegs();
-  applyMode(); renderRaceHead(); renderRaceAlerts();
+  applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum();
+}
+/* section 2 after import: one line (course, card distance, laid marks and flags) instead of the chooser;
+   "Choose another course" reopens it until the next import */
+let cardOpen=false;
+function renderCardSum(){
+  const cfg=(S.cardCfg||{})[ckey(S.race,S.start)], show=!!(cfg&&course().length&&!cardOpen);
+  $('cardSum').hidden=!show; $('cardBody').hidden=show;
+  if(!show)return;
+  const d=CARD.courses[cfg.c], seq=d&&d.cfg[cfg.s+'|'+cfg.f];
+  let nm=0; if(seq)for(let i=0;i<seq.length-1;i++){const p=CARD.pairs[seq[i]+'|'+seq[i+1]];if(p)nm+=p.nm;}
+  const notes=[];
+  [...new Set(seq?cardRounding(seq):[])].forEach(n=>{const cm=CARD.marks[n];if(!cm)return;
+    if(cm.laid){const lm=markById(cardId(S.race,n));if(lm&&lm.laidSt)notes.push(n+(lm.atFix?': RIB fix '+lm.laidSt.use.time:': planning position'));}
+    else if(cm.flag)notes.push(n+' flagged');});
+  if(d&&d.cond)notes.push('Condition: '+d.cond);
+  $('cardSumText').textContent=['Course '+cfg.c+' imported',cfg.s===cfg.f?cfg.s:cfg.s+' start, '+cfg.f+' finish',
+    nm?nm.toFixed(2)+' nm on the card route':''].filter(Boolean).concat(notes).join(' · ');
+  $('cardSum').className='cardsum'+(notes.some(t=>!/RIB fix/.test(t))?' flag':'');
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
 function stamp(k){S.courseDay=S.courseDay||{};S.courseDay[k||ckey(S.race,S.start)]=$('day').value||todayISO();}
@@ -1255,6 +1285,7 @@ $('raceAlertList').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)
   courseAct(b);};
 document.querySelectorAll('.modebar button').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 $('toRace').onclick=()=>setMode('race');
+$('cardReopen').onclick=()=>{cardOpen=true;render();};
 $('rRace').onchange=e=>{S.race=+e.target.value;commit();};
 $('rStart').onchange=e=>{S.start=+e.target.value;commit();};
 function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};stamp();save();buildLegs();scheduleSave();}
