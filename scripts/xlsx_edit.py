@@ -15,6 +15,7 @@ Usage:
     wb = Workbook('master_v3_14.xlsx')
     wb.set_cell('Marks', 59, 'H', 'RCYC Autumn League SI 2026, para 36')
     wb.append_readme('Some change v3.15 (1 Oct 2026)', 'What changed, why, and the baseline hash.')
+    wb.remove_sheet('Some Stale Sheet')
     wb.save('master_v3_15.xlsx')
 
 Then always: reopen, diff against the previous version, and run audit_workbook.py.
@@ -32,6 +33,7 @@ class Workbook:
         self.path = path
         self.zin = zipfile.ZipFile(path)
         self.parts = {}
+        self.removed = set()
         wbxml = self.zin.read('xl/workbook.xml').decode('utf-8')
         rels = self.zin.read('xl/_rels/workbook.xml.rels').decode('utf-8')
         self.sheets = {}
@@ -47,6 +49,50 @@ class Workbook:
         if part not in self.parts:
             self.parts[part] = self.zin.read(part).decode('utf-8')
         return part, self.parts[part]
+
+    def _part(self, name):
+        if name not in self.parts:
+            self.parts[name] = self.zin.read(name).decode('utf-8')
+        return self.parts[name]
+
+    def remove_sheet(self, sheet):
+        """Remove one worksheet: its part, and its one entry each in workbook.xml, the
+        workbook relationships and [Content_Types].xml. Every other part is untouched.
+
+        Refused, rather than attempted, if anything could still depend on the sheet: a
+        formula or defined name naming it, sheet-scoped names, or relationships of its
+        own (drawings, tables, comments). Cell text that merely mentions it is fine."""
+        part = self.sheets[sheet]
+        wb = self._part('xl/workbook.xml')
+        el = [m for m in re.finditer(r'<(?:x:)?sheet [^>]*/>', wb)
+              if re.search(r'name="%s"' % re.escape(escape(sheet, {'"': '&quot;'})), m.group(0))]
+        if len(el) != 1:
+            raise KeyError(f'{sheet}: expected one <sheet> entry, found {len(el)}')
+        rid = re.search(r'r:id="([^"]+)"', el[0].group(0)).group(1)
+        if 'localSheetId' in wb or re.search(r'<(?:x:)?definedName[^>]*>[^<]*' + re.escape(sheet), wb):
+            raise ValueError(f'{sheet}: named ranges in the workbook may refer to it')
+        own = part.rsplit('/', 1)
+        if f'{own[0]}/_rels/{own[1]}.rels' in self.zin.namelist():
+            raise ValueError(f'{sheet}: has relationships of its own, not handled here')
+        for n in self.zin.namelist():
+            if re.match(r'xl/worksheets/[^/]+\.xml$', n) and n != part and n not in self.removed:
+                s = self.parts.get(n) or self.zin.read(n).decode('utf-8')
+                for f in re.findall(r'<(?:x:)?f[ >].*?</(?:x:)?f>', s, re.S):
+                    if sheet in f:
+                        raise ValueError(f'{sheet}: a formula in {n} refers to it')
+
+        rels = self._part('xl/_rels/workbook.xml.rels')
+        rel = re.findall(r'<Relationship [^>]*Id="%s"[^>]*/>' % re.escape(rid), rels)
+        ct = self._part('[Content_Types].xml')
+        ov = re.findall(r'<Override PartName="/%s"[^>]*/>' % re.escape(part), ct)
+        if len(rel) != 1 or len(ov) != 1:
+            raise KeyError(f'{sheet}: expected one relationship and one content type, found {len(rel)} and {len(ov)}')
+        self.parts['xl/workbook.xml'] = wb.replace(el[0].group(0), '', 1)
+        self.parts['xl/_rels/workbook.xml.rels'] = rels.replace(rel[0], '', 1)
+        self.parts['[Content_Types].xml'] = ct.replace(ov[0], '', 1)
+        self.parts.pop(part, None)
+        self.removed.add(part)
+        del self.sheets[sheet]
 
     def set_cell(self, sheet, row, col, value, numeric=False):
         """Replace one cell. Row numbers are worksheet rows: data row i of a
@@ -100,6 +146,8 @@ class Workbook:
     def save(self, out):
         with zipfile.ZipFile(out, 'w') as z:
             for info in self.zin.infolist():
+                if info.filename in self.removed:
+                    continue
                 data = self.parts.get(info.filename)
                 z.writestr(info, data.encode('utf-8') if data is not None else self.zin.read(info.filename),
                            compress_type=info.compress_type)

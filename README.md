@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_16_MARK_TYPES.xlsx` |
-| SHA-256 | `3110fe964b2518c555824b8812c8b638a8ebddbfae69a7473ae6b5d94306211c` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_17_STALE_SHEETS_REMOVED.xlsx` |
+| SHA-256 | `2f12e280a8c3db48dcdfbd07175ae96ef5d3da0bdf47aee4a56365d0521dcbe0` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
@@ -149,11 +149,14 @@ result recorded long before these scripts existed.
 `Read Me` change records · `Marks` positions, type, source, accuracy ·
 `Course Card` the printed card as data · `Required Pairs` the 177 logical pairs ·
 `Passages` one authoritative row per directed pair · `Navigation Tests` the
-development test log · `Numbered Legs` the physical legs, the routing authority ·
-`ORC Distance Bearings` geodesic geometry for those legs · `Evidence Register`
-numeric evidence per chord. `Course Legs`, `ORC Export`, `Issues Audit` and
-`Resolution Priority` are stale v2.76-era sheets kept for history; do not read
-them as current.
+development test log · `Bathymetry Sources` the six INFOMAR grids used, with CRS,
+pixel size, no-data value and extent · `Navigation Model` the routing rules: the
+1.5 m chart-datum threshold, land and drying areas prohibited, inadequate coverage
+for review, and the western routing boundary · `Numbered Legs` the physical legs,
+the routing authority · `ORC Distance Bearings` geodesic geometry for those legs ·
+`Evidence Register` numeric evidence per chord. The stale v2.76-era sheets
+`Course Legs`, `ORC Export`, `Issues Audit` and `Resolution Priority` were removed
+in v3.17; they remain in the repository history.
 
 ## Licence
 
