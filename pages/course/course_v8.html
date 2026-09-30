@@ -48,6 +48,22 @@ textarea{width:100%;min-height:110px;padding:12px;border-radius:12px;border:2px 
 .chip.card{border-color:var(--sea);border-style:dashed}
 .chip.card.flagged{border-color:var(--warn)}
 .chip.split{border-color:var(--warn)}
+/* two modes: Setup (everything) and Race (header, alerts, legs, plot, wind, shift, send) */
+body.race .setupOnly{display:none!important}
+body:not(.race) .raceOnly{display:none!important}
+.wrap>h2{border-top:1px solid var(--line);padding-top:14px}
+.modebar{display:flex;margin:0 0 12px;border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+.modebar button{flex:1;padding:10px;border:none;background:transparent;font-weight:700}
+.modebar button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.racehead{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.racehead select{width:auto;margin:0;padding:6px 8px;font-weight:700}
+#rSum{flex:1 1 100%;color:var(--muted);font-size:.92rem}
+#raceAlertList .note,#raceAlertList .newer{margin:8px 0}
+#slotCB .ghost{margin-top:18px}
+/* the lines above the legs table share one box instead of one box each */
+.info{margin:8px 0;padding:6px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.info .note{margin:0;padding:5px 0;border:none;border-radius:0;background:none}
+.info .note+.note{border-top:1px solid var(--line)}
 .laidNote .note{margin:8px 0}
 .laidNote button{margin:6px 8px 0 0;padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
 .laidSel{display:inline-block;width:auto;margin:2px 4px;padding:4px 8px;font-size:.9rem}
@@ -110,6 +126,14 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 </head>
 <body>
 <div class="wrap">
+  <div class="modebar" role="group" aria-label="View"><button type="button" data-mode="setup">Setup</button><button type="button" data-mode="race">Race</button></div>
+  <!-- race view: what is needed after the gun. Shared controls (laid-mark notices, wind, committee boat) move into the slots here -->
+  <div class="raceOnly">
+    <div class="racehead"><select id="rRace" aria-label="Race"></select><select id="rStart" aria-label="Start"></select><span id="rSum"></span></div>
+    <div id="raceAlertList" role="status" aria-live="polite"></div>
+    <div id="slotLaid"></div>
+  </div>
+  <div class="setupOnly">
   <h1>Course plot</h1>
   <p class="lede">Get the marks from the RIBs, tap them in rounding order, and get the legs with bearings and distances.</p>
 
@@ -156,14 +180,18 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <div class="fields">
     <label>Finish<select id="finishSel"><option value="start">Start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
   </div>
-  <div class="fields">
+  <div class="fields" id="windFields">
     <label>Wind direction °M<input id="twd" type="number" min="0" max="359" inputmode="numeric" placeholder="optional"></label>
     <label>Wind speed kn<input id="tws" type="number" min="0" step="0.5" inputmode="decimal" placeholder="optional"></label>
   </div>
+  <button class="act" id="toRace" hidden>Go to race view</button>
+  </div>
 
-  <h2>4 · Legs</h2>
+  <h2 class="setupOnly">4 · Legs</h2>
   <div id="legs"></div>
   <div class="plot" id="plotWrap" hidden><div class="viewTabs"><button type="button" id="viewSketch" aria-pressed="true">Sketch</button><button type="button" id="viewChart" aria-pressed="false">Chart</button></div><div id="plot"></div><div id="mapWrap" hidden><div id="map"></div></div><p class="status" id="mapStatus" role="status" aria-live="polite"></p></div>
+
+  <div class="raceOnly" id="slotWind"></div>
 
   <h2>5 · Wind shift</h2>
   <p class="lede">Enter the new wind direction to get the mark moves for a true beat.</p>
@@ -177,21 +205,23 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   </div>
 
   <h2>6 · Send</h2>
-  <pre id="out"></pre>
+  <pre id="out" class="setupOnly"></pre>
   <div class="row">
       <a class="btn wa" id="wa" target="_blank" rel="noopener">Pick a chat in WhatsApp</a>
     <button class="btn" id="share">Share…</button>
     <button class="btn" id="copy">Copy text</button>
   </div>
 
-  <button class="clear" id="clear">Clear everything</button>
+  <div class="raceOnly" id="slotCB"></div>
+
+  <button class="clear setupOnly" id="clear">Clear everything</button>
 </div>
 <script>
 (function(){
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-29.9';
+const PAGE_VERSION='2026-09-30.1';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -228,7 +258,7 @@ async function keyFetch(url,opts){
 const K='course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,startClasses:[[],[],[]],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{}};}
+function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,startClasses:[[],[],[]],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -422,7 +452,7 @@ function legGeom(a,b){
   }else if(a.atFix||b.atFix)fixNote='to RIB fix, not depth-checked';
   return {r,via,fixNote};
 }
-let laidPending={};
+let laidPending={}, lastTotal=0, lastPullAt=0;
 function laidNotice(pts,total){
   const host=$('laidNote'); laidPending={};
   const seen=new Set(), changed={}, sugg=[]; let dirty=false;
@@ -708,9 +738,61 @@ function render(){
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
   $('finishSel').value=finishMode();
+  $('toRace').hidden=!cs.length;
   buildLegs();
+  applyMode(); renderRaceHead(); renderRaceAlerts();
 }
 function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
+
+/* ---------- Setup and Race views ----------
+   Race view is what is looked at after the gun. Controls both views need are moved, not copied, between their place
+   in Setup and a slot in Race view, so there is only ever one of each. Anything that changes during a race and needs
+   the RO (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh stopping) is collected in the
+   alert strip at the top of Race view, with the same buttons as in Setup. The view never switches by itself. */
+const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB']];
+const homes={};
+SHARED.forEach(([id])=>{const h=document.createElement('span');h.hidden=true;$(id).before(h);homes[id]=h;});
+function applyMode(){
+  const race=S.mode==='race';
+  document.body.classList.toggle('race',race);
+  document.querySelectorAll('.modebar button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===(race?'race':'setup'))));
+  SHARED.forEach(([id,slot])=>{const n=$(id);
+    if(race){if(n.parentNode!==$(slot))$(slot).appendChild(n);}
+    else if(homes[id].nextSibling!==n)homes[id].after(n);});
+}
+function setMode(m){S.mode=m;save();render();if(m==='race')window.scrollTo(0,0);}
+function renderRaceHead(){
+  const rr=$('rRace'), rs=$('rStart');
+  rr.innerHTML=races().map(r=>'<option value="'+r+'"'+(r===S.race?' selected':'')+'>Race '+r+'</option>').join('');
+  rs.innerHTML=S.starts.map((n,i)=>{const c=S.startClasses[i]||[];
+    return '<option value="'+i+'"'+(i===S.start?' selected':'')+'>'+esc(n+(c.length?' ('+c.map(shortClass).join(', ')+')':''))+'</option>';}).join('');
+  const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)], n=course().length;
+  $('rSum').textContent=[!n?'No course yet':ccfg?'Course '+ccfg.c:n+' mark'+(n>1?'s':''),
+    lastTotal?lastTotal.toFixed(2)+' nm':'', lastPullAt?'updated '+hhmm(lastPullAt):''].filter(Boolean).join(' · ');
+}
+function renderRaceAlerts(){
+  const a=[], cs=course(), stm=mins(startTime()), seen=new Set();
+  if(!pullOk)a.push('<p class="note flag">'+(lastPullAt?'Not updating: the last try to reach the server failed (last update '+hhmm(lastPullAt)+').':
+    'Not updating yet. Get the latest marks to start the 30-second refresh.')+' <br><button class="ghost" data-a="repull">Get latest marks</button></p>');
+  cs.forEach((e,i)=>{const m=markById(e.id); if(!m)return;
+    if(m.laidSt){const st=m.laidSt; if(seen.has(st.key))return; seen.add(st.key);
+      if(!st.use)a.push('<p class="note flag">'+esc(m.name)+': planning position until laid.</p>');
+      if(st.newer)a.push('<p class="newer">'+esc(m.name)+': newer fix at '+esc(st.newer.time)+' not used, because you chose '+
+        (st.use?'the '+esc(st.use.time)+' fix':'the card position')+' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></p>');
+      if(st.mode==='lost')a.push('<p class="note flag">'+esc(m.name)+': the fix you chose is no longer there, so the latest is used.</p>');
+      if(st.phones>1)a.push('<p class="note flag">⚠ '+esc(m.name)+': fixes from '+st.phones+' phones; '+(st.mode==='auto'?'the latest is used':'your choice is used')+'.</p>');
+      return;}
+    const nw=newerFix(m), later=nw&&cs.some((x,j)=>j>i&&x.id===nw.id);
+    if(nw&&!(later&&stm!==null&&mins(nw.time)>stm)){const during=stm!==null&&mins(nw.time)!==null&&mins(nw.time)>stm;
+      a.push('<p class="newer'+(during?' during':'')+'">'+esc(m.name)+' (mark '+(i+1)+'): '+(during?'moved during the race at ':'newer fix at ')+esc(nw.time||'?')+
+        ' <button data-a="newer" data-i="'+i+'">'+(during?'Use moved position':'Use it')+'</button></p>');}
+    const pk='p|'+m.race+'|'+m.name.toLowerCase();
+    if(!m.card&&!seen.has(pk)){seen.add(pk);const n=phoneCount(m);if(n>1)a.push('<p class="note flag">⚠ '+esc(m.name)+': fixes from '+n+' phones.</p>');}
+  });
+  [['Committee boat',isCB,'cb'],['Start Pin',isStartPin,'pin']].forEach(([lab,t,w])=>{const m=pick(t,w),n=m?phoneCount(m):0;
+    if(n>1)a.push('<p class="note flag">⚠ '+lab+': fixes from '+n+' phones.</p>');});
+  $('raceAlertList').innerHTML=a.join('');
+}
 
 const BOAT_M=10;
 /* Magnetic variation (°W), worked out silently for Irish waters from the marks' position and today's date.
@@ -854,7 +936,7 @@ function buildLegs(){
   const fPt=fl?{id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.f,'Finish'):null);
   const cardEnds=!sl&&!!sPt;
   const pts=(sPt?[sPt]:[]).concat(cs, fPt?[fPt]:[]);
-  if(pts.length<2||!cs.length){$('laidNote').innerHTML='';host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
+  if(pts.length<2||!cs.length){$('laidNote').innerHTML='';lastTotal=0;host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
   let rows='',total=0,lines=[];
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i],b=pts[i+1];
@@ -870,9 +952,9 @@ function buildLegs(){
       '<td class="n">'+(ang===null?'–':ang+'°<br><span style="color:var(--muted)">'+legType(ang)+'</span>')+'</td></tr>';
     lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+(via?' ('+via.trim()+')':'')+(fixNote?' ['+fixNote+']':'')+' · '+pad(brgM,3)+'°M ('+pad(brgT,3)+'°T) · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
   }
-  laidNotice(pts,total);
+  laidNotice(pts,total); lastTotal=total;
   const an=analysis(cs,twdv), warn=checks(ents,cs);
-  host.innerHTML=(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p>'+
+  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
   plot(pts,[sl&&{a:sl.cb,b:sl.pin},fl&&fl!==sl&&{a:fl.cb,b:fl.pin}].filter(Boolean));
@@ -963,7 +1045,7 @@ async function pull(quiet){
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok)applyServerCourses(jc.courses);
     }catch(_){}
-    pullOk=true; commit();
+    pullOk=true; lastPullAt=Date.now(); commit();
   }catch(e){
     pullOk=false; if(quiet)return;
     st.textContent=e.message==='no race key'?'Race key not loaded yet. Check signal and tap Get latest marks again.':
@@ -1134,7 +1216,8 @@ $('addManual').onclick=()=>{
   push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(Date.now()),pending:true,pid:id});
   $('readStatus').textContent=nm+' added. Sending…';$('readStatus').className='status ok';commit();sendOutbox();
 };
-$('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+// course-row actions; the Race view alert strip uses the same buttons, so both go through here
+function courseAct(b){
   const i=+b.dataset.i,cs=course();
   if(b.dataset.a==='up'&&i>0){[cs[i-1],cs[i]]=[cs[i],cs[i-1]];}
   if(b.dataset.a==='newer'){const nw=newerFix(markById(cs[i].id));if(nw){
@@ -1145,7 +1228,15 @@ $('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='laidnewest')S.laidSel[b.dataset.k]='auto';
   if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
   if(b.dataset.a==='del')cs.splice(i,1);
-  commit();};
+  commit();}
+$('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(b)courseAct(b);};
+$('raceAlertList').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
+  if(b.dataset.a==='repull'){pull(false);return;}
+  courseAct(b);};
+document.querySelectorAll('.modebar button').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+$('toRace').onclick=()=>setMode('race');
+$('rRace').onchange=e=>{S.race=+e.target.value;commit();};
+$('rStart').onchange=e=>{S.start=+e.target.value;commit();};
 function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};save();buildLegs();scheduleSave();}
 $('twd').oninput=e=>{S.twd=e.target.value;saveWind();};
 $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
