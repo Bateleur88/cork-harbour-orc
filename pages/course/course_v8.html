@@ -229,7 +229,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.3';
+const PAGE_VERSION='2026-09-30.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -639,6 +639,10 @@ function cardImport(){
     ents.push({id:cardId(S.race,nm),side});            /* out of step (e.g. the ** Dosco inserted as Mark 1): leave the side blank rather than borrow another mark's */
   });
   S.courses[ckey(S.race,S.start)]=ents; cardOpen=false;
+  // card marks left from an earlier import in this race, and used by no start's course, leave the bank:
+  // it then offers this card's marks, plus any another start in the race still uses. RIB fixes are never touched.
+  const inUse=new Set(); Object.keys(S.courses).forEach(k=>{if(+k.split('|')[0]===S.race)(S.courses[k]||[]).forEach(e=>inUse.add(typeof e==='string'?e:e.id));});
+  S.marks=S.marks.filter(m=>!(m.card&&m.race===S.race&&!inUse.has(m.id)));
   S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f}; stamp();
   const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag&&!CARD.marks[m].laid);
   // laid marks: say which position each uses, and take that as seen, so only a later change raises a notice
