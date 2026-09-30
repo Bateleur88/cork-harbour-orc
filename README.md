@@ -63,7 +63,10 @@ bathymetry only validates the resulting physical chords.
   invent a route, substitute a mark, infer an alias, expand a passage itself, or
   compensate for missing data. When Course 27 Dosco/Dosco was absent it correctly
   showed "No matching Numbered Legs rows found" instead of hiding the defect.
-  **One stated exception:** a club laid mark (Curlane, Dutchman, White Bay) takes
+  **Two stated exceptions**, both of position only, both keeping the card's route
+  and labelling the measured hop "not depth-checked": a recorded start or finish
+  line stands where the card's start (or Grassy Mid finish) is (see The pages);
+  and a club laid mark (Curlane, Dutchman, White Bay) takes
   its *position* from the day's RIB fix, because its stored coordinate is only a
   planning approximation. The mark is never substituted, only its position; only
   a fix with exactly the mark's name is used automatically; the card's route to it
@@ -121,7 +124,13 @@ Offline-first: the course card snapshot from the workbook is embedded in the pag
   and the committee-boat button. The view never switches by itself.
 - *Legs*: between two card marks the card's own route is used, passages included,
   with distances and bearings from the workbook; the page never searches for a
-  route.
+  route. With a recorded start line, the leg from it keeps the card's route from
+  the card's start point, and only the first hop (line → first waypoint, or → the
+  first mark on a direct leg) is measured from the line, labelled "from the
+  recorded line, not depth-checked"; the finish leg to a recorded line likewise.
+  A committee boat for a Grassy Walk start sits within a few hundred metres of
+  Grassy Mid, so that water is effectively the validated water; the page warns
+  when the line's midpoint is more than 500 m from the card's start point.
 - *Starts and finishes of a card course are deliberately not mirror images* — do
   not "fix" one into the other:
   - **Finish:** the card's Finish decides. Grassy Mid stands for the Grassy Walk

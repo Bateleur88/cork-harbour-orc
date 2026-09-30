@@ -241,7 +241,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.10';
+const PAGE_VERSION='2026-09-30.11';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -456,8 +456,13 @@ function laidPicker(m){
 /* one leg's geometry. Between two card marks the card's route is used; if either end is a laid mark at a RIB fix,
    the route is kept and only the segment touching that mark is measured to the fix, which INFOMAR never checked. */
 function legGeom(a,b){
-  // parts: the physical legs actually sailed, one per passage segment (a direct leg is one part)
+  // parts: the physical legs actually sailed, one per passage segment (a direct leg is one part).
+  // An end that is not where the card puts it (atFix: a laid mark at its RIB fix, or a card course's start or finish
+  // at the recorded line) keeps the card's route; only the segment touching it is measured, and labelled with its
+  // moveNote, because that segment was never depth-checked.
   let r=rhumb(a,b), via='', fixNote='', parts=null;
+  const noteOf=e=>e.moveNote||'to RIB fix, not depth-checked';
+  const moved=[a.atFix&&noteOf(a),b.atFix&&noteOf(b)].filter(Boolean);
   const p=a.card&&b.card?CARD.pairs[a.card+'|'+b.card]:null;
   if(p){
     if(p.segs.length>1)via=' via '+p.segs.slice(0,-1).map(s=>s.to).join(' → ');
@@ -467,14 +472,15 @@ function legGeom(a,b){
     else{
       const nodes=[a].concat(p.segs.slice(0,-1).map(s=>CARD.marks[s.to]),[b]);
       if(nodes.every(Boolean)){let nm=0,brg=null;parts=[];
-        p.segs.forEach((s,i)=>{const own=(i===0&&a.atFix)||(i===p.segs.length-1&&b.atFix);
-          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;
-          parts.push(Object.assign({nm:g.nm,brg:g.brg,fix:own},ends(i)));});
+        p.segs.forEach((s,i)=>{const first=i===0&&a.atFix, last=i===p.segs.length-1&&b.atFix;
+          const g=first||last?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;
+          const note=[first&&noteOf(a),last&&noteOf(b)].filter(Boolean).filter((t,k,arr)=>arr.indexOf(t)===k).join('; ');
+          parts.push(Object.assign({nm:g.nm,brg:g.brg,note},ends(i)));});
         r={nm,m:nm*1852,brg};}
-      fixNote='to RIB fix, not depth-checked';
+      fixNote=moved.filter((t,k,arr)=>arr.indexOf(t)===k).join('; ');
     }
-  }else if(a.atFix||b.atFix)fixNote='to RIB fix, not depth-checked';
-  return {r,via,fixNote,parts:parts||[{nm:r.nm,brg:r.brg,from:a.name,to:b.name}]};
+  }else if(moved.length)fixNote=moved.filter((t,k,arr)=>arr.indexOf(t)===k).join('; ');
+  return {r,via,fixNote,parts:parts||[{nm:r.nm,brg:r.brg,from:a.name,to:b.name,note:fixNote}]};
 }
 let laidPending={}, lastTotal=0, lastPullAt=0;
 function laidNotice(pts,total){
@@ -574,6 +580,9 @@ function drawChartInner(){
   const cardEnd=nm=>{const m=nm&&CARD.marks[nm];return m?{name:nm,lat:m.lat,lon:m.lon,card:nm}:null;};
   if(!sl0&&ccfg&&cardEnd(ccfg.s))cs=[cardEnd(ccfg.s)].concat(cs);
   if(!fl0&&ccfg&&cardEnd(ccfg.f))cs=cs.concat([cardEnd(ccfg.f)]);
+  // with a recorded line, draw the leg from it (and to it) along the card's route, as the legs table measures it
+  if(sl0&&ccfg&&CARD.marks[ccfg.s])cs=[{name:'Start',lat:sl0.mid.lat,lon:sl0.mid.lon,card:ccfg.s}].concat(cs);
+  if(fl0&&ccfg&&CARD.marks[ccfg.f])cs=cs.concat([{name:'Finish',lat:fl0.mid.lat,lon:fl0.mid.lon,card:ccfg.f}]);
   const path=chartPath(cs).filter(p=>isFinite(p.lat)&&isFinite(p.lon)), pts=path.map(p=>[p.lat,p.lon]);
   if(!pts.length){$('mapStatus').textContent='No positions to draw.';return;}
   $('mapStatus').className='status'; $('mapStatus').textContent='';
@@ -1006,8 +1015,17 @@ function buildLegs(){
   /* with no committee boat recorded, fall back to the card's own start and finish marks */
   const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)];
   const cardEnd=(nm,label)=>{const m=nm&&CARD.marks[nm];return m?{id:'_c'+label,name:label+' ('+nm+')',lat:m.lat,lon:m.lon,virtual:true,card:nm}:null;};
-  const sPt=sl?{id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.s,'Start'):null);
-  const fPt=fl?{id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true}:(ccfg?cardEnd(ccfg.f,'Finish'):null);
+  // on a card course a recorded line stands where the card's start (or Grassy Mid finish) is: keep the card's route
+  // from that point and measure only the first hop from the line (and the last hop to it), as for a laid mark's fix
+  const atLine=(ln,nm,dir)=>ccfg&&CARD.marks[nm]?{card:nm,atFix:true,moveNote:dir+' the recorded line, not depth-checked'}:{};
+  const sPt=sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg?cardEnd(ccfg.s,'Start'):null);
+  const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg?cardEnd(ccfg.f,'Finish'):null);
+  // the card's route from its start was validated for the water near that start point: say so if the line is far off
+  const farLine=[];
+  if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(rhumb(sl.mid,CARD.marks[ccfg.s]).m);
+    if(d>500)farLine.push('The recorded start line is '+d+' m from the card\'s '+ccfg.s+' start point. The leg'+
+      (fPt&&fPt.moveNote?'s from it and to it follow the card\'s routes':' from it follows the card\'s route')+
+      ' from '+ccfg.s+', which assumes the line is close to it: check on the chart.');}
   const cardEnds=!sl&&!!sPt;
   const pts=(sPt?[sPt]:[]).concat(cs, fPt?[fPt]:[]);
   if(pts.length<2||!cs.length){$('laidNote').innerHTML='';lastTotal=0;setSS([],'');host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
@@ -1030,7 +1048,7 @@ function buildLegs(){
       '<td class="n">'+(ang===null?'–':ang+'°<br><span style="color:var(--muted)">'+legType(ang)+'</span>')+'</td></tr>';
     if(nParts>1)g.parts.forEach((pt,j)=>{const sa=twdv===null?null:Math.round(twa(pt.brg,twdv));
       rows+='<tr class="segRow" data-leg="'+i+'"'+(open?'':' hidden')+'><td>'+(i+1)+String.fromCharCode(97+j)+' '+esc(pt.from)+' → '+esc(pt.to)+
-        (pt.fix?'<br><span class="viaTxt warnTxt">to RIB fix, not depth-checked</span>':'')+'</td>'+
+        (pt.note?'<br><span class="viaTxt warnTxt">'+esc(pt.note)+'</span>':'')+'</td>'+
         '<td class="n">'+pad(magOf(pt.brg),3)+'°M<br>'+pad(Math.round(pt.brg)%360,3)+'°T</td>'+
         '<td class="n">'+pt.nm.toFixed(2)+'<br>'+Math.round(pt.nm*1852)+' m</td>'+
         '<td class="n">'+(sa===null?'–':sa+'°')+'</td></tr>';});
@@ -1045,7 +1063,7 @@ function buildLegs(){
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).',total,pts.length-1);
-  const an=analysis(cs,twdv), warn=checks(ents,cs);
+  const an=analysis(cs,twdv), warn=farLine.concat(checks(ents,cs));
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
