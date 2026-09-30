@@ -14,7 +14,8 @@ a commit. Checks, in order:
   5  invariant      every VERIFIED passage physically expanded at every occurrence
   6  passages       one authoritative row per directed pair, no empty passages
   7  card           routed sequences match the printed course card text
-  8  evidence       every physical chord carries numeric evidence in Evidence Register
+  8  evidence       every physical chord carries numeric evidence in Evidence Register, in exactly
+                    one row per pair, with each column holding what its header says
   9  marks          every mark referenced by the routing exists with coordinates
 """
 import re
@@ -196,6 +197,26 @@ def main(path):
     recovered = er[er.apply(lambda r: (r.From, r.To) in chords, axis=1) &
                    er.Source.astype(str).str.contains('Recovered', case=False)]
     check(recovered.empty, 'no chord left on recovered evidence', f'{len(recovered)} rows')
+    # exactly one row per chord (and per any other pair): a second row can only disagree with the first
+    n_rows = collections.Counter(zip(er.From, er.To))
+    dup = sorted(k for k, v in n_rows.items() if v > 1)
+    check(not dup and all(n_rows[c] == 1 for c in chords),
+          'exactly one Evidence Register row per physical chord, and per any other pair',
+          f'{len(dup)} pairs repeated {[(f"{a} → {b}", n_rows[(a, b)]) for a, b in dup[:3]]}')
+    # every column holds what its header says: Geometry is the route from From to To; Source is a provenance
+    # label, never a route or a test result; the status is one of the register's statuses
+    statuses = {'DIRECT – VERIFIED', 'PASSAGE VERIFIED', 'PASS – HW RESTRICTED', 'PASSAGE REQUIRED',
+                'ROUTING REQUIRED – DEPTH FAIL'}
+    result = re.compile(r'\d[\d,]*(\.\d+)? m[;,]|\d+/\d+|samples|below 1\.5|\bmin(imum)?\b', re.I)
+
+    def misplaced(r):
+        route = [t.strip() for t in str(r.Geometry).split('→')]
+        src = str(r.Source)
+        return (r['Physical Segment Status'] not in statuses or len(route) < 2 or
+                route[0] != r.From or route[-1] != r.To or '→' in src or bool(result.search(src)))
+    bad = er[er.apply(misplaced, axis=1)]
+    check(bad.empty, 'every Evidence Register column holds what its header says',
+          f'{len(bad)} rows, sheet rows {[i + 2 for i in bad.index[:8]]}')
 
     # 9 marks
     used = set(nl.From) | set(nl.To)

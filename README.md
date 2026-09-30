@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_17_STALE_SHEETS_REMOVED.xlsx` |
-| SHA-256 | `2f12e280a8c3db48dcdfbd07175ae96ef5d3da0bdf47aee4a56365d0521dcbe0` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_18_EVIDENCE_REGISTER.xlsx` |
+| SHA-256 | `546b9dcf3773d759e06450486b3f3bc862c7f77b6f834ac8e622083379e421bd` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
@@ -17,7 +17,7 @@ SailScoring `course-cards` issues #16 to #19.
 | Routing waypoints | 8, plus W2 used as a turning point in 8 passages |
 | Marks used | 38 |
 | Evidence | every chord carries a numeric INFOMAR result; no chord on recovered evidence |
-| Audit | `scripts/audit_workbook.py` passes all 14 checks |
+| Audit | `scripts/audit_workbook.py` passes all 16 checks |
 
 Race officer page: `course_v8.html`, served at `tradboats.ie/course/`, bundling a
 snapshot generated from the workbook above.
@@ -106,7 +106,7 @@ denies web access. That only works on Apache or LiteSpeed; check it on the live 
 
 ## Before any release
 
-1. `python scripts/audit_workbook.py <workbook>` — must pass all 14 checks.
+1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
 2. `python scripts/xlsx_edit.py` diff, or `cell_diff(before, after)` — confirm the
    changed cells are exactly the ones intended, and nothing else moved.
 3. Open the file in Excel itself, not only LibreOffice, and confirm it opens with

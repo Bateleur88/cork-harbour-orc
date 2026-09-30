@@ -16,6 +16,7 @@ Usage:
     wb.set_cell('Marks', 59, 'H', 'RCYC Autumn League SI 2026, para 36')
     wb.append_readme('Some change v3.15 (1 Oct 2026)', 'What changed, why, and the baseline hash.')
     wb.remove_sheet('Some Stale Sheet')
+    wb.delete_rows('Evidence Register', [166, 174])       # after any set_cell edits to that sheet
     wb.save('master_v3_15.xlsx')
 
 Then always: reopen, diff against the previous version, and run audit_workbook.py.
@@ -93,6 +94,43 @@ class Workbook:
         self.parts.pop(part, None)
         self.removed.add(part)
         del self.sheets[sheet]
+
+    def delete_rows(self, sheet, rows):
+        """Delete whole worksheet rows and move every later row up, renumbering its row and
+        cell references. Make any set_cell edits first: they use the row numbers before deletion.
+
+        Refused if the sheet has anything else that addresses rows (merged cells, filters,
+        conditional formats, validations, hyperlinks, tables, frozen panes, selections, print
+        breaks, a dimension) or if any formula in the workbook exists to be broken."""
+        part, s = self._xml(sheet)
+        for tag in ('dimension', 'mergeCells', 'autoFilter', 'conditionalFormatting', 'dataValidations',
+                    'hyperlinks', 'tableParts', 'pane', 'selection', 'rowBreaks'):
+            if re.search(r'<(?:x:)?%s\b' % tag, s):
+                raise ValueError(f'{sheet}: has <{tag}>, which addresses rows; not handled here')
+        for n in self.zin.namelist():
+            if re.match(r'xl/worksheets/[^/]+\.xml$', n) and n not in self.removed:
+                if re.search(r'<(?:x:)?f[ >]', self.parts.get(n) or self.zin.read(n).decode('utf-8')):
+                    raise ValueError(f'{n} has formulas, which deleting rows could break')
+        if re.search(r'<x:row [^>]*/>', s):
+            raise ValueError(f'{sheet}: has empty self-closing rows; not handled here')
+        gone = sorted(set(rows))
+        found = set(int(r) for r in re.findall(r'<x:row r="(\d+)"', s))
+        if not set(gone) <= found:
+            raise KeyError(f'{sheet}: rows not found {sorted(set(gone) - found)}')
+
+        def shift(n):
+            return n - sum(1 for g in gone if g < n)
+
+        def one(m):
+            n = int(m.group(1))
+            if n in gone:
+                return ''
+            k = shift(n)
+            if k == n:
+                return m.group(0)
+            row = re.sub(r'(<x:row r=")%d"' % n, r'\g<1>%d"' % k, m.group(0), count=1)
+            return re.sub(r'(<x:c r="[A-Z]+)%d"' % n, r'\g<1>%d"' % k, row)
+        self.parts[part] = re.sub(r'<x:row r="(\d+)"[^>]*>.*?</x:row>', one, s, flags=re.S)
 
     def set_cell(self, sheet, row, col, value, numeric=False):
         """Replace one cell. Row numbers are worksheet rows: data row i of a
