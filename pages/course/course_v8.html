@@ -97,6 +97,10 @@ svg{display:block;width:100%;height:auto}
 .btn.wa{grid-column:1/-1;background:#1F8A4C;border-color:#1F8A4C;color:#fff;padding:16px}
 .btn[aria-disabled="true"]{opacity:.4;pointer-events:none}
 .ssHead{font-size:1rem;margin:22px 0 4px}
+.legsCap{caption-side:top;text-align:left;font-weight:700;font-size:.9rem;margin:10px 0 2px;color:var(--ink)}
+.segToggle{margin-top:4px;padding:2px 8px;border-radius:8px;border:1px solid var(--sea);background:transparent;color:var(--sea);font-size:.8rem;font-weight:700}
+tr.segRow td{font-size:.85rem;color:var(--muted);padding-top:4px;padding-bottom:4px}
+tr.segRow td:first-child{padding-left:18px}
 pre#out,pre#ssOut{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
 details.backup{margin-top:12px}
 details.backup summary{cursor:pointer;color:var(--muted);padding:6px 0}
@@ -221,8 +225,10 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
     <button class="btn" id="copy">Copy text</button>
   </div>
   <h3 class="ssHead">Leg table for SailScoring</h3>
+  <p class="legsCap" id="ssCount"></p>
   <p class="cardnote" id="ssNote"></p>
   <pre id="ssOut" class="setupOnly"></pre>
+  <p class="cardnote setupOnly" id="ssTotal"></p>
   <div class="row"><button class="btn" id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button></div>
 
   <div class="raceOnly" id="slotCB"></div>
@@ -234,7 +240,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-09-30.8';
+const PAGE_VERSION='2026-09-30.9';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -454,17 +460,20 @@ function legGeom(a,b){
   const p=a.card&&b.card?CARD.pairs[a.card+'|'+b.card]:null;
   if(p){
     if(p.segs.length>1)via=' via '+p.segs.slice(0,-1).map(s=>s.to).join(' → ');
-    if(!a.atFix&&!b.atFix){r={nm:p.nm,m:p.nm*1852,brg:p.segs[0].brg};parts=p.segs.map(s=>({nm:s.nm,brg:s.brg}));}
+    // each part names its ends: the leg's own ends, and the card's waypoints in between
+    const ends=i=>({from:i?p.segs[i-1].to:a.name, to:i===p.segs.length-1?b.name:p.segs[i].to});
+    if(!a.atFix&&!b.atFix){r={nm:p.nm,m:p.nm*1852,brg:p.segs[0].brg};parts=p.segs.map((s,i)=>Object.assign({nm:s.nm,brg:s.brg},ends(i)));}
     else{
       const nodes=[a].concat(p.segs.slice(0,-1).map(s=>CARD.marks[s.to]),[b]);
       if(nodes.every(Boolean)){let nm=0,brg=null;parts=[];
         p.segs.forEach((s,i)=>{const own=(i===0&&a.atFix)||(i===p.segs.length-1&&b.atFix);
-          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;parts.push({nm:g.nm,brg:g.brg});});
+          const g=own?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;
+          parts.push(Object.assign({nm:g.nm,brg:g.brg,fix:own},ends(i)));});
         r={nm,m:nm*1852,brg};}
       fixNote='to RIB fix, not depth-checked';
     }
   }else if(a.atFix||b.atFix)fixNote='to RIB fix, not depth-checked';
-  return {r,via,fixNote,parts:parts||[{nm:r.nm,brg:r.brg}]};
+  return {r,via,fixNote,parts:parts||[{nm:r.nm,brg:r.brg,from:a.name,to:b.name}]};
 }
 let laidPending={}, lastTotal=0, lastPullAt=0;
 function laidNotice(pts,total){
@@ -993,10 +1002,19 @@ function buildLegs(){
     const brgT=Math.round(r.brg)%360;
     const brgM=magOf(r.brg);
     const ang=twdv===null?null:Math.round(twa(r.brg,twdv));
-    rows+='<tr><td>'+(isLine?'Line':'Leg '+(i+1))+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+(via?'<br><span class="viaTxt">card route'+esc(via)+'</span>':'')+(fixNote?'<br><span class="viaTxt warnTxt">'+esc(fixNote)+'</span>':'')+'</td>'+
+    // a leg made of more than one physical leg (a card passage) can be opened to show each, as the SailScoring block lists them
+    const nParts=g.parts.length, open=openLegs.has(ckey(S.race,S.start)+'|'+i);
+    rows+='<tr><td>'+(isLine?'Line':'Leg '+(i+1))+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+(via?'<br><span class="viaTxt">card route'+esc(via)+'</span>':'')+(fixNote?'<br><span class="viaTxt warnTxt">'+esc(fixNote)+'</span>':'')+
+      (nParts>1?'<br><button type="button" class="segToggle" data-leg="'+i+'" data-n="'+nParts+'" aria-expanded="'+open+'">'+(open?'▾ ':'▸ ')+nParts+' physical legs</button>':'')+'</td>'+
       '<td class="n">'+pad(brgM,3)+'°M<br><span style="color:var(--muted)">'+pad(brgT,3)+'°T</span></td>'+
       '<td class="n">'+r.nm.toFixed(2)+'<br><span style="color:var(--muted)">'+Math.round(r.m)+' m</span></td>'+
       '<td class="n">'+(ang===null?'–':ang+'°<br><span style="color:var(--muted)">'+legType(ang)+'</span>')+'</td></tr>';
+    if(nParts>1)g.parts.forEach((pt,j)=>{const sa=twdv===null?null:Math.round(twa(pt.brg,twdv));
+      rows+='<tr class="segRow" data-leg="'+i+'"'+(open?'':' hidden')+'><td>'+(i+1)+String.fromCharCode(97+j)+' '+esc(pt.from)+' → '+esc(pt.to)+
+        (pt.fix?'<br><span class="viaTxt warnTxt">to RIB fix, not depth-checked</span>':'')+'</td>'+
+        '<td class="n">'+pad(magOf(pt.brg),3)+'°M<br>'+pad(Math.round(pt.brg)%360,3)+'°T</td>'+
+        '<td class="n">'+pt.nm.toFixed(2)+'<br>'+Math.round(pt.nm*1852)+' m</td>'+
+        '<td class="n">'+(sa===null?'–':sa+'°')+'</td></tr>';});
     lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+(via?' ('+via.trim()+')':'')+(fixNote?' ['+fixNote+']':'')+' · '+pad(brgM,3)+'°M ('+pad(brgT,3)+'°T) · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
   }
   laidNotice(pts,total); lastTotal=total;
@@ -1004,10 +1022,11 @@ function buildLegs(){
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded':'from the first mark (no start point)';
   const to=fl?(finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no finish line is recorded':'at the last mark (no finish point)';
-  setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).');
+  setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).',total,pts.length-1);
   const an=analysis(cs,twdv), warn=checks(ents,cs);
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
-    '<table><thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
+    '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
+    '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
   plot(pts,[sl&&{a:sl.cb,b:sl.pin},fl&&fl!==sl&&{a:fl.cb,b:fl.pin}].filter(Boolean));
   buildShift(cs);
@@ -1019,11 +1038,17 @@ function buildLegs(){
 /* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
    The note is shown above the block and is not part of what is copied. */
 let ssText='';
-function setSS(lines,note){
+const openLegs=new Set();   // legs-table rows opened to show their physical legs, by race|start|leg; kept across refreshes
+function setSS(lines,note,courseTotal,legs){
   ssText=lines.join('\n');
   $('ssNote').textContent=note;
   $('ssOut').textContent=ssText||'Build a course to get the leg table.';
   $('ssCopy').disabled=!ssText;
+  $('ssCount').textContent=lines.length?lines.length+' physical leg'+(lines.length>1?'s':'')+(lines.length>legs?', passages split':''):'';
+  // the block's own total, from the rounded lines exactly as copied
+  const own=lines.reduce((s,l)=>s+parseFloat(l),0);
+  $('ssTotal').textContent=lines.length?'These lines add to '+own.toFixed(2)+' nm; the course total is '+courseTotal.toFixed(2)+
+    ' nm. They can differ by a few hundredths because each leg is rounded separately; the course total is the accurate one.':'';
 }
 function setOut(t){
   text=t;$('out').textContent=t||'Build a course to get the summary.';
@@ -1324,6 +1349,11 @@ function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
 $('shiftCopy').onclick=async()=>{if(!shiftText)return;try{await navigator.clipboard.writeText(shiftText);$('shiftCopy').textContent='Copied';setTimeout(()=>$('shiftCopy').textContent='Copy move',1500);}catch(e){}};
 $('share').onclick=async()=>{if(!text)return;try{await navigator.share({text});}catch(e){}};
+$('legs').addEventListener('click',e=>{const b=e.target.closest('.segToggle');if(!b)return;
+  const i=b.dataset.leg, k=ckey(S.race,S.start)+'|'+i, open=!openLegs.has(k);
+  if(open)openLegs.add(k);else openLegs.delete(k);
+  b.setAttribute('aria-expanded',String(open)); b.textContent=(open?'▾ ':'▸ ')+b.dataset.n+' physical legs';
+  document.querySelectorAll('#legs tr.segRow[data-leg="'+i+'"]').forEach(r=>{r.hidden=!open;});});
 $('ssCopy').onclick=async()=>{if(!ssText)return;
   try{await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);}
   catch(e){const r=document.createRange();r.selectNodeContents($('ssOut'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
