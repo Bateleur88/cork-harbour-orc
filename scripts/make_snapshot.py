@@ -37,14 +37,10 @@ LAID_TYPE = 'Club laid mark'
 LAID_FLAG = "Club laid mark: the RIB's fix for the day takes precedence; this position is a planning approximation."
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('workbook')
-    ap.add_argument('--out', default='cardsnap.json')
-    a = ap.parse_args()
-
-    sha = hashlib.sha256(open(a.workbook, 'rb').read()).hexdigest()
-    x = pd.read_excel(a.workbook, sheet_name=None)
+def build(workbook):
+    """The snapshot for one workbook, as a dict. rebuild_page.py embeds it in the course page."""
+    sha = hashlib.sha256(open(workbook, 'rb').read()).hexdigest()
+    x = pd.read_excel(workbook, sheet_name=None)
     nl = x['Numbered Legs'].copy()
     nl['Course'] = nl['Course'].astype(str)
     ob = x['ORC Distance Bearings'].copy()
@@ -130,16 +126,31 @@ def main():
                  'brg': geo[(path[i], path[i + 1])][1]} for i in range(len(path) - 1)]
         pj[key] = {'nm': round(sum(s['nm'] for s in segs), 3), 'segs': segs}
 
-    snap = {'meta': {'source': a.workbook.rsplit('/', 1)[-1], 'sha256': sha,
+    snap = {'meta': {'source': re.split(r'[\\/]', workbook)[-1], 'sha256': sha,
                      'generated': pd.Timestamp.today().strftime('%Y-%m-%d'),
                      'criterion': 'Physical legs validated against INFOMAR 2 m LAT grids, minimum 1.5 m at LAT',
                      'attribution': 'Contains Irish Public Sector Data (Geological Survey Ireland & '
                                     'Marine Institute) licensed under CC BY 4.0'},
             'marks': marks, 'pairs': pj, 'courses': courses}
+    return snap
+
+
+def dumps(snap):
+    """The snapshot's one text form, used for the file and for the page alike."""
+    return json.dumps(snap, separators=(',', ':'), allow_nan=False)   # NaN is not JSON: fail rather than write it
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('workbook')
+    ap.add_argument('--out', default='cardsnap.json')
+    a = ap.parse_args()
+    snap = build(a.workbook)
+    text = dumps(snap)
     with open(a.out, 'w') as fh:
-        json.dump(snap, fh, separators=(',', ':'), allow_nan=False)   # NaN is not JSON: fail rather than write it
-    print(f"{len(marks)} marks, {len(pj)} pairs, {len(courses)} courses -> {a.out} "
-          f"({len(json.dumps(snap, separators=(',', ':'))) // 1024} KB)")
+        fh.write(text)
+    print(f"{len(snap['marks'])} marks, {len(snap['pairs'])} pairs, {len(snap['courses'])} courses -> {a.out} "
+          f"({len(text) // 1024} KB)")
 
 
 if __name__ == '__main__':
