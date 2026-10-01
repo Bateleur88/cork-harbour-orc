@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.3';
+const PAGE_VERSION='2026-10-01.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -374,8 +374,8 @@ if(!Array.isArray(S.dayClasses))S.dayClasses=[];
 function ownClasses(r){return S.raceClasses[r||S.race]||null;}
 function dayFallback(){return S.dayClasses.some(l=>l.length)?S.dayClasses:null;}
 function classesOf(r){return ownClasses(r)||[[],[],[]];}
-// the race's own groups, empty the first time it is edited
-function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=[[],[],[]];return S.raceClasses[r];}
+// the race's own groups, empty the first time it is edited; every edit marks them as built for the day being worked on
+function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=[[],[],[]];stamp('_starts|'+r);return S.raceClasses[r];}
 S.starts=classesOf().map((_,i)=>'Start '+(i+1));
 let classOpen=false;
 if(typeof S.start!=='number')S.start=0;
@@ -722,7 +722,7 @@ function render(){
   if(dayOnly){cn.innerHTML='Before groups were kept per race, this day had one set for every race: '+
     esc(S.dayClasses.map((l,i)=>'Start '+(i+1)+' '+(l.length?l.map(shortClass).join(' + '):'none')).join(', '))+
     '. Race '+S.race+' does not use them unless you tap <button class="ghost" id="classUse">Use them for Race '+S.race+'</button>';
-    $('classUse').onclick=()=>{S.raceClasses[S.race]=S.dayClasses.map(l=>l.slice());commit();};}
+    $('classUse').onclick=()=>{S.raceClasses[S.race]=S.dayClasses.map(l=>l.slice());stamp('_starts|'+S.race);commit();};}
   const pk=$('classPick');
   if(classOpen){
     const mine=CL[S.start]||[];
@@ -1180,10 +1180,14 @@ async function pull(quiet){
       await saveCourses(true,k=>!mine(k));
       ['courses','startTimes','finishes','lineSel','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
+      // start groups likewise: only a race's groups set for this day stay; the old day-wide groups come from this day's file only
+      Object.keys(S.raceClasses).forEach(r=>{if(!mine('_starts|'+r))delete S.raceClasses[r];});
+      S.dayClasses=[];
       const kept=new Set(Object.keys(S.courses).filter(k=>(S.courses[k]||[]).length).map(k=>+k.split('|')[0]));
       // courses kept for this day have never been sent to this day's server file: mark them unsent, so they win over
       // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
       S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';});
+      Object.keys(S.raceClasses).forEach(r=>{S.synced['_starts|'+r]='';});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
       ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
       if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;
@@ -1286,7 +1290,8 @@ function applyServerCourses(obj){
     if(k==='_starts'){S.dayClasses=Array.isArray(rec.classes)?rec.classes:[];S.synced[k]=JSON.stringify(recordFor(k));return;}
     // a device that has never synced this course takes the server's version; otherwise unsent local edits win until saved
     if(S.synced[k]!==undefined&&isDirty(k))return;
-    if(k.indexOf('_starts|')===0){if(Array.isArray(rec.classes)&&rec.classes.length)S.raceClasses[k.slice(8)]=rec.classes;}
+    if(k.indexOf('_starts|')===0){if(Array.isArray(rec.classes)&&rec.classes.length){S.raceClasses[k.slice(8)]=rec.classes;
+      S.courseDay=S.courseDay||{}; S.courseDay[k]=S.pulledDay;}}   // groups from the server belong to the day they came from
     else{
       S.courses[k]=(rec.entries||[]).map(e=>({id:resolveRef(e.ref),side:e.side||''})).filter(e=>e.id);
       if(rec.startTime)S.startTimes[k]=rec.startTime; else delete S.startTimes[k];
