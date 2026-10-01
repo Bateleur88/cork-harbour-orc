@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.9';
+const PAGE_VERSION='2026-10-01.10';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1464,7 +1464,9 @@ function applyServerCourses(obj){
       S.courses[k]=(rec.entries||[]).map(e=>({id:resolveRef(e.ref),side:e.side||''})).filter(e=>e.id);
       if(rec.startTime)S.startTimes[k]=rec.startTime; else delete S.startTimes[k];
       S.finishes[k]=rec.finish||'start';
-      const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=typeof v==='string'&&(v==='none'||/^[sl]:/.test(v))?v:'auto';}); S.lineSel[k]=ls;
+      // a page before 2026-10-01.8 that saved this course turned 'none' into 'l:ne' (no fix id can be 'ne'): read it as none
+      const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w]==='l:ne'?'none':rec.lineSel[w];
+        ls[w]=typeof v==='string'&&(v==='none'||/^[sl]:/.test(v))?v:'auto';}); S.lineSel[k]=ls;
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
       // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
       if('card' in rec){S.cardCfg=S.cardCfg||{};
