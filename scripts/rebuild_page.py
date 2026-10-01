@@ -13,6 +13,11 @@ release can be checked (after a workbook-only change, expect just meta.source
 and meta.sha256). If the snapshot is already current the page is left alone.
 --dry-run prints the changes and writes nothing.
 
+Every run that is not --dry-run also writes index.html next to the page, a
+byte-identical copy that is uploaded as /course/index.html. It is written from
+the same bytes as the page, in the same step, even when the snapshot is already
+current, so a copy left stale by an interrupted run is put right by the next.
+
 Refuses, and writes nothing, if the page does not have exactly one CARD line
 and one PAGE_VERSION, or if the result would not read back as the snapshot.
 """
@@ -45,12 +50,35 @@ def changes(old, new, path=''):
     return [] if old == new else [(path, old, new)]
 
 
+def write_both(page, copy, data):
+    """Write the page and its upload copy from the same bytes. Both are written in full to .tmp files before
+    either is renamed into place, then both are read back and must match."""
+    try:
+        for p in (page, copy):
+            with open(p + '.tmp', 'wb') as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())
+        for p in (page, copy):
+            os.replace(p + '.tmp', p)
+    finally:
+        for p in (page, copy):
+            if os.path.exists(p + '.tmp'):
+                os.remove(p + '.tmp')
+    for p in (page, copy):
+        if open(p, 'rb').read() != data:
+            sys.exit(f'{p}: does not read back as written')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('workbook')
     ap.add_argument('--page', default=os.path.join('pages', 'course', 'course_v8.html'))
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
+    copy = os.path.join(os.path.dirname(a.page), 'index.html')
+    if os.path.basename(a.page) == 'index.html':
+        sys.exit(f'{a.page}: --page must be the source page, not its index.html copy; nothing written')
 
     page = open(a.page, encoding='utf-8', newline='').read()      # keep the page's own line endings
     lines = page.split('\n')
@@ -66,7 +94,12 @@ def main():
     snap = build(a.workbook)
     diff = changes(old, snap)
     if [p for p, _, _ in diff] in ([], ['/meta/generated']):
-        print(f'{a.page}: snapshot already current for {snap["meta"]["source"]}; nothing written')
+        print(f'{a.page}: snapshot already current for {snap["meta"]["source"]}; page unchanged')
+        if a.dry_run:
+            print('dry run: nothing written')
+            return 0
+        write_both(a.page, copy, open(a.page, 'rb').read())
+        print(f'{copy}: written, byte-identical to {a.page}')
         return 0
     print(f'snapshot changes ({len(diff)}):')
     for p, o, n in diff[:40]:
@@ -86,9 +119,10 @@ def main():
     if a.dry_run:
         print(f'dry run: would set PAGE_VERSION {day}.{n} -> {version}; nothing written')
         return 0
-    open(a.page, 'w', encoding='utf-8', newline='').write(out)
+    write_both(a.page, copy, out.encode('utf-8'))
     print(f'{a.page}: embedded {snap["meta"]["source"]} ({snap["meta"]["sha256"][:12]}), '
           f'PAGE_VERSION {day}.{n} -> {version}')
+    print(f'{copy}: written, byte-identical to {a.page}')
     return 0
 
 
