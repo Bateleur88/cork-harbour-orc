@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_18_EVIDENCE_REGISTER.xlsx` |
-| SHA-256 | `546b9dcf3773d759e06450486b3f3bc862c7f77b6f834ac8e622083379e421bd` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx` |
+| SHA-256 | `ff0ae3ee4cbd4216caaa0e5608848a6c8ca7ba82a3d41612bfd0069b9a735220` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
@@ -32,7 +32,7 @@ snapshot generated from the workbook above. See [The pages](#the-pages).
 2. **Audit the workbook.** Read-only; prints a report and exits non-zero on any
    failure. Expect 16 PASS lines and the counts in the table above:
 
-       python scripts/audit_workbook.py RCYC_Cork_Harbour_ORC_MASTER_v3_18_EVIDENCE_REGISTER.xlsx
+       python scripts/audit_workbook.py RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx
 
 3. **Check the file is the one described.** The audit prints its SHA-256; it should
    match the table above.
@@ -162,7 +162,9 @@ Offline-first: the course card snapshot from the workbook is embedded in the pag
 one line per physical leg, in sailing order, from the start to the first mark
 through to the last mark to the finish. A card passage is split into the legs
 actually sailed. Each line is the distance in nautical miles to two decimals, a
-space, and the bearing as three digits magnetic, and nothing else:
+space, and the bearing as three digits, and nothing else. The bearings are given in
+degrees **magnetic**; that SailScoring expects magnetic rather than true is an
+assumption, pending confirmation with Mark:
 
     0.24 105
     0.23 123
@@ -170,7 +172,8 @@ space, and the bearing as three digits magnetic, and nothing else:
 
 A note above the block, not part of what is copied, says whether the first and
 last legs are measured from the recorded committee boat and pin (or finish pin) or
-from the card's stand-in start and finish, and that bearings are magnetic. Because
+from the card's stand-in start and finish, and that the bearings given are magnetic
+(see the assumption above). Because
 each physical leg is rounded separately, the lines can add to a few hundredths
 more or less than the legs table's total.
 
@@ -204,7 +207,7 @@ shorter than the geodesic distances in ORC Distance Bearings.
 also includes every other GeoTIFF under RASTER_DIR, so the evidence would differ
 from the register's. Cork Harbour work uses GEO12_04, then KRY12_05, then CB12_01:
 
-    python scripts/test_chords.py RCYC_Cork_Harbour_ORC_MASTER_v3_18_EVIDENCE_REGISTER.xlsx E:\Infomar --rasters GEO12_04,KRY12_05,CB12_01
+    python scripts/test_chords.py RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx E:\Infomar --rasters GEO12_04,KRY12_05,CB12_01
 
 **`xlsx_edit.py`** has no command line: it is used from Python. `Workbook(path)`
 opens a workbook; `set_cell`, `append_readme`, `remove_sheet` and `delete_rows`
@@ -288,8 +291,9 @@ result recorded long before these scripts existed.
    Autumn League SIs (para 36, September) publish Ringabella 408 m apart and Harp
    83 m apart. The workbook follows the later document. RCYC has not been asked to
    resolve it.
-2. **EF2 and Cage.** Carried on the club's word. The Port publishes no positions
-   and refers mariners to BA 1765, 1773 and 1777.
+2. **EF2.** The club-supplied position, adopted in v3.8 because a Navionics reading
+   corroborated it: 15 m south, on an identical longitude. The Port publishes no
+   position for this buoy and refers mariners to BA 1765, 1773 and 1777.
 3. **No.6 to Cage** has a 29.9 m unsurveyed run near Cage. Deliberately retained at
    DIRECT – VERIFIED; do not downgrade it on coverage grounds without new evidence.
 4. **Twenty-three chords pass under 2.0 m at LAT,** mostly around Cage. Passing,
