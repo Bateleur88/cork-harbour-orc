@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.6';
+const PAGE_VERSION='2026-10-01.7';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -645,6 +645,18 @@ function cardInit(){
   cardPreview();
 }
 function cardRounding(seq){return seq.slice(1,seq.length-1);}
+// a card mark of race r, at its workbook position; card marks have their own ids, never shared with RIB fixes
+function pushCardMark(r,nm){const m=CARD.marks[nm];if(!m)return;
+  push({race:r,name:nm,fix:1,lat:m.lat,lon:m.lon,acc:null,time:'',card:nm,flag:m.flag||'',cardType:m.type||''});}
+/* A course loaded from the server that was imported from the card names its card setup ({c,s,f}); this phone may never
+   have imported it, so the card marks its entries point to are made here (existing ones are left as they are). */
+/* The card setup as saved: course c, route-basis ends s and f (Grassy Mid / No.8 / Dosco), and for each end, once the RO
+   has switched it, ls / lf = 'card' (the card mark) or 'laid' (the recorded line). With no ls / lf the end follows the
+   automatic rule as before. Anything else in a record is dropped. */
+function cardRec(c){const r={c:String(c.c),s:String(c.s||''),f:String(c.f||'')};
+  if(c.ls==='card'||c.ls==='laid')r.ls=c.ls; if(c.lf==='card'||c.lf==='laid')r.lf=c.lf; return r;}
+function ensureCardMarks(r,cfg){const d=CARD.courses[cfg.c], seq=d&&d.cfg[cfg.s+'|'+cfg.f]; if(!seq)return;
+  cardRounding(seq).forEach(nm=>{if(!S.marks.some(m=>m.id===cardId(r,nm)))pushCardMark(r,nm);});}
 function cardPreview(){
   const {c}=cardSel(), d=CARD.courses[c], seq=cardSeq(), host=$('cardPreview');
   if(!d||!seq){host.innerHTML='<p class="cardnote flag">That start and finish combination is not in the workbook.</p>';return;}
@@ -672,9 +684,8 @@ function cardImport(){
   const sides=(d.card||[]); const ents=[]; let ptr=0;
   if(sides.length&&marks.length&&sides[0].m!==marks[0]&&sides[0].m===cardSel().s)ptr=1;  /* the card's first mark is the start line itself */
   marks.forEach(nm=>{
-    const m=CARD.marks[nm];
-    if(!m)return;
-    push({race:S.race,name:nm,fix:1,lat:m.lat,lon:m.lon,acc:null,time:'',card:nm,flag:m.flag||'',cardType:m.type||''});
+    if(!CARD.marks[nm])return;
+    pushCardMark(S.race,nm);
     let side='';
     if(sides[ptr]&&sides[ptr].m===nm){side=sides[ptr].s||'';ptr++;}   /* in step with the printed card */
     ents.push({id:cardId(S.race,nm),side});            /* out of step (e.g. the ** Dosco inserted as Mark 1): leave the side blank rather than borrow another mark's */
@@ -1279,9 +1290,10 @@ function recordFor(k){
   Object.keys(ls).forEach(w=>{lsr[w]=ls[w]==='auto'?'auto':refOf(ls[w]);});
   return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
           startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
-          wind:(S.winds&&S.winds[k])||{twd:'',tws:''}};
+          wind:(S.winds&&S.winds[k])||{twd:'',tws:''},
+          card:(S.cardCfg&&S.cardCfg[k])?cardRec(S.cardCfg[k]):null};
 }
-function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws);}
+function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
 // the day-wide _starts is never sent: only each race's own groups are
 function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
@@ -1321,11 +1333,25 @@ function applyServerCourses(obj){
       S.finishes[k]=rec.finish||'start';
       const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=v==='auto'?'auto':(resolveRef(v)||'auto');}); S.lineSel[k]=ls;
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
+      // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
+      if('card' in rec){S.cardCfg=S.cardCfg||{};
+        if(rec.card&&typeof rec.card==='object'&&rec.card.c){S.cardCfg[k]=cardRec(rec.card);
+          ensureCardMarks(+k.split('|')[0],S.cardCfg[k]);}
+        else delete S.cardCfg[k];}
       S.courseDay=S.courseDay||{}; S.courseDay[k]=S.pulledDay;   // a course from the server belongs to the day it came from
     }
     S.synced[k]=JSON.stringify(recordFor(k));
   });
 }
+
+/* Course records gained "card" in 2026-10-01.7. What this phone last saved or loaded under the old shape is upgraded once,
+   where the phone's course still matches it, so the update alone makes no course look unsent and nothing is re-sent;
+   a course with genuinely unsent edits still differs, and is sent as before. */
+if(S.recShape!==2){Object.keys(S.synced||{}).forEach(k=>{const v=S.synced[k];
+  if(!v||k.indexOf('_starts')===0||v.indexOf('"card":')>=0)return;
+  const r=recordFor(k), old=Object.assign({},r); delete old.card;
+  if(JSON.stringify(old)===v)S.synced[k]=JSON.stringify(r);});
+  S.recShape=2; save();}
 
 /* ---------- committee boat fix from this phone ---------- */
 if(!Array.isArray(S.outbox))S.outbox=[];
