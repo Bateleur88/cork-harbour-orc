@@ -14,9 +14,12 @@ still present and unchanged:
   2  damaged    a half-written day file is refused, not overwritten
   3  write      a write that fails part-way leaves the day file unchanged, no .tmp left behind
   4  moved      the RO page re-posting a fix to another race keeps its device and recorder
-  5  parallel   60 fixes, 10 courses and 30 reads at once: nothing lost, no reader sees a partial day
+  5  parallel   60 fixes, 10 courses, 9 races' start groups and 30 reads at once: nothing lost, no reader
+                sees a partial day
   6  key        a missing key.js, or one still holding the CHANGE_ME placeholder, refuses every request,
                 even one sending an empty key; a wrong key is refused
+  7  groups     each race's start groups (_starts|race) are kept apart: saving one race's groups leaves the
+                other race's, the old day-wide _starts and every course unchanged; malformed keys refused
 
 Each throwaway folder gets its own key.js with a test key; the real key is never in this repository.
 Fixture positions have 7 decimals, as marks.php stores them: PHP before 7.1 writes JSON numbers to 14
@@ -200,6 +203,8 @@ def t5_concurrent(run):
             for i in range(60)]
     jobs += [('POST', {'action': 'course', 'date': DAY, 'key': f'{i}|2', 'data': {'legs': [i]}}, '')
              for i in range(1, 11)]
+    jobs += [('POST', {'action': 'course', 'date': DAY, 'key': f'_starts|{r}', 'data': {'classes': [[f'C{r}']]}}, '')
+             for r in range(1, 10)]
     jobs += [('GET', None, f'date={DAY}') for _ in range(30)]
     with cf.ThreadPoolExecutor(24) as ex:
         res = list(ex.map(lambda j: req(d, *j), jobs))
@@ -209,10 +214,12 @@ def t5_concurrent(run):
     missing = [i for i in range(60) if f'par{i:03d}' not in have]
     partial = sum(1 for s, g in gets if s != 200 or len(g.get('marks', [])) < 12)
     bad = [(s, r.get('error')) for s, r in posts if s != 200]
+    groups_ok = all(courses.get(f'_starts|{r}', {}).get('data') == {'classes': [[f'C{r}']]} for r in range(1, 10))
     ok, detail = intact(d)
     report(f'5 concurrent writes (run {run})',
-           ok and not missing and not bad and not partial and len(courses) == 12 and not leftovers(d),
-           f'{len(posts) - len(bad)}/{len(posts)} writes OK; fixes missing {len(missing)}; courses {len(courses)}/12; '
+           ok and not missing and not bad and not partial and len(courses) == 21 and groups_ok and not leftovers(d),
+           f'{len(posts) - len(bad)}/{len(posts)} writes OK; fixes missing {len(missing)}; courses {len(courses)}/21; '
+           f'race groups all kept {groups_ok}; '
            f'reads seeing a partial day {partial}/30; {detail}')
 
 
@@ -237,13 +244,36 @@ def t6_key():
            f'files untouched {untouched}; wrong key {s_wrong}; right key {s_right}')
 
 
+def t7_race_groups():
+    d = setup('t7')
+    day_wide = {'classes': [['Class 1 Non Spinnaker', 'Class 2 Non Spinnaker'], ['Class 3 Spinnaker']]}
+    r1 = {'classes': [['Class 1 Non Spinnaker', 'Class 2 Non Spinnaker'], ['Class 3 Spinnaker'],
+                      ['Class 1 Spinnaker', 'Class 2 Spinnaker']]}
+    r2 = {'classes': [['Class 3 Spinnaker'], ['Class 1 Spinnaker', 'Class 2 Spinnaker'],
+                      ['Class 1 Non Spinnaker', 'Class 2 Non Spinnaker']]}
+    post = lambda k, data: req(d, body={'action': 'course', 'date': DAY, 'key': k, 'data': data})[0]
+    s = [post('_starts', day_wide), post('_starts|1', r1), post('_starts|2', r2)]
+    c = load(course_file(d))
+    _, want = fixture()
+    kept = (c.get('_starts', {}).get('data') == day_wide and c.get('_starts|1', {}).get('data') == r1
+            and c.get('_starts|2', {}).get('data') == r2 and all(c.get(k) == v for k, v in want.items()))
+    before = sha(course_file(d))
+    bad = {k: post(k, r1) for k in ('_starts|', '_starts|0', '_starts|10', '_starts|x', '_starts1', 'x_starts|1',
+                                     '_starts|1|2', '_starts|1\n')}
+    refused = all(v == 400 for v in bad.values()) and sha(course_file(d)) == before
+    ok, detail = intact(d)
+    report('7 start groups per race', ok and s == [200] * 3 and kept and refused,
+           f'statuses {s}; day-wide, race 1, race 2 and courses all kept {kept}; '
+           f'malformed keys {sorted(set(bad.values()))}, file {"unchanged" if refused else "CHANGED"}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
         return 2
     print(subprocess.run([PHPCGI, '-v'], capture_output=True, text=True).stdout.splitlines()[0])
     try:
-        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key):
+        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

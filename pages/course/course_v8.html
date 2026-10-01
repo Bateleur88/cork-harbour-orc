@@ -183,6 +183,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <h2>3 · Build the course</h2>
   <div class="tabs" id="tabs" role="group" aria-label="Race"></div>
   <div class="starts" id="starts" role="group" aria-label="Start"></div>
+  <p class="hint" id="classNote" hidden></p>
   <div class="classpick" id="classPick" hidden></div>
   <div class="fields" style="margin:0 0 12px"><label>Start time for this start<input id="startTime" type="time"></label></div>
   <button class="ghost" id="copyStart" hidden></button>
@@ -241,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.2';
+const PAGE_VERSION='2026-10-01.3';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -278,7 +279,7 @@ async function keyFetch(url,opts){
 const K='course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,startClasses:[[],[],[]],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
+function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -363,8 +364,19 @@ function bank(){
 }
 const CLASSES=['Class 1 Spinnaker','Class 2 Spinnaker','Class 3 Spinnaker','Class 1 Non Spinnaker','Class 2 Non Spinnaker','Class 3 Non Spinnaker'];
 function shortClass(c){return c.replace('Class ','').replace(' Non Spinnaker',' NS').replace(' Spinnaker',' Spin');}
-if(!Array.isArray(S.startClasses)||!S.startClasses.length)S.startClasses=[[],[],[]];
-S.starts=S.startClasses.map((_,i)=>'Start '+(i+1));
+/* Start groups belong to a race: S.raceClasses[race], saved as _starts|race. A race with none has empty groups; nothing
+   is ever filled in from another race or day. Groups saved before that were one list for the whole day (_starts): the
+   loaded day's copy is kept as S.dayClasses only to be shown, never used or saved, unless the RO taps to use it.
+   The phone's own pre-race copy (startClasses) is dropped: it may belong to another day. */
+if(!S.raceClasses||typeof S.raceClasses!=='object')S.raceClasses={};
+delete S.startClasses;
+if(!Array.isArray(S.dayClasses))S.dayClasses=[];
+function ownClasses(r){return S.raceClasses[r||S.race]||null;}
+function dayFallback(){return S.dayClasses.some(l=>l.length)?S.dayClasses:null;}
+function classesOf(r){return ownClasses(r)||[[],[],[]];}
+// the race's own groups, empty the first time it is edited
+function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=[[],[],[]];return S.raceClasses[r];}
+S.starts=classesOf().map((_,i)=>'Start '+(i+1));
 let classOpen=false;
 if(typeof S.start!=='number')S.start=0;
 Object.keys(S.courses||{}).forEach(k=>{if(!k.includes('|')){S.courses[k+'|0']=S.courses[k];delete S.courses[k];}});
@@ -395,7 +407,7 @@ function newerFix(m){
   });
   return best;
 }
-function startName(){const c=S.startClasses[S.start]||[];return 'Start '+(S.start+1)+(c.length?' ('+c.join(', ')+')':'');}
+function startName(){const c=classesOf()[S.start]||[];return 'Start '+(S.start+1)+(c.length?' ('+c.join(', ')+')':'');}
 function markById(id){const m=S.marks.find(x=>x.id===id);return isLaidCard(m)?resolveLaid(m):m;}
 
 /* ---------- who recorded a fix ----------
@@ -693,32 +705,38 @@ function render(){
   const tabs=$('tabs');tabs.innerHTML='';
   races().forEach(r=>{const b=document.createElement('button');b.textContent='Race '+r;b.setAttribute('aria-pressed',r===S.race);
     b.onclick=()=>{S.race=r;commit();};tabs.appendChild(b);});
+  const CL=classesOf(), dayOnly=!ownClasses()&&!!dayFallback();
+  S.starts=CL.map((_,i)=>'Start '+(i+1));
   if(S.start>=S.starts.length)S.start=0;
   $('startTime').value=startTime();
   const st=$('starts');st.innerHTML='';
-  S.starts=S.startClasses.map((_,i)=>'Start '+(i+1));
   S.starts.forEach((n,i)=>{const b=document.createElement('button');b.setAttribute('aria-pressed',i===S.start);
-    const cl=S.startClasses[i]||[];
+    const cl=CL[i]||[];
     b.innerHTML=esc(n)+'<small>'+(cl.length?esc(cl.map(shortClass).join(' · ')):'choose classes')+'</small>';
-    b.onclick=()=>{if(S.start===i){classOpen=!classOpen;}else{S.start=i;classOpen=!(S.startClasses[i]||[]).length;}commit();};
+    b.onclick=()=>{if(S.start===i){classOpen=!classOpen;}else{S.start=i;classOpen=!(CL[i]||[]).length;}commit();};
     st.appendChild(b);});
   const ad=document.createElement('button');ad.className='edit';ad.textContent='+ Start';ad.setAttribute('aria-label','Add a start');
-  ad.onclick=()=>{S.startClasses.push([]);S.start=S.startClasses.length-1;classOpen=true;commit();};
+  ad.onclick=()=>{const g=editClasses();g.push([]);S.start=g.length-1;classOpen=true;commit();};
   st.appendChild(ad);
+  const cn=$('classNote'); cn.hidden=!dayOnly;
+  if(dayOnly){cn.innerHTML='Before groups were kept per race, this day had one set for every race: '+
+    esc(S.dayClasses.map((l,i)=>'Start '+(i+1)+' '+(l.length?l.map(shortClass).join(' + '):'none')).join(', '))+
+    '. Race '+S.race+' does not use them unless you tap <button class="ghost" id="classUse">Use them for Race '+S.race+'</button>';
+    $('classUse').onclick=()=>{S.raceClasses[S.race]=S.dayClasses.map(l=>l.slice());commit();};}
   const pk=$('classPick');
   if(classOpen){
-    const mine=S.startClasses[S.start]||[];
+    const mine=CL[S.start]||[];
     pk.hidden=false;
     pk.innerHTML='<p class="pickhead">Classes in Start '+(S.start+1)+'</p>'+CLASSES.map(c=>{
-      const other=S.startClasses.findIndex((l,i)=>i!==S.start&&l.includes(c));
+      const other=CL.findIndex((l,i)=>i!==S.start&&l.includes(c));
       return '<label class="pick'+(other>=0?' taken':'')+'"><input type="checkbox" value="'+esc(c)+'"'+(mine.includes(c)?' checked':'')+(other>=0?' disabled':'')+'> '+esc(c)+(other>=0?' <small>in Start '+(other+1)+'</small>':'')+'</label>';
     }).join('')+'<button class="done" id="classDone">Done</button>'+
-      (S.startClasses.length>1&&!mine.length?'<button class="rm" id="classRm">Remove Start '+(S.start+1)+'</button>':'');
+      (CL.length>1&&!mine.length?'<button class="rm" id="classRm">Remove Start '+(S.start+1)+'</button>':'');
     pk.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
-      const l=S.startClasses[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{S.startClasses[S.start]=l.filter(x=>x!==cb.value);}
-      S.startClasses[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
+      const g=editClasses(), l=g[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{g[S.start]=l.filter(x=>x!==cb.value);}
+      g[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
     $('classDone').onclick=()=>{classOpen=false;commit();};
-    const rm=$('classRm'); if(rm)rm.onclick=()=>{S.startClasses.splice(S.start,1);
+    const rm=$('classRm'); if(rm)rm.onclick=()=>{editClasses().splice(S.start,1);
       Object.keys(S.courses).forEach(k=>{const [r,st]=k.split('|').map(Number);if(st===S.start)delete S.courses[k];else if(st>S.start){S.courses[r+'|'+(st-1)]=S.courses[k];delete S.courses[k];}});
       S.start=0;classOpen=false;commit();};
   }else pk.hidden=true;
@@ -835,7 +853,7 @@ function setMode(m){S.mode=m;save();render();if(m==='race')window.scrollTo(0,0);
 function renderRaceHead(){
   const rr=$('rRace'), rs=$('rStart');
   rr.innerHTML=races().map(r=>'<option value="'+r+'"'+(r===S.race?' selected':'')+'>Race '+r+'</option>').join('');
-  rs.innerHTML=S.starts.map((n,i)=>{const c=S.startClasses[i]||[];
+  rs.innerHTML=classesOf().map((c,i)=>{const n='Start '+(i+1);
     return '<option value="'+i+'"'+(i===S.start?' selected':'')+'>'+esc(n+(c.length?' ('+c.map(shortClass).join(', ')+')':''))+'</option>';}).join('');
   const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)], n=course().length;
   $('rSum').textContent=[!n?'No course yet':ccfg?'Course '+ccfg.c:n+' mark'+(n>1?'s':''),
@@ -1233,15 +1251,17 @@ if(!S.synced||typeof S.synced!=='object')S.synced={};
 function refOf(id){const m=markById(id);return m&&m.sid?'s:'+m.sid:'l:'+id;}
 function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===r.slice(2));return m?m.id:null;}return r.slice(2);}
 function recordFor(k){
-  if(k==='_starts')return {classes:S.startClasses};
+  if(k==='_starts')return {classes:S.dayClasses};
+  if(k.indexOf('_starts|')===0)return {classes:S.raceClasses[k.slice(8)]||[]};
   const ls=S.lineSel[k]||{}, lsr={};
   Object.keys(ls).forEach(w=>{lsr[w]=ls[w]==='auto'?'auto':refOf(ls[w]);});
   return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
           startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
           wind:(S.winds&&S.winds[k])||{twd:'',tws:''}};
 }
-function isEmptyRec(k,r){return k==='_starts'?!r.classes.some(l=>l.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws);}
-function allKeys(){return [...new Set(['_starts'].concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
+function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws);}
+// the day-wide _starts is never sent: only each race's own groups are
+function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
@@ -1262,9 +1282,11 @@ async function saveCourses(force,only){
 function applyServerCourses(obj){
   Object.keys(obj||{}).forEach(k=>{
     const rec=obj[k]&&obj[k].data; if(!rec)return;
+    // the day-wide groups are never edited or saved here, so the server's copy always wins
+    if(k==='_starts'){S.dayClasses=Array.isArray(rec.classes)?rec.classes:[];S.synced[k]=JSON.stringify(recordFor(k));return;}
     // a device that has never synced this course takes the server's version; otherwise unsent local edits win until saved
     if(S.synced[k]!==undefined&&isDirty(k))return;
-    if(k==='_starts'){if(Array.isArray(rec.classes)&&rec.classes.length)S.startClasses=rec.classes;}
+    if(k.indexOf('_starts|')===0){if(Array.isArray(rec.classes)&&rec.classes.length)S.raceClasses[k.slice(8)]=rec.classes;}
     else{
       S.courses[k]=(rec.entries||[]).map(e=>({id:resolveRef(e.ref),side:e.side||''})).filter(e=>e.id);
       if(rec.startTime)S.startTimes[k]=rec.startTime; else delete S.startTimes[k];

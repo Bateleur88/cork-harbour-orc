@@ -2,6 +2,8 @@
 /*
  * Laid-mark and course store for the RIB record page and the RO course page.
  * Marks go in data/marks-YYYY-MM-DD.json, built courses in data/courses-YYYY-MM-DD.json.
+ * Courses are keyed race|start; each race's start groups are _starts|race. The older day-wide _starts
+ * (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
  * Upload it as /marks/marks.php. It creates a "data" folder next to itself.
  * The race key is not in this file or the repository. It is read from key.js next to this file, the same
  * file both pages load, so the key is set in one place. Copy key.example.js to key.js, set the key, and
@@ -102,11 +104,11 @@ $d      = arg($in, 'date', '');
 $id     = arg($in, 'id', '');
 if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
 
-/* ---------- POST action "course": save one built course (race|start) or the day's start classes ---------- */
+/* ---------- POST action "course": save one built course (race|start) or one race's start groups (_starts|race) ---------- */
 if ($action === 'course') {
   $k    = arg($in, 'key', '');
   $data = arg($in, 'data', null);
-  if (!is_string($k) || !preg_match('/^(\d{1,2}\|\d{1,2}|_starts)$/', $k)) out(400, array('ok' => false, 'error' => 'bad course name'));
+  if (!is_string($k) || !preg_match('/^(\d{1,2}\|\d{1,2}|_starts(\|[1-9])?)$/D', $k)) out(400, array('ok' => false, 'error' => 'bad course name'));
   if (!is_array($data) || strlen(json_encode($data)) > 50000) out(400, array('ok' => false, 'error' => 'bad course'));
   $f  = $dir . '/courses-' . $d . '.json';
   $lh = lock_data($dir);
