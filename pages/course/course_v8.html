@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.7';
+const PAGE_VERSION='2026-10-01.8';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -772,16 +772,14 @@ function render(){
   renderMover();
   const ol=$('course');ol.innerHTML='';const cs=course();
   const sl0=startLine();
-  const pins=fixesOf(isStartPin), cbs=fixesOf(isCB), stm=mins(startTime());
-  const later=[...pins,...cbs].filter(m=>stm!==null&&mins(m.time)!==null&&mins(m.time)>stm);
+  const nPins=candidates('pin').length, nCbs=candidates('cb').length;
   // with no line recorded, an imported card course measures from the card's own start (same test as buildLegs)
   const ccfg0=(S.cardCfg||{})[ckey(S.race,S.start)];
   const cardS=!sl0&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
   const cardF=cardS&&!finishIsCardMark()&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
-  const ends=cardS&&!pins.length&&!cbs.length?'':
-    '<div class="meta">'+endPicker('Committee boat',isCB,'cb',!!cardS)+' ↔ '+endPicker('Start Pin',isStartPin,'pin',!!cardS)+'</div>';
+  const ends=cardS&&!nPins&&!nCbs?'':
+    '<div class="meta">'+endPicker('cb',!!cardS)+'</div><div class="meta">↔ '+endPicker('pin',!!cardS)+'</div>';
   ol.innerHTML='<li class="lineRow"><div class="disc line">S</div><div><b>Start line</b>'+ends+
-    (later.length?'<div class="meta" style="color:var(--muted);font-size:.85rem">'+later.map(m=>esc(m.name)+' fix at '+esc(m.time)).join(', ')+' is after this start, so it isn\'t used automatically.</div>':'')+
     (sl0?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
         '. Record the committee boat and pin to measure the real line and its bias.'+
@@ -810,6 +808,9 @@ function render(){
       '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>'+
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
+  if(!cardCfgNow()&&finishMode()==='finishpin'){const li=document.createElement('li');li.className='lineRow';
+    li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="meta">'+endPicker('fcb')+'</div><div class="meta">↔ '+endPicker('fpin')+'</div></div><div></div>';
+    ol.appendChild(li);}
   $('finishSel').value=finishMode();
   // a card course takes its finish from the card, so the hand-built Finish selector gives way to a plain statement
   {const c=cardCfgNow(); $('finishFields').hidden=!!c; $('finishCard').hidden=!c;
@@ -841,7 +842,7 @@ function renderCardSum(){
 /* Remove start i of the current race only. Its groups, course and settings go, and the race's later starts move down one,
    each taking everything kept for it. Other races are not touched. The server keeps one record per race|start, so the
    race's last start number, left vacant, is saved empty if the server had it, and no old course comes back on loading. */
-const START_KEYED=['courses','startTimes','finishes','lineSel','winds','cardCfg','courseDay'];
+const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay'];
 function removeStart(i){
   const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
   let last=classesOf().length-1;
@@ -900,8 +901,13 @@ function renderRaceAlerts(){
     const pk='p|'+m.race+'|'+m.name.toLowerCase();
     if(!m.card&&!seen.has(pk)){seen.add(pk);const n=phoneCount(m);if(n>1)a.push('<p class="note flag">⚠ '+esc(m.name)+': fixes from '+n+' phones.</p>');}
   });
-  [['Committee boat',isCB,'cb'],['Start Pin',isStartPin,'pin']].forEach(([lab,t,w])=>{const m=pick(t,w),n=m?phoneCount(m):0;
-    if(n>1)a.push('<p class="note flag">⚠ '+lab+': fixes from '+n+' phones.</p>');});
+  const ends=['cb','pin'].concat(!cardCfgNow()&&finishMode()==='finishpin'?['fcb','fpin']:[]), kk=ckey(S.race,S.start);
+  ends.forEach(w=>{const e=endPick(w),n=e.m?phoneCount(e.m):0,lab=(w[0]==='f'?'Finish ':'Start ')+END_LABEL[w].toLowerCase(),
+      fl=(S.lineFlags[kk]||{})[w];
+    if(n>1)a.push('<p class="note flag">⚠ '+esc(lab)+': fixes from '+n+' phones.</p>');
+    if(e.warn)a.push('<p class="note flag">⚠ '+esc(lab)+': '+esc(e.warn)+'.</p>');
+    if(e.m&&accWarn(e.m))a.push('<p class="note flag">⚠ '+esc(lab)+' in use: '+esc(fixText(e.m,w))+'.</p>');
+    if(fl)a.push('<p class="note flag">⚠ '+esc(fl)+'</p>');});
   $('raceAlertList').innerHTML=a.join('');
 }
 
@@ -926,20 +932,64 @@ function isLineMark(n){return isCB(n)||isStartPin(n)||isFinishPin(n);}
 function latest(test){let b=null;bank().forEach(m=>{if(test(m.name)&&(!b||m.race>b.race||(m.race===b.race&&m.fix>b.fix)))b=m;});return b;}
 function mkLine(a,b){return a&&b?{cb:a,pin:b,mid:{lat:(a.lat+b.lat)/2,lon:(a.lon+b.lon)/2}}:null;}
 if(!S.lineSel||typeof S.lineSel!=='object')S.lineSel={};
-function fixesOf(test){return bank().filter(m=>test(m.name)).sort((a,b)=>a.race-b.race||a.fix-b.fix);}
-// automatic choice: the latest fix at or before this start's start time (or the latest overall if no start time is set)
-function autoPick(test){
-  const list=fixesOf(test); if(!list.length)return null;
-  const st=mins(startTime()); if(st===null)return list[list.length-1];
-  const before=list.filter(m=>mins(m.time)!==null&&mins(m.time)<=st);
-  return before.length?before[before.length-1]:list[0];
+/* ---------- line ends: which recorded fix stands for each end of the start and finish lines ----------
+   cb and pin make the start line; fcb and fpin the committee boat & Finish Pin finish line. For each race|start,
+   S.lineSel[race|start][end] holds the RO's choice as a reference to the fix ('s:<server id>', or 'l:<id>' for a fix not
+   yet on the server), or 'none' (that end is not used, so the leg it starts or ends is not measured). With no choice the
+   end is inherited from the previous start, or picked automatically, and the page says which and why. The RO decides:
+   nothing automatic ever replaces a choice he made. */
+if(!S.lineFlags||typeof S.lineFlags!=='object')S.lineFlags={};
+const END_TEST={cb:n=>isCB(n),pin:n=>isStartPin(n),fcb:n=>isCB(n),fpin:n=>isFinishPin(n)};
+const END_LABEL={cb:'Committee boat',pin:'Start Pin',fcb:'Committee boat',fpin:'Finish Pin'};
+const ACC_CHECK=15, ACC_POOR=30;   // ±m: a fix is flagged when its accuracy is strictly greater; it stays selectable
+function accWarn(m){const a=m&&typeof m.acc==='number'?m.acc:null;return a===null?'':a>ACC_POOR?'poor GPS':a>ACC_CHECK?'check GPS':'';}
+// a time of day (HH:MM) on the loaded day as a moment; a fix's own recorded moment; null when unknown
+function dayMoment(hm){const d=S.pulledDay||$('day').value, t=String(hm||'').match(/^(\d{1,2}):(\d{2})/);
+  if(!d||!t)return null;const[y,mo,da]=d.split('-').map(Number);return new Date(y,mo-1,da,+t[1],+t[2]).getTime();}
+function fixMoment(m){return typeof m.tms==='number'?m.tms:dayMoment(m.time);}
+function startMoment(r,st){return dayMoment(S.startTimes[ckey(r,st)]);}
+// every recorded fix of an end's type in race r and the races before it, earlier races first, then by time
+function candidates(w,r){r=r||S.race;const t=END_TEST[w];
+  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+function refFor(m){return m.sid?'s:'+m.sid:'l:'+m.id;}
+function refFix(ref,w,r){if(typeof ref!=='string'||!/^[sl]:/.test(ref))return null;
+  const m=ref[0]==='s'?S.marks.find(x=>x.sid===ref.slice(2)):S.marks.find(x=>x.id===ref.slice(2));
+  return m&&!m.card&&m.race<=(r||S.race)&&END_TEST[w](m.name)?m:null;}
+/* The fix used for end w of race r, start st, and how it was decided: how = 'chosen' or 'none' (by the RO),
+   'inherited' (an earlier start's choice), 'auto', or 'unset' (auto found nothing); reason is shown with it, and warn
+   when the RO should look. own=false gives what would apply without this start's own choice. */
+function endPick(w,r,st,own){r=r||S.race;st=st==null?S.start:st;
+  const v=own===false?undefined:(S.lineSel[ckey(r,st)]||{})[w];
+  if(v==='none')return {m:null,how:'none',reason:'None, chosen by you: this end is not used'};
+  if(v&&v!=='auto'){const m=refFix(v,w,r);if(m)return {m,how:'chosen',reason:'Chosen by you'};}
+  // a later start keeps the previous start's choice unless a newer fix of this type was recorded after the previous
+  // start's time and at or before this start's time; both times are needed to tell
+  if(st>0){const p=endPick(w,r,st-1);
+    if(p.how==='chosen'||p.how==='none'||p.how==='inherited'){
+      const t0=startMoment(r,st-1), t1=startMoment(r,st), from=p.how==='inherited'?p.from:st-1;
+      if(t0!==null&&t1!==null&&t0<=t1){
+        const newer=candidates(w,r).filter(m=>{const t=fixMoment(m);return t!==null&&t>t0&&t<=t1;});
+        if(!newer.length)return {m:p.m,how:'inherited',from,reason:'Inherited from Start '+(from+1)+(p.m?'':' (none)')};
+        const n=newer[newer.length-1];
+        return Object.assign(autoEnd(w,r,st),{warn:'New '+END_LABEL[w]+' fix at '+(n.time||'?')+' since Start '+st+
+          '\'s choice, so auto is used: check it'});}}}
+  return autoEnd(w,r,st);
 }
-function pick(test,which){
-  const sel=(S.lineSel[ckey(S.race,S.start)]||{})[which];
-  if(sel&&sel!=='auto'){const m=markById(sel);if(m&&test(m.name))return m;}
-  return autoPick(test);
+function autoEnd(w,r,st){
+  if(w==='fcb'){const s=endPick('cb',r,st);
+    return {m:s.m,how:s.m?'auto':'unset',reason:'Auto: same as this start\'s committee boat',warn:s.m?'':'No committee boat for this start'};}
+  const list=candidates(w,r).filter(m=>fixMoment(m)!==null).sort((a,b)=>fixMoment(a)-fixMoment(b));
+  if(w==='fpin'){const m=list[list.length-1]||null;
+    return m?{m,how:'auto',reason:'Auto: latest Finish Pin fix'}:{m:null,how:'unset',reason:'Auto: none',warn:'No Finish Pin fix recorded'};}
+  const t=startMoment(r,st), hm=S.startTimes[ckey(r,st)];
+  if(t===null)return {m:null,how:'unset',reason:'Auto: none, no start time set',
+    warn:'No start time set: set it, or choose the '+END_LABEL[w]+' fix'};
+  const before=list.filter(m=>fixMoment(m)<=t), m=before[before.length-1]||null;
+  return m?{m,how:'auto',reason:'Auto: latest at or before the '+hm+' start'}
+    :{m:null,how:'unset',reason:'Auto: none, no '+END_LABEL[w]+' fix at or before the '+hm+' start',
+      warn:'No '+END_LABEL[w]+' fix at or before the '+hm+' start: choose one, or record it'};
 }
-function startLine(){return mkLine(pick(isCB,'cb'),pick(isStartPin,'pin'));}
+function startLine(){return mkLine(endPick('cb').m,endPick('pin').m);}
 if(!S.finishes||typeof S.finishes!=='object')S.finishes={};
 function finishMode(){return S.finishes[ckey(S.race,S.start)]||'start';}
 /* Finishes and starts of a card course are deliberately NOT mirror images. Do not "fix" one into the other.
@@ -954,17 +1004,27 @@ function cardCfgNow(){return (S.cardCfg||{})[ckey(S.race,S.start)];}
 function finishIsCardMark(){const c=cardCfgNow(),m=c&&CARD.marks[c.f];return !!(m&&m.type!=='Start/finish modelling point');}
 function finishLine(){
   if(cardCfgNow())return finishIsCardMark()?null:startLine();
-  const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(pick(isCB,'cb'),pick(isFinishPin,'fpin'));return startLine();}
-function endPicker(label,test,which,cardStandIn){
-  const list=fixesOf(test), cur=pick(test,which), sel=(S.lineSel[ckey(S.race,S.start)]||{})[which]||'auto';
-  if(!list.length)return cardStandIn?'<span style="color:var(--muted)">'+label+' not recorded</span>':'<span class="warnTxt">'+label+' missing</span>';
-  const who=m=>whoOf(m)?' · '+esc(whoOf(m)):'', phones=phoneCount(cur);
-  const split=phones>1?' <span class="warnTxt">⚠ fixes from '+phones+' phones</span>':'';
-  if(list.length===1)return esc(label)+' '+esc(cur.time||'')+who(cur)+split;
-  const auto=autoPick(test);
-  return esc(label)+' <select class="endSel" data-w="'+which+'" aria-label="'+esc(label)+' fix">'+
-    '<option value="auto"'+(sel==='auto'?' selected':'')+'>auto ('+esc(auto.time||'?')+who(auto)+')</option>'+
-    list.map(m=>'<option value="'+esc(m.id)+'"'+(sel===m.id?' selected':'')+'>'+esc(m.time||'typed')+(m.race<S.race?' (R'+m.race+')':'')+who(m)+'</option>').join('')+'</select>'+split;
+  const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(endPick('fcb').m,endPick('fpin').m);return startLine();}
+// one fix as a dropdown entry: time, earlier race, accuracy (and its warning), recorder, and "after this start"
+function fixText(m,w){const t=fixMoment(m), st=startMoment(S.race,S.start), aw=accWarn(m);
+  const acc=typeof m.acc==='number'&&m.acc>0?'±'+Math.round(m.acc)+' m'+(aw?', '+aw:''):'';
+  return [m.time||'no time',m.race<S.race?'Race '+m.race:'',acc,whoOf(m),
+    (w==='cb'||w==='pin')&&t!==null&&st!==null&&t>st?'after this start':''].filter(Boolean).join(' · ');}
+function endPicker(w,cardStandIn){
+  const label=END_LABEL[w], list=candidates(w), k=ckey(S.race,S.start), e=endPick(w), a=endPick(w,S.race,S.start,false);
+  const v=(S.lineSel[k]||{})[w], flag=(S.lineFlags[k]||{})[w];
+  const note=(flag?'<div class="meta warnTxt">⚠ '+esc(flag)+'</div>':'');
+  if(!list.length)return '<span'+(cardStandIn?' style="color:var(--muted)"':' class="warnTxt"')+'>'+esc(label)+' not recorded</span>'+note;
+  const sel=e.how==='none'?'none':e.how==='chosen'?v:'auto', opt=(val,txt)=>'<option value="'+esc(val)+'"'+(sel===val?' selected':'')+'>'+esc(txt)+'</option>';
+  const phones=e.m?phoneCount(e.m):0;
+  return esc(label)+' <select class="endSel" data-w="'+w+'" aria-label="'+esc(label)+' fix">'+
+    opt('auto',a.reason+(a.m?': '+fixText(a.m,w):''))+opt('none','None: this end not used')+
+    list.map(m=>opt(refFor(m),fixText(m,w))).join('')+'</select>'+
+    '<div class="meta" style="font-size:.85rem">'+esc(e.reason)+(e.m&&e.how!=='chosen'?': '+esc(fixText(e.m,w)):'')+
+      (e.how==='chosen'||e.how==='none'?' <button type="button" class="ghost endAuto" data-w="'+w+'">Back to auto</button>':'')+'</div>'+
+    (e.warn?'<div class="meta warnTxt">⚠ '+esc(e.warn)+'</div>':'')+
+    (e.m&&accWarn(e.m)?'<div class="meta warnTxt">⚠ '+esc(label)+' in use is '+esc(fixText(e.m,w))+'</div>':'')+
+    (phones>1?'<div class="meta warnTxt">⚠ fixes from '+phones+' phones</div>':'')+note;
 }
 function card(ents){
   const out=['Start'];
@@ -1213,7 +1273,7 @@ async function pull(quiet){
       const kept=new Set(Object.keys(S.courses).filter(k=>(S.courses[k]||[]).length).map(k=>+k.split('|')[0]));
       // courses kept for this day have never been sent to this day's server file: mark them unsent, so they win over
       // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
-      S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';}); dayGen++;
+      S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';}); dayGen++; S.lineFlags={};
       Object.keys(S.raceClasses).forEach(r=>{S.synced['_starts|'+r]='';});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
       ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
@@ -1233,6 +1293,7 @@ async function pull(quiet){
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
+    if(!stale())checkLineRefs();
     if(!stale()){pullOk=true; lastPullAt=Date.now();}
     commit();
   }catch(e){
@@ -1268,6 +1329,11 @@ async function moveFix(sid,newRace){
   const t=m.tms||Date.now();
   try{
     await postFix({action:'add',id:sid,series:S.title||'',date:day,race:newRace,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc||0,time:t});
+    // a line choice pointing at this fix, in any race or start, is cleared and flagged, never carried to its new race
+    Object.keys(S.lineSel).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{if(ls[w]!=='s:'+sid&&ls[w]!=='l:'+m.id)return;
+      delete ls[w];S.lineFlags[k]=S.lineFlags[k]||{};const[r,st]=k.split('|').map(Number);
+      S.lineFlags[k][w]='The '+END_LABEL[w]+' fix at '+(m.time||'?')+' chosen for Race '+r+' Start '+(st+1)+' was moved to Race '+newRace+
+        ': choice cleared, auto is used until you choose again';stamp(k);});});
     const oldIds=new Map(S.marks.filter(x=>x.sid).map(x=>[x.id,x.sid]));
     await pull(true);
     // keep any course entries pointing at this fix
@@ -1279,6 +1345,21 @@ async function moveFix(sid,newRace){
   }catch(e){st.textContent='Could not move that fix. Check signal and try again.'; st.className='status err';}
 }
 
+function checkLineRefs(){
+  Object.keys(S.lineSel||{}).forEach(k=>{if(!/^\d+\|\d+$/.test(k))return;const ls=S.lineSel[k],[r,st]=k.split('|').map(Number);
+    Object.keys(ls).forEach(w=>{const v=ls[w];if(!END_TEST[w]||typeof v!=='string'||!/^[sl]:/.test(v))return;
+      const m=refFix(v,w,r);
+      if(!m){delete ls[w];S.lineFlags[k]=S.lineFlags[k]||{};
+        S.lineFlags[k][w]='The '+END_LABEL[w]+' fix chosen for Race '+r+' Start '+(st+1)+' is no longer in this race or an earlier one '+
+          '(moved or deleted): choice cleared, auto is used until you choose again';stamp(k);}
+      else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k);}});});
+}
+/* Line choices were held as phone-side fix ids before 2026-10-01.8; they become references once. The saved record
+   already sent references, so nothing changes on the server and nothing looks unsent. */
+if(S.lineShape!==2){Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{const v=ls[w];
+  if(v==='auto'||v==='none'||/^[sl]:/.test(v))return;const m=S.marks.find(x=>x.id===v);if(m)ls[w]=refFor(m);else delete ls[w];});});
+  S.lineShape=2; save();}
+
 /* ---------- built courses saved on the server ---------- */
 if(!S.synced||typeof S.synced!=='object')S.synced={};
 function refOf(id){const m=markById(id);return m&&m.sid?'s:'+m.sid:'l:'+id;}
@@ -1287,7 +1368,7 @@ function recordFor(k){
   if(k==='_starts')return {classes:S.dayClasses};
   if(k.indexOf('_starts|')===0)return {classes:S.raceClasses[k.slice(8)]||[]};
   const ls=S.lineSel[k]||{}, lsr={};
-  Object.keys(ls).forEach(w=>{lsr[w]=ls[w]==='auto'?'auto':refOf(ls[w]);});
+  Object.keys(ls).forEach(w=>{const v=ls[w];if(v==='auto'||v==='none'||/^[sl]:/.test(v))lsr[w]=v;});
   return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
           startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
           wind:(S.winds&&S.winds[k])||{twd:'',tws:''},
@@ -1331,7 +1412,7 @@ function applyServerCourses(obj){
       S.courses[k]=(rec.entries||[]).map(e=>({id:resolveRef(e.ref),side:e.side||''})).filter(e=>e.id);
       if(rec.startTime)S.startTimes[k]=rec.startTime; else delete S.startTimes[k];
       S.finishes[k]=rec.finish||'start';
-      const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=v==='auto'?'auto':(resolveRef(v)||'auto');}); S.lineSel[k]=ls;
+      const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w];ls[w]=typeof v==='string'&&(v==='none'||/^[sl]:/.test(v))?v:'auto';}); S.lineSel[k]=ls;
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
       // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
       if('card' in rec){S.cardCfg=S.cardCfg||{};
@@ -1401,8 +1482,12 @@ setInterval(()=>{sendOutbox();saveCourses();},15000);
 window.addEventListener('online',sendOutbox);
 
 /* ---------- events ---------- */
-$('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(!t)return;
-  const k=ckey(S.race,S.start); S.lineSel[k]=S.lineSel[k]||{}; S.lineSel[k][t.dataset.w]=t.value; stamp(k); commit();});
+function setEnd(w,v){const k=ckey(S.race,S.start);S.lineSel[k]=S.lineSel[k]||{};
+  if(v==='auto')delete S.lineSel[k][w]; else S.lineSel[k][w]=v;
+  if(S.lineFlags[k])delete S.lineFlags[k][w];   // the RO has looked at this end again
+  stamp(k); commit();}
+$('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(t)setEnd(t.dataset.w,t.value);});
+$('course').addEventListener('click',e=>{const t=e.target.closest('.endAuto');if(t)setEnd(t.dataset.w,'auto');});
 $('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;commit();});
 $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='ack')Object.assign(S.laidAck,laidPending);
