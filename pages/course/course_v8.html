@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.8';
+const PAGE_VERSION='2026-10-01.9';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -588,10 +588,10 @@ function drawChartInner(){
   if(LWind){LWind.remove();LWind=null;}
   let cs=course().filter(e=>markById(e.id)).map(e=>markById(e.id));
   if(!cs.length){$('mapStatus').textContent='Nothing to draw yet.';return;}
-  const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)], sl0=startLine(), fl0=finishLine();
+  const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)], sl0=legStartLine(), fl0=finishLine(), fs0=finishState();
   const cardEnd=nm=>{const m=nm&&CARD.marks[nm];return m?{name:nm,lat:m.lat,lon:m.lon,card:nm}:null;};
-  if(!sl0&&ccfg&&cardEnd(ccfg.s))cs=[cardEnd(ccfg.s)].concat(cs);
-  if(!fl0&&ccfg&&cardEnd(ccfg.f))cs=cs.concat([cardEnd(ccfg.f)]);
+  if(!sl0&&ccfg&&startStandIn()&&cardEnd(ccfg.s))cs=[cardEnd(ccfg.s)].concat(cs);
+  if(!fl0&&ccfg&&fs0.kind!=='missing'&&cardEnd(ccfg.f))cs=cs.concat([cardEnd(ccfg.f)]);
   // with a recorded line, draw the leg from it (and to it) along the card's route, as the legs table measures it
   if(sl0&&ccfg&&CARD.marks[ccfg.s])cs=[{name:'Start',lat:sl0.mid.lat,lon:sl0.mid.lon,card:ccfg.s}].concat(cs);
   if(fl0&&ccfg&&CARD.marks[ccfg.f])cs=cs.concat([{name:'Finish',lat:fl0.mid.lat,lon:fl0.mid.lon,card:ccfg.f}]);
@@ -599,9 +599,9 @@ function drawChartInner(){
   if(!pts.length){$('mapStatus').textContent='No positions to draw.';return;}
   $('mapStatus').className='status'; $('mapStatus').textContent='';
   if(pts.length>1)L.polyline(pts,{color:'#2458a6',weight:4,opacity:.9}).addTo(LRoute);
-  const sl=startLine(), fl=finishLine();
-  [sl,fl].forEach((ln,i)=>{ if(ln)L.polyline([[ln.cb.lat,ln.cb.lon],[ln.pin.lat,ln.pin.lon]],
-      {color:'#111',weight:2,dashArray:'6,5'}).bindTooltip(i?'Finish line':'Start line',{sticky:true}).addTo(LRoute); });
+  const sl=startLine(), fl=finishLine(), slUnused=cardEndMode('s')==='card';
+  [sl,fl!==sl?fl:null].forEach((ln,i)=>{ if(ln)L.polyline([[ln.cb.lat,ln.cb.lon],[ln.pin.lat,ln.pin.lon]],
+      {color:'#111',weight:2,dashArray:'6,5'}).bindTooltip(i?'Finish line':slUnused?'Start line (recorded, not used: Card mark chosen)':'Start line',{sticky:true}).addTo(LRoute); });
   const seen=new Set();
   path.forEach(p=>{
     const key=p.name+'|'+p.lat.toFixed(5);
@@ -654,7 +654,9 @@ function pushCardMark(r,nm){const m=CARD.marks[nm];if(!m)return;
    has switched it, ls / lf = 'card' (the card mark) or 'laid' (the recorded line). With no ls / lf the end follows the
    automatic rule as before. Anything else in a record is dropped. */
 function cardRec(c){const r={c:String(c.c),s:String(c.s||''),f:String(c.f||'')};
-  if(c.ls==='card'||c.ls==='laid')r.ls=c.ls; if(c.lf==='card'||c.lf==='laid')r.lf=c.lf; return r;}
+  if(c.ls==='card'||c.ls==='laid')r.ls=c.ls; if(c.lf==='card'||c.lf==='laid')r.lf=c.lf;
+  if(c.lfs==='start')r.lfs='start';   // laid finish with no Finish Pin: the RO kept the start line as the finish
+  return r;}
 function ensureCardMarks(r,cfg){const d=CARD.courses[cfg.c], seq=d&&d.cfg[cfg.s+'|'+cfg.f]; if(!seq)return;
   cardRounding(seq).forEach(nm=>{if(!S.marks.some(m=>m.id===cardId(r,nm)))pushCardMark(r,nm);});}
 function cardPreview(){
@@ -695,7 +697,9 @@ function cardImport(){
   // it then offers this card's marks, plus any another start in the race still uses. RIB fixes are never touched.
   const inUse=new Set(); Object.keys(S.courses).forEach(k=>{if(+k.split('|')[0]===S.race)(S.courses[k]||[]).forEach(e=>inUse.add(typeof e==='string'?e:e.id));});
   S.marks=S.marks.filter(m=>!(m.card&&m.race===S.race&&!inUse.has(m.id)));
-  S.cardCfg=S.cardCfg||{}; S.cardCfg[ckey(S.race,S.start)]={c:c,s:cardSel().s,f:cardSel().f}; stamp();
+  // a re-import keeps this start's line switches: they describe how the ends are handled, not which course it is
+  S.cardCfg=S.cardCfg||{}; {const k=ckey(S.race,S.start), was=S.cardCfg[k]||{};
+    S.cardCfg[k]=cardRec(Object.assign({},was,{c:c,s:cardSel().s,f:cardSel().f}));} stamp();
   const flags=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].flag&&!CARD.marks[m].laid);
   // laid marks: say which position each uses, and take that as seen, so only a later change raises a notice
   const laid=[...new Set(marks)].filter(m=>CARD.marks[m]&&CARD.marks[m].laid).map(nm=>{const lm=markById(cardId(S.race,nm));
@@ -771,16 +775,22 @@ function render(){
     b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};bk.appendChild(b);});
   renderMover();
   const ol=$('course');ol.innerHTML='';const cs=course();
-  const sl0=startLine();
+  const sl0=legStartLine(), sm=cardEndMode('s'), slRec=startLine();
   const nPins=candidates('pin').length, nCbs=candidates('cb').length;
   // with no line recorded, an imported card course measures from the card's own start (same test as buildLegs)
   const ccfg0=(S.cardCfg||{})[ckey(S.race,S.start)];
-  const cardS=!sl0&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
+  const cardS=!sl0&&startStandIn()&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
   const cardF=cardS&&!finishIsCardMark()&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
-  const ends=cardS&&!nPins&&!nCbs?'':
+  const sw=sm?lineSwitch('s'):'';
+  const ends=sm==='card'?'<div class="meta">Card mark: the card\'s '+esc(ccfg0.s)+' start point is used.'+
+      (slRec?' Recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+') shown, not used.':'')+'</div>':
+    cardS&&!nPins&&!nCbs?'':
     '<div class="meta">'+endPicker('cb',!!cardS)+'</div><div class="meta">↔ '+endPicker('pin',!!cardS)+'</div>';
-  ol.innerHTML='<li class="lineRow"><div class="disc line">S</div><div><b>Start line</b>'+ends+
-    (sl0?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
+  const sMiss=sm==='laid'&&!slRec?'<div class="meta warnTxt">⚠ Start line missing: Laid line is chosen and no committee boat and pin are usable, '+
+      'so the first leg is not measured. <button type="button" class="ghost lineAct" data-act="chooseStart">Choose or record committee boat and pin</button> '+
+      '<button type="button" class="ghost lineAct" data-act="useCard">Use Card mark</button></div>':'';
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+
+    (sl0||sm==='card'||sm==='laid'?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
         '. Record the committee boat and pin to measure the real line and its bias.'+
         (CARD.marks[cardS].type!=='Start/finish modelling point'?' A '+esc(cardS)+' start is a committee boat line near the mark, not the mark itself.':'')+'</div>'
@@ -808,15 +818,22 @@ function render(){
       '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>'+
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
-  if(!cardCfgNow()&&finishMode()==='finishpin'){const li=document.createElement('li');li.className='lineRow';
+  if((!cardCfgNow()&&finishMode()==='finishpin')||cardEndMode('f')==='laid'){const li=document.createElement('li');li.className='lineRow';li.id='finishRow';
     li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="meta">'+endPicker('fcb')+'</div><div class="meta">↔ '+endPicker('fpin')+'</div></div><div></div>';
     ol.appendChild(li);}
   $('finishSel').value=finishMode();
   // a card course takes its finish from the card, so the hand-built Finish selector gives way to a plain statement
   {const c=cardCfgNow(); $('finishFields').hidden=!!c; $('finishCard').hidden=!c;
-   if(c)$('finishCard').textContent=finishIsCardMark()
-     ?'Finish: '+c.f+', the mark itself (from the card). Boats finish as they round or pass it; the committee boat positions itself to time them. Starts are different: a No.8 or Dosco start is a committee boat line near the mark, so a recorded line is always used for the start.'
-     :'Finish: the Grassy Walk line (from the card): the recorded start line, or Grassy Mid standing in until the committee boat and pin are recorded. To finish elsewhere, choose another Card finish in section 2.';}
+   if(!c)$('finishCard').innerHTML='';
+   if(c){const fs=finishState(), fm=cardEndMode('f');
+     $('finishCard').innerHTML=lineSwitch('f')+'<span>'+esc(fm==='laid'?
+       (fs.kind==='finishpin'?'Finish: the recorded finish line (committee boat and Finish Pin), chosen above.':
+        fs.kind==='startline'?'Finish: the recorded start line'+(fs.kept?', kept as the finish.':'.'):'Finish: none.'):
+       fm==='card'?(finishIsCardMark()?'Finish: '+c.f+', the mark itself (Card mark).':'Finish: the card\'s '+c.f+' point (Card mark); a recorded line is not used.'):
+       finishAutoText(c))+'</span>'+
+       (fs.warn?'<span class="warnTxt"> ⚠ '+esc(fs.warn)+'.</span>'+(fs.kind==='startline'?
+         ' <button type="button" class="ghost lineAct" data-act="markFinish">Mark finish line</button> <button type="button" class="ghost lineAct" data-act="keepStart">Keep start line</button>':
+         ' <button type="button" class="ghost lineAct" data-act="markFinish">Mark finish line</button>'):'');}}
   $('toRace').hidden=!cs.length;
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum();
@@ -901,7 +918,9 @@ function renderRaceAlerts(){
     const pk='p|'+m.race+'|'+m.name.toLowerCase();
     if(!m.card&&!seen.has(pk)){seen.add(pk);const n=phoneCount(m);if(n>1)a.push('<p class="note flag">⚠ '+esc(m.name)+': fixes from '+n+' phones.</p>');}
   });
-  const ends=['cb','pin'].concat(!cardCfgNow()&&finishMode()==='finishpin'?['fcb','fpin']:[]), kk=ckey(S.race,S.start);
+  const ends=(cardEndMode('s')==='card'?[]:['cb','pin']).concat((!cardCfgNow()&&finishMode()==='finishpin')||cardEndMode('f')==='laid'?['fcb','fpin']:[]), kk=ckey(S.race,S.start);
+  if(cardEndMode('s')==='laid'&&!startLine())a.push('<p class="note flag">⚠ Start line missing: the first leg is not measured.</p>');
+  {const fs=finishState();if(fs&&fs.warn)a.push('<p class="note flag">⚠ '+esc(fs.warn)+'.</p>');}
   ends.forEach(w=>{const e=endPick(w),n=e.m?phoneCount(e.m):0,lab=(w[0]==='f'?'Finish ':'Start ')+END_LABEL[w].toLowerCase(),
       fl=(S.lineFlags[kk]||{})[w];
     if(n>1)a.push('<p class="note flag">⚠ '+esc(lab)+': fixes from '+n+' phones.</p>');
@@ -1002,8 +1021,36 @@ function finishMode(){return S.finishes[ckey(S.race,S.start)]||'start';}
    The Finish selector (start line / finish pin / last mark) is for hand-built courses only. */
 function cardCfgNow(){return (S.cardCfg||{})[ckey(S.race,S.start)];}
 function finishIsCardMark(){const c=cardCfgNow(),m=c&&CARD.marks[c.f];return !!(m&&m.type!=='Start/finish modelling point');}
+/* The line switch of a card course, per end: 'auto' until the RO taps one (the rules above), 'card' (the card mark:
+   a recorded line is shown, labelled not used, and the legs use the card point; a No.8 or Dosco finish is the mark itself
+   either way) or 'laid' (the recorded line; a start with none is not measured; a finish with no Finish Pin uses the start
+   line, flagged until the RO keeps it; with no line at all it is not measured). Hand-built courses have no switch. */
+function finishAutoText(c){return finishIsCardMark()
+  ?'Finish: '+c.f+', the mark itself (from the card). Boats finish as they round or pass it; the committee boat positions itself to time them. Starts are different: a No.8 or Dosco start is a committee boat line near the mark, so a recorded line is always used for the start.'
+  :'Finish: the Grassy Walk line (from the card): the recorded start line, or Grassy Mid standing in until the committee boat and pin are recorded. To finish elsewhere, choose another Card finish in section 2.';}
+// the two-way switch for one end of a card course; until tapped the end follows the automatic rule, and says what it uses
+function lineSwitch(e){const m=cardEndMode(e);if(!m)return '';
+  const now=e==='s'?(startLine()?'Laid line (recorded line in use)':'Card mark (no line recorded)')
+    :(()=>{const k=finishState().kind;return k==='mark'?'Card mark (the mark itself)':k==='startline'?'Laid line (the start line)':'Card mark';})();
+  const b=(v,t)=>'<button type="button" class="ghost lineSw" data-end="'+e+'" data-v="'+v+'" aria-pressed="'+(m===v)+'">'+t+'</button>';
+  return '<span class="meta" style="display:block">'+(e==='s'?'Start':'Finish')+' line: '+b('card','Card mark')+' '+b('laid','Laid line')+
+    (m==='auto'?' <small>Automatic: '+esc(now)+'</small>':'')+'</span>';}
+function cardEndMode(e){const c=cardCfgNow();if(!c)return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';}
+// the start line the legs are measured from: none when Card mark is chosen
+function legStartLine(){return cardEndMode('s')==='card'?null:startLine();}
+// whether the card's start point may stand in when there is no line: not when Laid line is chosen
+function startStandIn(){const m=cardEndMode('s');return m==='auto'||m==='card';}
+// how a card course's finish is measured: kind 'finishpin' | 'startline' | 'mark' | 'cardpt' | 'missing', and any warning
+function finishState(){const c=cardCfgNow();if(!c)return null;const m=cardEndMode('f');
+  if(m==='laid'){if(mkLine(endPick('fcb').m,endPick('fpin').m))return {kind:'finishpin'};
+    if(startLine())return c.lfs==='start'?{kind:'startline',kept:true}:{kind:'startline',warn:'No finish line marked: the start line is used as the finish'};
+    return {kind:'missing',warn:'Finish line missing'};}
+  if(finishIsCardMark())return {kind:'mark'};
+  if(m==='card')return {kind:'cardpt'};
+  return startLine()?{kind:'startline'}:{kind:'cardpt'};}
 function finishLine(){
-  if(cardCfgNow())return finishIsCardMark()?null:startLine();
+  if(cardCfgNow()){const fs=finishState();
+    return fs.kind==='finishpin'?mkLine(endPick('fcb').m,endPick('fpin').m):fs.kind==='startline'?startLine():null;}
   const f=finishMode();if(f==='last')return null;if(f==='finishpin')return mkLine(endPick('fcb').m,endPick('fpin').m);return startLine();}
 // one fix as a dropdown entry: time, earlier race, accuracy (and its warning), recorder, and "after this start"
 function fixText(m,w){const t=fixMoment(m), st=startMoment(S.race,S.start), aw=accWarn(m);
@@ -1038,12 +1085,12 @@ function analysis(cs,twdT){
   if(sl){
     const r=rhumb(sl.cb,sl.pin);
     if(twdT===null){
-      bits.push('<p class="note">Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M. Enter the wind direction for bias.</p>');
+      bits.push('<p class="note">Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M'+(cardEndMode('s')==='card'?' (recorded, not used: Card mark chosen)':'')+'. Enter the wind direction for bias.</p>');
     }else{
       const up=r.m*Math.cos(rad(((r.brg-twdT)+360)%360)); // +ve: pin further upwind
       const fav=up>0?'pin':'boat';
       const off=Math.abs(90-Math.abs(((r.brg-twdT+360)%360)>180?360-((r.brg-twdT+360)%360):((r.brg-twdT+360)%360)));
-      const line='Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
+      const line='Start line '+(cardEndMode('s')==='card'?'(recorded, not used: Card mark chosen) ':'')+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
         (off<=2?' · no end favoured':' · '+fav+' end favoured by '+(Math.abs(up)<1?'under 1 m':Math.round(Math.abs(up))+' m (~'+(Math.abs(up)/BOAT_M).toFixed(1)+' boat lengths)'));
       bits.push('<p class="note'+(off>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
     }
@@ -1111,15 +1158,15 @@ function buildLegs(){
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
   const twsv=S.tws===''?null:+S.tws;
   const host=$('legs');
-  const sl=startLine(), fl=finishLine();
-  /* with no committee boat recorded, fall back to the card's own start and finish marks */
+  const sl=legStartLine(), fl=finishLine(), fsx=finishState(), slRec=startLine();
+  /* with no committee boat recorded, fall back to the card's own start and finish marks (unless Laid line is chosen) */
   const ccfg=(S.cardCfg||{})[ckey(S.race,S.start)];
   const cardEnd=(nm,label)=>{const m=nm&&CARD.marks[nm];return m?{id:'_c'+label,name:label+' ('+nm+')',lat:m.lat,lon:m.lon,virtual:true,card:nm}:null;};
   // on a card course a recorded line stands where the card's start (or Grassy Mid finish) is: keep the card's route
   // from that point and measure only the first hop from the line (and the last hop to it), as for a laid mark's fix
   const atLine=(ln,nm,dir)=>ccfg&&CARD.marks[nm]?{card:nm,atFix:true,moveNote:dir+' the recorded line, not depth-checked'}:{};
-  const sPt=sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg?cardEnd(ccfg.s,'Start'):null);
-  const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg?cardEnd(ccfg.f,'Finish'):null);
+  const sPt=sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg&&startStandIn()?cardEnd(ccfg.s,'Start'):null);
+  const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg&&fsx.kind!=='missing'?cardEnd(ccfg.f,'Finish'):null);
   // the card's route from its start was validated for the water near that start point: say so if the line is far off
   const farLine=[];
   if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(rhumb(sl.mid,CARD.marks[ccfg.s]).m);
@@ -1156,19 +1203,24 @@ function buildLegs(){
   }
   laidNotice(pts,total); lastTotal=total;
   const from=sl?'from the midpoint of the recorded start line (committee boat and pin)':
+    sPt&&cardEndMode('s')==='card'?'from the card\'s '+ccfg.s+' start (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
       (CARD.marks[ccfg.s]&&CARD.marks[ccfg.s].type!=='Start/finish modelling point'?' (a '+ccfg.s+' start is a committee boat line near the mark, not the mark itself)':''):
     'from the first mark (no start point)';
-  const to=ccfg&&finishIsCardMark()?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
+  const to=fsx&&fsx.kind==='finishpin'?'at the midpoint of the recorded finish line (committee boat and Finish Pin)':
+    fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+ccfg.f+' finish (Card mark chosen)':
+    ccfg&&fsx.kind==='mark'?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
-  setSS(ss,'First leg measured '+from+'; last leg ends '+to+'. Bearings are magnetic (°M).',total,pts.length-1);
+  const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
+  setSS(ss,(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
+    (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   const an=analysis(cs,twdv), warn=farLine.concat(checks(ents,cs));
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
-  plot(pts,[sl&&{a:sl.cb,b:sl.pin},fl&&fl!==sl&&{a:fl.cb,b:fl.pin}].filter(Boolean));
+  plot(pts,[slRec&&{a:slRec.cb,b:slRec.pin},fl&&fl!==slRec&&{a:fl.cb,b:fl.pin}].filter(Boolean));
   buildShift(cs);
   const head=(S.title||'Course')+(S.date?' – '+S.date:'');
   setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(ents)+'\n'+ents.map((e,i)=>{const m=markById(e.id);return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
@@ -1482,6 +1534,14 @@ setInterval(()=>{sendOutbox();saveCourses();},15000);
 window.addEventListener('online',sendOutbox);
 
 /* ---------- events ---------- */
+document.addEventListener('click',e=>{const b=e.target.closest('.lineSw,.lineAct');if(!b)return;
+  const k=ckey(S.race,S.start), c=(S.cardCfg||{})[k];
+  if(b.classList.contains('lineSw')){if(!c)return;c[b.dataset.end==='s'?'ls':'lf']=b.dataset.v;stamp(k);commit();return;}
+  const act=b.dataset.act;
+  if(act==='useCard'&&c){c.ls='card';stamp(k);commit();}
+  else if(act==='keepStart'&&c){c.lfs='start';stamp(k);commit();}
+  else if(act==='chooseStart'){const r=$('startRow'),sel=r&&r.querySelector('select');if(r)r.scrollIntoView({block:'center'});if(sel)sel.focus();else if($('recCB'))$('recCB').focus();}
+  else if(act==='markFinish'){const r=$('finishRow'),sel=r&&r.querySelector('select[data-w="fpin"]');if(r)r.scrollIntoView({block:'center'});if(sel)sel.focus();}});
 function setEnd(w,v){const k=ckey(S.race,S.start);S.lineSel[k]=S.lineSel[k]||{};
   if(v==='auto')delete S.lineSel[k][w]; else S.lineSel[k][w]=v;
   if(S.lineFlags[k])delete S.lineFlags[k][w];   // the RO has looked at this end again
