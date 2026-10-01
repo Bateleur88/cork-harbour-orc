@@ -19,6 +19,8 @@ still present and unchanged:
                 even one sending an empty key; a wrong key is refused
 
 Each throwaway folder gets its own key.js with a test key; the real key is never in this repository.
+Fixture positions have 7 decimals, as marks.php stores them: PHP before 7.1 writes JSON numbers to 14
+significant digits, so a position carrying more digits than marks.php ever writes would change on rewrite.
 
 Exits non-zero if any test fails.
 """
@@ -47,7 +49,7 @@ def fixture():
         for i, name in enumerate(['Committee boat', 'Start Pin', 'Windward', 'Leeward']):
             mid = f'fixr{race}n{i}'
             marks[mid] = {'id': mid, 'series': 'Autumn League', 'date': DAY, 'race': race, 'name': name,
-                          'lat': 51.80 + i / 1000, 'lon': -8.30 - race / 1000, 'acc': 4.0,
+                          'lat': round(51.80 + i / 1000, 7), 'lon': round(-8.30 - race / 1000, 7), 'acc': 4.0,
                           'time': 1790000000000 + race * 100000 + i, 'received': 1790000000}
     courses = {'1|1': {'data': {'legs': ['Windward', 'Leeward']}, 'updated': 1790000000},
                '2|1': {'data': {'legs': ['A', 'B']}, 'updated': 1790000001}}
@@ -239,6 +241,7 @@ def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
         return 2
+    print(subprocess.run([PHPCGI, '-v'], capture_output=True, text=True).stdout.splitlines()[0])
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key):
             t()
