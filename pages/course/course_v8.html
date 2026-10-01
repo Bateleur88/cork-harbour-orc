@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.4';
+const PAGE_VERSION='2026-10-01.5';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -736,9 +736,7 @@ function render(){
       const g=editClasses(), l=g[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{g[S.start]=l.filter(x=>x!==cb.value);}
       g[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
     $('classDone').onclick=()=>{classOpen=false;commit();};
-    const rm=$('classRm'); if(rm)rm.onclick=()=>{editClasses().splice(S.start,1);
-      Object.keys(S.courses).forEach(k=>{const [r,st]=k.split('|').map(Number);if(st===S.start)delete S.courses[k];else if(st>S.start){S.courses[r+'|'+(st-1)]=S.courses[k];delete S.courses[k];}});
-      S.start=0;classOpen=false;commit();};
+    const rm=$('classRm'); if(rm)rm.onclick=()=>{removeStart(S.start);S.start=0;classOpen=false;commit();};
   }else pk.hidden=true;
   const cp=$('copyStart'), src=S.starts.findIndex((n,i)=>i!==S.start&&course(S.race,i).length);
   if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));stamp();commit();};}
@@ -828,6 +826,19 @@ function renderCardSum(){
   $('cardSumText').textContent=['Course '+cfg.c+' imported',cfg.s===cfg.f?cfg.s:cfg.s+' start, '+cfg.f+' finish',
     nm?nm.toFixed(2)+' nm on the card route':''].filter(Boolean).concat(notes).join(' · ');
   $('cardSum').className='cardsum'+(notes.some(t=>!/RIB fix/.test(t))?' flag':'');
+}
+/* Remove start i of the current race only. Its groups, course and settings go, and the race's later starts move down one,
+   each taking everything kept for it. Other races are not touched. The server keeps one record per race|start, so the
+   race's last start number, left vacant, is saved empty if the server had it, and no old course comes back on loading. */
+const START_KEYED=['courses','startTimes','finishes','lineSel','winds','cardCfg','courseDay'];
+function removeStart(i){
+  const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
+  let last=classesOf().length-1;
+  START_KEYED.forEach(f=>Object.keys(S[f]||{}).filter(own).forEach(k=>{last=Math.max(last,+k.split('|')[1]);}));
+  editClasses().splice(i,1);
+  START_KEYED.forEach(f=>{const o=S[f]=S[f]||{};delete o[ckey(r,i)];
+    for(let j=i+1;j<=last;j++){const a=ckey(r,j);if(a in o){o[ckey(r,j-1)]=o[a];delete o[a];}}});
+  const gone=ckey(r,last); if(S.synced[gone]!==undefined){S.courses[gone]=[];stamp(gone);}
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
 function stamp(k){S.courseDay=S.courseDay||{};S.courseDay[k||ckey(S.race,S.start)]=$('day').value||todayISO();}
