@@ -247,10 +247,14 @@ Tested with PHP 8.4 on Windows; the live host may differ.
 
 ## Deploying the pages
 
-    pages/course/course_v8.html  ->  /course/index.html
+    pages/course/index.html      ->  /course/index.html  (generated: see below)
     pages/record/record.html     ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
     pages/marks/key.js           ->  /marks/key.js      (not in the repository)
+
+`pages/course/index.html` is not in the repository: `rebuild_page.py` writes it on
+every run as a byte-identical copy of `course_v8.html`, which stays the source. Upload
+that file as `/course/index.html`; never edit it by hand.
 
 The race key is kept out of this public repository. Copy `pages/marks/key.example.js`
 to `key.js`, set the key, and upload it next to `marks.php`: both pages load it and
@@ -276,9 +280,10 @@ denies web access. That only works on Apache or LiteSpeed; check it on the live 
    workbook it was made from.
 6. `python scripts/rebuild_page.py <workbook>` — embeds a fresh snapshot in
    `pages/course/course_v8.html` and moves its `PAGE_VERSION` on, so the bundled
-   data and the master do not drift. It prints what changed in the snapshot first:
-   after a change to the workbook alone, expect only `meta.source` and
-   `meta.sha256`. `--dry-run` shows the changes without writing.
+   data and the master do not drift, and writes `pages/course/index.html` as a
+   byte-identical copy; upload that file as `/course/index.html`. It prints what
+   changed in the snapshot first: after a change to the workbook alone, expect only
+   `meta.source` and `meta.sha256`. `--dry-run` shows the changes without writing.
 7. Record the new SHA-256 in this README.
 
 A validation worth repeating whenever the sampling changes: Dosco to
