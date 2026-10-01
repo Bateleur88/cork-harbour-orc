@@ -242,7 +242,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.5';
+const PAGE_VERSION='2026-10-01.6';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1174,13 +1174,17 @@ function plot(cs,segs){
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2);}
 function hhmm(t){const d=new Date(t);return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2);}
 function longDate(iso){try{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-IE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}catch(e){return iso;}}
-let pullOk=false;
+let pullOk=false, pullSeq=0, dayGen=0;   // dayGen counts changes of loaded day; see saveCourses
 async function pull(quiet){
+  // loads can overlap (the button, the 30 s refresh, moving a fix): only the latest one started may change anything,
+  // so a load that is no longer the latest stops at its next wait, before it touches the phone's state
+  const seq=++pullSeq, stale=()=>seq!==pullSeq;
   const day=$('day').value||todayISO(), st=$('readStatus');
   if(!quiet){st.textContent='Fetching…'; st.className='status';}
   try{
     const r=await keyFetch(ENDPOINT+'?date='+encodeURIComponent(day),{});
     const j=await r.json();
+    if(stale())return;
     if(!r.ok||!j.ok)throw new Error(j.error||('server '+r.status));
     const list=j.marks.slice().sort((a,b)=>a.time-b.time);
     if(day!==S.pulledDay){
@@ -1189,6 +1193,7 @@ async function pull(quiet){
          Unsent edits to the old day's courses are saved to the old day first; this day's are not, they go to this day. */
       const cd=S.courseDay||{}, mine=k=>cd[k]===day;
       await saveCourses(true,k=>!mine(k));
+      if(stale())return;
       ['courses','startTimes','finishes','lineSel','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // start groups likewise: only a race's groups set for this day stay; the old day-wide groups come from this day's file only
@@ -1197,7 +1202,7 @@ async function pull(quiet){
       const kept=new Set(Object.keys(S.courses).filter(k=>(S.courses[k]||[]).length).map(k=>+k.split('|')[0]));
       // courses kept for this day have never been sent to this day's server file: mark them unsent, so they win over
       // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
-      S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';});
+      S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';}); dayGen++;
       Object.keys(S.raceClasses).forEach(r=>{S.synced['_starts|'+r]='';});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
       ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
@@ -1215,10 +1220,12 @@ async function pull(quiet){
     st.className='status '+(list.length?'ok':'');
     try{
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
-      const jc=await rc.json(); if(rc.ok&&jc.ok)applyServerCourses(jc.courses);
+      const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
-    pullOk=true; lastPullAt=Date.now(); commit();
+    if(!stale()){pullOk=true; lastPullAt=Date.now();}
+    commit();
   }catch(e){
+    if(stale())return;
     pullOk=false; if(quiet)return;
     st.textContent=e.message==='no race key'?'Race key not loaded yet. Check signal and tap Get latest marks again.':
       /key|403/i.test(e.message)?'Server refused the key. Check key.js on the server matches the one the pages load.':'Could not reach the server. Check signal and try again.';
@@ -1286,11 +1293,16 @@ async function saveCourses(force,only){
   // a course is only ever sent to the file of the day it was built for; one built for another day waits for that day
   const day=S.pulledDay, cd=S.courseDay||{};
   const ks=allKeys().filter(isDirty).filter(k=>!cd[k]||cd[k]===day).filter(only||(()=>true)); if(!ks.length)return; savingC=true;
+  // each record is taken now, before any send: a load of another day may clear these courses while they are being sent,
+  // and what was built for this day must still reach this day's file, never an emptied copy
+  const recs=ks.map(k=>[k,recordFor(k)]);
+  // a send that finishes after the loaded day has changed, even back to this same day, must not mark anything as saved:
+  // the day's S.synced has been rebuilt since, and the same key (1|0) can exist on both days
+  const gen=dayGen;
   try{
-    for(const k of ks){if(S.pulledDay!==day)break;           // the day changed while saving: stop, and let the new day save its own
-      const rec=recordFor(k), js=JSON.stringify(rec);
+    for(const [k,rec] of recs){const js=JSON.stringify(rec);
       await postFix({action:'course',date:day,key:k,data:rec});
-      if(S.pulledDay===day){S.synced[k]=js; save();}}
+      if(gen===dayGen&&S.pulledDay===day){S.synced[k]=js; save();}}
   }catch(e){}
   savingC=false;
 }
