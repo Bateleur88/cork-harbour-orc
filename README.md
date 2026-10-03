@@ -115,6 +115,11 @@ damaged day file is refused rather than overwritten.
 **Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
 Offline-first: the course card snapshot from the workbook is embedded in the page.
 
+- *Series name*: at the top of Setup, set by the RO and saved on the server, so
+  every RO device shows the same name; it heads the WhatsApp course message. It is
+  never taken from the RIBs' fixes or from a pasted WhatsApp backup. Unset, the
+  field is empty with a red border and says so. An edit made without signal is
+  kept on the phone and saved when there is signal.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands

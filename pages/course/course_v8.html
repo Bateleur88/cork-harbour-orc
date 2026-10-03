@@ -83,6 +83,7 @@ ol.course li{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-ite
 .fields{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
 .fields label{flex:1 1 130px;font-size:.85rem;color:var(--muted)}
 .fields input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+#series::placeholder{color:var(--warn)}#series:placeholder-shown{border:2px solid var(--warn)}
 table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.95rem}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
 th{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -146,6 +147,10 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
   <div class="setupOnly">
   <h1>Course plot</h1>
   <p class="lede">Get the marks from the RIBs, tap them in rounding order, and get the legs with bearings and distances.</p>
+  <div class="fields" style="margin-top:0">
+    <label>Series name<input id="series" maxlength="60" autocomplete="off" placeholder="Not set – type the series name"></label>
+  </div>
+  <p class="status" id="seriesStatus" role="status" aria-live="polite"></p>
 
   <h2>1 · Marks from the RIBs</h2>
   <div class="fields" style="margin-top:0">
@@ -242,7 +247,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-01.10';
+const PAGE_VERSION='2026-10-03.1';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -279,10 +284,17 @@ async function keyFetch(url,opts){
 const K='course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{title:'',date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
+function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
+/* The series name belongs to the whole series and is kept on the server (marks.php ?type=series); it is set here, by the RO.
+   The last value seen is kept on this phone outside S, so Clear everything keeps it and it shows without signal.
+   An edit not yet sent ("dirty") wins over the server's copy until it has been sent. */
+const SERIES_KEY='course-series';
+let series=(()=>{try{const o=JSON.parse(localStorage.getItem(SERIES_KEY)||'{}');
+  if(o&&typeof o.name==='string')return{name:o.name,dirty:!!o.dirty};}catch(e){}return{name:'',dirty:false};})();
+function saveSeries(){try{localStorage.setItem(SERIES_KEY,JSON.stringify(series));}catch(e){}}
 
 
 /* ---------- geometry (rhumb line) ---------- */
@@ -320,9 +332,9 @@ function parsePos(str){
   return null;
 }
 function readPaste(txt){
-  let race=1, added=0, title=S.title, date=S.date;
+  let race=1, added=0, date=S.date;   // a pasted header never sets the series: it is set on this page only
   const hdr=txt.match(/^\s*\*(.+?)\s*[–-]\s*(.+?)\*/m);
-  if(hdr){title=hdr[1].trim();date=hdr[2].trim();}
+  if(hdr)date=hdr[2].trim();
   txt.split(/\r?\n/).forEach(line=>{
     line=line.trim(); if(!line||/^```/.test(line))return;
     let m=line.match(/\*?Race\s+(\d+)/i);
@@ -342,7 +354,7 @@ function readPaste(txt){
       added++;
     }
   });
-  S.title=title;S.date=date;
+  S.date=date;
   return added;
 }
 function cardId(race,nm){return 'card|'+race+'|'+String(nm).toLowerCase();}
@@ -1222,7 +1234,7 @@ function buildLegs(){
     '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
   plot(pts,[slRec&&{a:slRec.cb,b:slRec.pin},fl&&fl!==slRec&&{a:fl.cb,b:fl.pin}].filter(Boolean));
   buildShift(cs);
-  const head=(S.title||'Course')+(S.date?' – '+S.date:'');
+  const head=[series.name,S.date].filter(Boolean).join(' – ')||'Course';
   setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(ents)+'\n'+ents.map((e,i)=>{const m=markById(e.id);return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
     '\nTotal '+total.toFixed(2)+' nm'+(an.txt.length?'\n'+an.txt.join('\n'):'')+(twdM===null?'':'\nWind '+pad(twdM,3)+'°M'+(twsv===null?'':' '+twsv+' kn'))+'\n\n'+
     [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+laidTag(m)+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
@@ -1336,7 +1348,7 @@ async function pull(quiet){
     list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
       push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,server:true,sid:m.id,
         device:typeof m.device==='string'?m.device:'',recorder:typeof m.recorder==='string'?m.recorder:''});});
-    if(list.length){S.title=list[list.length-1].series||S.title;S.date=longDate(day);}
+    if(list.length)S.date=longDate(day);
     S.pulledDay=day;
     const rs=races(); if(!rs.includes(S.race))S.race=rs[0];
     st.textContent=list.length?list.length+' fix'+(list.length>1?'es':'')+' for '+longDate(day)+' · updated '+hhmm(Date.now()):'No marks recorded yet for '+longDate(day)+'.';
@@ -1380,7 +1392,7 @@ async function moveFix(sid,newRace){
   const day=$('day').value||todayISO();
   const t=m.tms||Date.now();
   try{
-    await postFix({action:'add',id:sid,series:S.title||'',date:day,race:newRace,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc||0,time:t});
+    await postFix({action:'add',id:sid,date:day,race:newRace,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc||0,time:t});
     // a line choice pointing at this fix, in any race or start, is cleared and flagged, never carried to its new race
     Object.keys(S.lineSel).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{if(ls[w]!=='s:'+sid&&ls[w]!=='l:'+m.id)return;
       delete ls[w];S.lineFlags[k]=S.lineFlags[k]||{};const[r,st]=k.split('|').map(Number);
@@ -1510,6 +1522,31 @@ async function sendOutbox(){
   }
   sending=false;
 }
+
+/* ---------- series name: send an unsent edit, then take the server's copy ---------- */
+function showSeries(msg,cls){
+  if(document.activeElement!==$('series'))$('series').value=series.name;
+  if(msg!==undefined){$('seriesStatus').textContent=msg;$('seriesStatus').className='status'+(cls?' '+cls:'');}
+}
+let seriesBusy=false;
+async function syncSeries(){
+  if(seriesBusy)return; seriesBusy=true;
+  let refused=false, sent;
+  try{
+    while(series.dirty){sent=series.name;                // edited again while sending: send the newer one too
+      await postFix({action:'series',name:sent});
+      if(series.name===sent){series.dirty=false;saveSeries();showSeries(sent?'Series name saved for every RO device.':'Series name cleared.','ok');}}
+    const r=await keyFetch(ENDPOINT+'?type=series',{}), j=await r.json();
+    if(r.ok&&j.ok&&!series.dirty&&typeof j.name==='string'&&j.name!==series.name){series.name=j.name;saveSeries();showSeries();render();}
+  }catch(e){
+    if(/server 400/.test(e.message)){refused=true;      // only the refused name is dropped; a newer edit is sent by the rerun below
+      if(series.name===sent){series.dirty=false;saveSeries();showSeries('The server refused that series name. Use up to 60 characters.','err');}}
+    else if(series.dirty)showSeries('Series name kept on this phone. It is saved for every RO device once there is signal.');
+  }
+  seriesBusy=false;
+  if(refused)syncSeries();   // put the saved name back now, not at the next refresh
+}
+$('series').onchange=e=>{series.name=e.target.value.trim();series.dirty=true;saveSeries();showSeries();render();syncSeries();};
 var cbWatch=null;
 $('recCB').onclick=()=>{
   if(cbWatch!==null)return;
@@ -1521,7 +1558,7 @@ $('recCB').onclick=()=>{
     const c=best.coords, day=$('day').value||todayISO();
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
     const fix=1+S.marks.filter(m=>m.race===S.race&&/^committee boat$/i.test(m.name)).length;
-    S.outbox.push({action:'add',id,series:S.title||'',date:day,race:S.race,name:'Committee boat',lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now()});
+    S.outbox.push({action:'add',id,date:day,race:S.race,name:'Committee boat',lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now()});
     push({race:S.race,name:'Committee boat',fix,lat:c.latitude,lon:c.longitude,acc:Math.round(c.accuracy),time:hhmm(Date.now()),pending:true,pid:id});
     $('cbStatus').textContent='Committee boat recorded for Race '+S.race+', ±'+Math.round(c.accuracy)+' m. Sending…';$('cbStatus').className='status ok';
     commit(); sendOutbox();};
@@ -1579,7 +1616,7 @@ $('addManual').onclick=()=>{
   if(!p){$('readStatus').textContent='Could not read that position.';$('readStatus').className='status err';return;}
   const nm=name.trim(), fix=1+S.marks.filter(m=>m.race===S.race&&m.name.toLowerCase()===nm.toLowerCase()).length;
   const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-  S.outbox.push({action:'add',id,series:S.title||'',date:$('day').value||todayISO(),race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:Date.now()});
+  S.outbox.push({action:'add',id,date:$('day').value||todayISO(),race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:Date.now()});
   push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(Date.now()),pending:true,pid:id});
   $('readStatus').textContent=nm+' added. Sending…';$('readStatus').className='status ok';commit();sendOutbox();
 };
@@ -1631,6 +1668,9 @@ $('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Tap again 
 render();
 $('recCB').textContent=cbLabel();
 sendOutbox();
+showSeries(); syncSeries();
+setInterval(()=>{if(!document.hidden)syncSeries();},30000);
+window.addEventListener('online',syncSeries);
 })();
 </script>
 </body>
