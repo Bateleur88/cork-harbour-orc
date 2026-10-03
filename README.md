@@ -105,8 +105,11 @@ and an optional "Who's recording?" name. A WhatsApp message is the backup.
 
 **Server** (`pages/marks/marks.php`, served as `/marks/marks.php`). Stores the day's
 fixes and the RO's built courses as JSON in `/marks/data/`, behind the race key in
-`key.js`. Writes go to a temporary file renamed into place, so a failed write
-cannot empty a day; a damaged day file is refused rather than overwritten.
+`key.js`. It also keeps the series name, one for the whole series and set from the
+RO page, in `/marks/data/series.json`; fixes no longer carry a series, and a
+`series` sent by a phone that has not reloaded is ignored, never refused. Writes go
+to a temporary file renamed into place, so a failed write cannot empty a day; a
+damaged day file is refused rather than overwritten.
 `tests/test_marks.py` checks all of this.
 
 **Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
@@ -237,9 +240,10 @@ alone is over 5 GB) and are not in the repository.
 Runs `marks.php` unmodified as real CGI requests against a throwaway day file
 holding three races, and checks those races are intact after each case: a fix
 or course that cannot be JSON-encoded, a damaged day file, a write failing
-part-way, the RO page moving a fix (device and recorder must survive), and 60
-fixes, 10 courses and 30 reads arriving at once. Run it before uploading any
-change to `marks.php`.
+part-way, the RO page moving a fix (device and recorder must survive), the series
+name (saved, read back and cleared; a wrong key, a bad name or a failed write leaves
+`series.json` unchanged), and 60 fixes, 10 courses and 30 reads arriving at once.
+Run it before uploading any change to `marks.php`.
 
 Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
 package on Linux), found on PATH or through the `PHP_CGI` environment variable.

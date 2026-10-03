@@ -20,6 +20,11 @@ still present and unchanged:
                 even one sending an empty key; a wrong key is refused
   7  groups     each race's start groups (_starts|race) are kept apart: saving one race's groups leaves the
                 other race's, the old day-wide _starts and every course unchanged; malformed keys refused
+  8  series     the series name: unset reads as ""; saved (spaces collapsed, 60 characters not bytes), read back,
+                cleared; a wrong key is refused 403 on GET and POST; a name over 60 characters or not a string is
+                refused 400, a body that is not UTF-8 refused 400 before it is read; a write failing part-way
+                is refused 500 by save_json; each refusal leaves series.json unchanged; a fix carrying a long
+                "series" (an old page) is accepted and stored without one
 
 Each throwaway folder gets its own key.js with a test key; the real key is never in this repository.
 Fixture positions have 7 decimals, as marks.php stores them: PHP before 7.1 writes JSON numbers to 14
@@ -187,14 +192,16 @@ def t3_write_fails():
 def t4_moved():
     d = setup('t4')
     req(d, body=fix('movefix', race=1, device=DEVICE, recorder='Pat'))
-    # what the RO course page sends when moving a fix: same id, new race, no device or recorder
+    # what an RO course page not yet reloaded sends when moving a fix: same id, new race, a series, no device or recorder
     s, _ = req(d, body={'action': 'add', 'id': 'movefix', 'series': 'Autumn League', 'date': DAY, 'race': 2,
                         'name': 'Gybe', 'lat': 51.81, 'lon': -8.31, 'acc': 3.5, 'time': 1790099999000})
     m = load(day_file(d))['movefix']
     ok, detail = intact(d)
     report('4 moved fix keeps attribution',
-           ok and s == 200 and m['race'] == 2 and m.get('device') == DEVICE and m.get('recorder') == 'Pat',
-           f'HTTP {s}; race now {m["race"]}; device={m.get("device", "-")[:8]} recorder={m.get("recorder", "-")!r}; {detail}')
+           ok and s == 200 and m['race'] == 2 and m.get('device') == DEVICE and m.get('recorder') == 'Pat'
+           and 'series' not in m,
+           f'HTTP {s}; race now {m["race"]}; device={m.get("device", "-")[:8]} recorder={m.get("recorder", "-")!r}; '
+           f'series {"not stored" if "series" not in m else repr(m["series"])}; {detail}')
 
 
 def t5_concurrent(run):
@@ -267,13 +274,53 @@ def t7_race_groups():
            f'malformed keys {sorted(set(bad.values()))}, file {"unchanged" if refused else "CHANGED"}; {detail}')
 
 
+def series_file(d): return os.path.join(d, 'data', 'series.json')
+
+
+def t8_series():
+    d = setup('t8')
+    put = lambda name, key=KEY: req(d, body={'action': 'series', 'name': name}, key=key)
+    get = lambda key=KEY: req(d, 'GET', query='type=series', key=key)
+    s_unset, g = get()
+    unset = g.get('name')
+    s = [put('  Autumn \t  League ')[0]]
+    collapsed = get()[1].get('name')
+    s.append(put('é' * 60)[0])                                       # 60 characters, 120 bytes
+    sixty = get()[1].get('name')
+    s.append(put('Autumn League')[0])
+    s_saved, g = get()
+    saved, before = g.get('name'), sha(series_file(d))
+    # refusals: each must leave series.json byte-for-byte as it was
+    refused = {'61 chars': put('x' * 61), 'not a string': put(5),
+               'not UTF-8': req(d, body=b'{"action":"series","name":"Autumn \xff League"}'),
+               'wrong key POST': put('Frostbite', key='wrong-key'), 'wrong key GET': get(key='wrong-key')}
+    os.makedirs(series_file(d) + '.tmp')                            # temp path unusable -> save_json's fopen fails
+    refused['write fails'] = put('Frostbite')
+    os.rmdir(series_file(d) + '.tmp')
+    want = {'61 chars': (400, 'series name too long'), 'not a string': (400, 'bad series'),
+            'not UTF-8': (400, 'bad body'), 'wrong key POST': (403, 'bad key'), 'wrong key GET': (403, 'bad key'),
+            'write fails': (500, 'could not write, series.json unchanged')}
+    got = {k: (st, j.get('error')) for k, (st, j) in refused.items()}
+    kept = sha(series_file(d)) == before and get()[1].get('name') == 'Autumn League' and not leftovers(d)
+    s.append(req(d, body=fix('oldpage', series='S' * 500))[0])       # an old RIB page, long series
+    stored = load(day_file(d)).get('oldpage', {})
+    s.append(put('')[0])
+    cleared = get()[1].get('name')
+    ok, detail = intact(d)
+    report('8 series name', ok and s_unset == 200 and unset == '' and s == [200] * 5 and collapsed == 'Autumn League'
+           and sixty == 'é' * 60 and s_saved == 200 and saved == 'Autumn League' and got == want and kept
+           and bool(stored) and 'series' not in stored and cleared == '',
+           f'unset {unset!r}; statuses {s}; refused {got}; series.json {"unchanged" if kept else "CHANGED"}; '
+           f'old-page fix {"stored without series" if stored and "series" not in stored else stored}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
         return 2
     print(subprocess.run([PHPCGI, '-v'], capture_output=True, text=True).stdout.splitlines()[0])
     try:
-        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups):
+        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

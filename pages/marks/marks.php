@@ -2,6 +2,8 @@
 /*
  * Laid-mark and course store for the RIB record page and the RO course page.
  * Marks go in data/marks-YYYY-MM-DD.json, built courses in data/courses-YYYY-MM-DD.json.
+ * The series name, one for the whole series and set from the RO page, goes in data/series.json. Fixes no longer
+ * carry a series: a "series" sent by a page not yet reloaded is ignored, never a reason to refuse the fix.
  * Courses are keyed race|start; each race's start groups are _starts|race. The older day-wide _starts
  * (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
  * Upload it as /marks/marks.php. It creates a "data" folder next to itself.
@@ -80,6 +82,12 @@ if (!file_exists($dir . '/.htaccess')) {
 
 /* ---------- GET: all fixes (or all built courses) for a day ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+  if (arg($_GET, 'type', '') === 'series') {
+    $f = $dir . '/series.json';
+    $s = array();
+    if (file_exists($f)) { $j = json_decode(file_get_contents($f), true); if (is_array($j)) $s = $j; }
+    out(200, array('ok' => true, 'name' => (string)arg($s, 'name', ''), 'updated' => (int)arg($s, 'updated', 0)));
+  }
   $d = arg($_GET, 'date', '');
   if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
   if (arg($_GET, 'type', '') === 'courses') {
@@ -100,6 +108,20 @@ $in = json_decode(file_get_contents('php://input'), true);
 if (!is_array($in)) out(400, array('ok' => false, 'error' => 'bad body'));
 
 $action = arg($in, 'action', 'add');
+
+/* ---------- POST action "series": the series name, one for the whole series; "" clears it ---------- */
+if ($action === 'series') {
+  $name = arg($in, 'name', null);
+  if (!is_string($name)) out(400, array('ok' => false, 'error' => 'bad series'));
+  $name = preg_replace('/\s+/u', ' ', trim(strip_tags($name)));    // null if not valid UTF-8
+  if (!is_string($name)) out(400, array('ok' => false, 'error' => 'bad series'));
+  if (!preg_match('/^.{0,60}\z/us', $name)) out(400, array('ok' => false, 'error' => 'series name too long'));
+  $lh = lock_data($dir);
+  save_json($dir . '/series.json', array('name' => $name, 'updated' => time()));
+  flock($lh, LOCK_UN); fclose($lh);
+  out(200, array('ok' => true, 'name' => $name));
+}
+
 $d      = arg($in, 'date', '');
 $id     = arg($in, 'id', '');
 if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
@@ -126,15 +148,14 @@ $rec = null;
 if ($action === 'add') {
   $race = (int)arg($in, 'race', 0);
   $name = trim(strip_tags((string)arg($in, 'name', '')));
-  $ser  = trim(strip_tags((string)arg($in, 'series', '')));
   $lat  = (float)arg($in, 'lat', 999);
   $lon  = (float)arg($in, 'lon', 999);
   $acc  = (float)arg($in, 'acc', -1);
   $time = (float)arg($in, 'time', 0);
-  if ($race < 1 || $race > 9 || $name === '' || strlen($name) > 80 || strlen($ser) > 120
+  if ($race < 1 || $race > 9 || $name === '' || strlen($name) > 80
       || $lat < -90 || $lat > 90 || $lon < -180 || $lon > 180 || $acc < 0 || $acc > 10000 || $time <= 0)
     out(400, array('ok' => false, 'error' => 'bad fix'));
-  $rec = array('id' => $id, 'series' => $ser, 'date' => $d, 'race' => $race, 'name' => $name,
+  $rec = array('id' => $id, 'date' => $d, 'race' => $race, 'name' => $name,
                'lat' => round($lat, 7), 'lon' => round($lon, 7), 'acc' => round($acc, 1),
                'time' => $time, 'received' => time());
   // who recorded it: kept only if well formed, otherwise dropped silently
