@@ -103,7 +103,7 @@ details.backup summary{cursor:pointer;color:var(--muted)}
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-03.3';
+const PAGE_VERSION='2026-10-03.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -112,6 +112,12 @@ const PAGE_VERSION='2026-10-03.3';
     if(!done)location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));
   }
 }catch(_){}})();
+
+/* ---------- opening with no signal ----------
+   sw.js keeps a copy of this page and /marks/key.js, so a phone that has opened /record/ once with signal opens it again
+   without. Registered as sw.js?v=PAGE_VERSION: each page version installs its own worker and cache, and the new worker
+   deletes the older copies. Where service workers are unavailable the page works as before, online only. */
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v='+encodeURIComponent(PAGE_VERSION),{scope:'./'}).catch(()=>{});
 
 /* ---------- settings: must match marks.php ---------- */
 const ENDPOINT='/marks/marks.php';

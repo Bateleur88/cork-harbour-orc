@@ -104,6 +104,24 @@ is signal, so nothing is lost offline. Each fix carries a random id for the phon
 and an optional "Who's recording?" name. A WhatsApp message is the backup, headed
 "Laid marks – date": the series name is set on the RO page, not here.
 
+*Opening with no signal.* A service worker (`pages/record/sw.js`, served as
+`/record/sw.js`, controlling `/record/` and nothing else on the site) keeps a copy
+of the page and `key.js`. Opening the page always tries the network first. The
+saved copy is used only if the network fails, answers with a server error (5xx), or
+has not answered within 3 seconds; an answer that arrives later still refreshes the
+copy for next time. The saved page is replaced only by a response that contains
+the `PAGE_VERSION` marker, so a maintenance or error page that comes back as 200 is
+shown but never saved over the good copy. `marks.php`, the page's version check,
+Google Fonts and every other request go to the network untouched. Each
+`PAGE_VERSION` registers its own worker (`sw.js?v=<version>`) with its own cache,
+`record-<version>`, and the new worker deletes the older caches when it takes over,
+so `sw.js` itself needs no change for a release.
+**Dock rule:** a new phone must open `https://tradboats.ie/record/` once with
+signal before it can open it without; until then a cold start offline shows
+Chrome's own offline page. Bookmark it with the trailing slash: `/record` without
+it is outside the worker's scope. On iPhones, Safari may clear the copy after about
+a week without a visit, so open the page with signal before each race day.
+
 **Server** (`pages/marks/marks.php`, served as `/marks/marks.php`). Stores the day's
 fixes and the RO's built courses as JSON in `/marks/data/`, behind the race key in
 `key.js`. It also keeps the series name, one for the whole series and set from the
@@ -258,6 +276,7 @@ Tested with PHP 8.4 on Windows; the live host may differ.
 ## Deploying the pages
 
     pages/course/index.html      ->  /course/index.html  (generated: see below)
+    pages/record/sw.js           ->  /record/sw.js       (upload before the page)
     pages/record/record.html     ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
     pages/marks/key.js           ->  /marks/key.js      (not in the repository)
@@ -271,6 +290,16 @@ to `key.js`, set the key, and upload it next to `marks.php`: both pages load it 
 `marks.php` reads it, so the key is changed in one place. Without a usable `key.js`,
 `marks.php` refuses every request. Each phone remembers the last key it saw, so a
 `key.js` that fails to load mid-race does not stop uploads.
+
+**If the RIB page's service worker misbehaves,** upload `pages/record/sw-kill.js`
+**as `/record/sw.js`**, replacing the real one. Do not just delete `sw.js`: a
+missing file leaves the installed worker running. Each phone picks up the kill
+switch the next time it opens `/record/` with signal (reload once if the page
+looked wrong): it deletes the saved copies and unregisters itself, and the page
+loads from the network as before. While the kill switch is in place the page still
+registers it on each open, and it removes itself again at once. Put the real
+`sw.js` back once it is fixed. `sw-kill.js` itself is never uploaded under its own
+name.
 
 `marks.php` keeps its data in `/marks/data/` and writes an `.htaccess` there that
 denies web access. That only works on Apache or LiteSpeed; check it on the live server.
