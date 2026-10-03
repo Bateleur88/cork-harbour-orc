@@ -136,6 +136,8 @@ damaged day file is refused rather than overwritten.
 
 **Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
 Offline-first: the course card snapshot from the workbook is embedded in the page.
+The same ORC IRL watermark as the RIB page, embedded, sits behind it, with the
+footer "© Pat Tanner ORC Ireland".
 
 - *Series name*: at the top of Setup, set by the RO and saved on the server, so
   every RO device shows the same name; it heads the WhatsApp course message. It is
