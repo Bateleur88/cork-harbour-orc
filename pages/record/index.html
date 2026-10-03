@@ -105,7 +105,7 @@ details.backup summary{cursor:pointer;color:var(--muted)}
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-03.1';
+const PAGE_VERSION='2026-10-03.2';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -287,7 +287,10 @@ $('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeT
 let armed=false;
 $('newDay').onclick=()=>{
   const unsent=S.marks.filter(m=>!m.sent).length;
-  if(!armed){armed=true;$('newDay').textContent=unsent?unsent+' fixes not sent yet – tap again to clear anyway':'Tap again to clear this phone';setTimeout(()=>{armed=false;$('newDay').textContent='Start a new day (clears this phone)';},4000);return;}
+  const dels=S.deletes.length;   // deletes of fixes the server already has; clearing would leave those marks there
+  const count=(n,one,many)=>n+' '+(n===1?one:many);
+  const pending=[unsent&&count(unsent,'fix','fixes'),dels&&count(dels,'delete','deletes')].filter(Boolean).join(' and ');
+  if(!armed){armed=true;$('newDay').textContent=pending?pending+' not sent yet – tap again to clear anyway':'Tap again to clear this phone';setTimeout(()=>{armed=false;$('newDay').textContent='Start a new day (clears this phone)';},4000);return;}
   stop();   // a fix still in progress would otherwise land in the new day
   const ev=S.event;S=fresh();S.event=ev;armed=false;$('newDay').textContent='Start a new day (clears this phone)';
   $('markName').value='';document.querySelector('details.backup').open=false;   // not held in S, so render() leaves them
