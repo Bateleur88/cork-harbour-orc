@@ -103,6 +103,9 @@ Bay) and record. Fixes are queued on the phone and upload to `marks.php` when th
 is signal, so nothing is lost offline. Each fix carries a random id for the phone
 and an optional "Who's recording?" name. A WhatsApp message is the backup, headed
 "Laid marks – date": the series name is set on the RO page, not here.
+The ORC IRL watermark behind the page is embedded in it as a data URI, so it is
+there offline; `pages/record/assets/orc-irl-watermark.png` is its source and is
+not uploaded.
 
 *Opening with no signal.* A service worker (`pages/record/sw.js`, served as
 `/record/sw.js`, controlling `/record/` and nothing else on the site) keeps a copy
