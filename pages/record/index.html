@@ -21,7 +21,6 @@ button,input{font:inherit;color:inherit}button{cursor:pointer}
 .num{font-variant-numeric:tabular-nums}
 .top{display:flex;gap:10px;flex-wrap:wrap}
 .top input{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
-#event{flex:1 1 140px;font-weight:700}
 .who{display:flex;align-items:center;gap:8px;margin:8px 0 0;color:var(--muted);font-size:.85rem}
 .who input{flex:1 1 auto;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:.9rem}
 .races{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0 4px}
@@ -66,7 +65,6 @@ details.backup summary{cursor:pointer;color:var(--muted)}
 <body>
 <div class="wrap">
   <div class="top">
-    <input id="event" aria-label="Series name" placeholder="Series name">
     <input id="date" type="date" aria-label="Race date">
   </div>
   <label class="who">Who's recording? <input id="recorder" autocomplete="off" maxlength="60" placeholder="optional"></label>
@@ -105,7 +103,7 @@ details.backup summary{cursor:pointer;color:var(--muted)}
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-03.2';
+const PAGE_VERSION='2026-10-03.3';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -165,7 +163,7 @@ let recorder='';try{recorder=localStorage.getItem(RECORDER_KEY)||'';}catch(e){}
 
 const pad=(n,w)=>String(n).padStart(w,'0');
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2);}
-function fresh(){return{event:'Series Name',date:todayISO(),race:1,marks:[],deletes:[],csv:true};}
+function fresh(){return{date:todayISO(),race:1,marks:[],deletes:[],csv:true};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks)){s.deletes=s.deletes||[];return s;}}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -193,7 +191,7 @@ async function sync(){
   if(busy)return; busy=true; lastErr='';
   try{
     for(const m of S.marks.filter(m=>!m.sent)){
-      await post({action:'add',id:m.id,series:m.series,date:m.date,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc,time:m.time,device:DEVICE,recorder:m.recorder||''});
+      await post({action:'add',id:m.id,date:m.date,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc,time:m.time,device:DEVICE,recorder:m.recorder||''});
       m.sent=true; save(); renderSync(); renderList();
     }
     while(S.deletes.length){
@@ -227,12 +225,12 @@ function renderList(){
     ul.appendChild(li);});
 }
 function render(){
-  $('event').value=S.event;$('date').value=S.date;$('csv').checked=!!S.csv;
+  $('date').value=S.date;$('csv').checked=!!S.csv;
   document.querySelectorAll('.races button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.r===S.race));
   renderList(); renderSync();
   if(watchId===null)$('record').textContent=recLabel();
   const rm=withFix(raceMarks());
-  const lines=['*'+(S.event||'Series')+' – '+fmtDate(S.date)+'*','*Race '+S.race+' – laid marks*'];
+  const lines=['*Laid marks – '+fmtDate(S.date)+'*','*Race '+S.race+'*'];   // the series name is set on the RO page
   rm.forEach(m=>lines.push(m.name+(m.fix>1?' (moved, fix '+m.fix+')':'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)+' (±'+Math.round(m.acc)+' m, '+hhmm(m.time)+')'));
   if(S.csv&&rm.length){lines.push('','```','race,mark,fix,lat,lon,acc_m,time');rm.forEach(m=>lines.push([S.race,'"'+m.name+'"',m.fix,m.lat.toFixed(6),m.lon.toFixed(6),Math.round(m.acc),hhmm(m.time)].join(',')));lines.push('```');}
   text=rm.length?lines.join('\n'):'';
@@ -257,7 +255,7 @@ $('record').onclick=()=>{
   const finish=()=>{stop();if(!best){setStatus('No fix received. Check location is on and allowed for this page.','err');return;}
     const c=best.coords;
     const prior=raceMarks().some(m=>m.name.toLowerCase()===name.toLowerCase());
-    S.marks.push({id:uid(),series:S.event,date:S.date,race:S.race,name,lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now(),recorder:recorder.trim(),sent:false});
+    S.marks.push({id:uid(),date:S.date,race:S.race,name,lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now(),recorder:recorder.trim(),sent:false});
     $('markName').value='';
     setStatus(prior?name+' moved: new fix kept alongside the earlier one. If the earlier fix was a mistake, delete it with ✕.':name+' recorded for Race '+S.race+', ±'+Math.round(c.accuracy)+' m.','ok');
     commit(); sync();};
@@ -277,7 +275,6 @@ $('list').onclick=e=>{const b=e.target.closest('.del');if(!b)return;
   const m=S.marks.find(x=>x.id===b.dataset.id); if(!m)return;
   if(m.sent)S.deletes.push({id:m.id,date:m.date});
   S.marks=S.marks.filter(x=>x.id!==m.id); commit(); sync();};
-$('event').onchange=e=>{S.event=e.target.value.trim();commit();};
 $('date').onchange=e=>{S.date=e.target.value||todayISO();commit();};
 $('csv').onchange=e=>{S.csv=e.target.checked;commit();};
 $('recorder').value=recorder;   // kept outside S so "Start a new day" doesn't clear it
@@ -292,7 +289,7 @@ $('newDay').onclick=()=>{
   const pending=[unsent&&count(unsent,'fix','fixes'),dels&&count(dels,'delete','deletes')].filter(Boolean).join(' and ');
   if(!armed){armed=true;$('newDay').textContent=pending?pending+' not sent yet – tap again to clear anyway':'Tap again to clear this phone';setTimeout(()=>{armed=false;$('newDay').textContent='Start a new day (clears this phone)';},4000);return;}
   stop();   // a fix still in progress would otherwise land in the new day
-  const ev=S.event;S=fresh();S.event=ev;armed=false;$('newDay').textContent='Start a new day (clears this phone)';
+  S=fresh();armed=false;$('newDay').textContent='Start a new day (clears this phone)';
   $('markName').value='';document.querySelector('details.backup').open=false;   // not held in S, so render() leaves them
   setStatus('New day started.','ok');commit();};
 render(); if(newDayNote)setStatus(newDayNote); save(); sync();

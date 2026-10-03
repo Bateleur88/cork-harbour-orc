@@ -97,11 +97,12 @@ Three files in `pages/`, working together through the web server (see Deploying
 the pages for where each goes).
 
 **RIB page** (`pages/record/record.html`, served as `/record/`). The RIB crew
-records each mark as it is laid, with the phone's GPS: pick the series, date and
+records each mark as it is laid, with the phone's GPS: pick the date and
 race, tap a name (quick picks include the laid marks Curlane, Dutchman and White
 Bay) and record. Fixes are queued on the phone and upload to `marks.php` when there
 is signal, so nothing is lost offline. Each fix carries a random id for the phone
-and an optional "Who's recording?" name. A WhatsApp message is the backup.
+and an optional "Who's recording?" name. A WhatsApp message is the backup, headed
+"Laid marks – date": the series name is set on the RO page, not here.
 
 **Server** (`pages/marks/marks.php`, served as `/marks/marks.php`). Stores the day's
 fixes and the RO's built courses as JSON in `/marks/data/`, behind the race key in
