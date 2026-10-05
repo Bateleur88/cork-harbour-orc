@@ -215,6 +215,17 @@ footer "© Pat Tanner ORC Ireland".
 - *Outputs* (section 6): a WhatsApp message of the course, legs and positions; and
   the **leg table for SailScoring**, below.
 
+**Wide screens.** Under 700 CSS px (phones) the page is one 560 px column, as it
+always was. From 700 px it is one 760 px column with larger sketches. From 1100 px
+(tablet landscape, PC) it is two columns, up to 1400 px in all, centred, so the scorer
+can check the recorded marks and the legs together: in Setup, sections 1 to 3 on the
+left and section 4, "Check recorded marks", wind shift and send on the right; in Race
+view, the legs table on the left and the sketch with "Check recorded marks" on the
+right, and wind, wind shift and send below. The columns depend on element order in
+the page, not on wrapper elements (see the comment above the media queries): moving
+an element into or out of the Setup container, or reordering the column's elements,
+moves it between columns. The watermark stays centred on the screen.
+
 **SailScoring leg table.** The course as sailed, for entering into SailScoring:
 one line per physical leg, in sailing order, from the start to the first mark
 through to the last mark to the finish. A card passage is split into the legs

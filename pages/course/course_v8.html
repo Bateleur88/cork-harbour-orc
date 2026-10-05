@@ -172,6 +172,33 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body::before{filter:brightness(0) invert(1)}}
 :root[data-theme="dark"] body::before{filter:brightness(0) invert(1)}
 .foot{margin:18px 0 0;padding-bottom:env(safe-area-inset-bottom);text-align:center;color:var(--muted);font-size:.8rem}
+/* ---------- tablet and PC: the phone layout (under 700 px) is untouched; nothing above changes ----------
+   700 px and up: one wider column. 1100 px and up: two columns, so the scorer can check the recorded marks and the legs
+   together. The two columns DEPEND ON ELEMENT ORDER in .wrap; there is no column wrapper (one would stop .wrap>h2 from
+   matching sections 4 to 6, and h2:first-of-type would drop the rule above "4 · Legs" on phones). In Setup the one
+   div.setupOnly child of .wrap (series name to section 3, "Go to race view" included) floats left, and every child of
+   .wrap after it takes the right column, except "Clear everything" and the footer, which run across the foot. In Race
+   view #legs floats left, #plotWrap and #slotFixWide take the right, and #slotWind and everything after run across
+   below. Moving an element into or out of div.setupOnly, or reordering .wrap's children, moves it between columns.
+   "Check recorded marks" is moved into #slotFixWide by applyMode() at 1100 px and up. The watermark is fixed to the
+   window, so it stays centred on the screen, in the gap between the columns. */
+@media (min-width:700px){
+  .wrap{max-width:760px}
+  #plot svg,#fxPlot svg{max-height:75vh}
+}
+@media (min-width:1100px){
+  .wrap{max-width:1400px}
+  body:not(.race) .wrap>div.setupOnly{float:left;width:calc(50% - 16px)}
+  body:not(.race) .wrap>div.setupOnly~:not(#clear):not(.foot){margin-left:calc(50% + 16px)}
+  body:not(.race) .wrap>div.setupOnly+h2{margin-top:0;border-top:none;padding-top:0}
+  .wrap>#clear,.wrap>.foot{clear:both}
+  .wrap>#clear{display:block}   /* a button is inline-block, and clear only acts on a block */
+  body.race #legs{float:left;width:calc(50% - 16px)}
+  body.race #plotWrap,body.race #slotFixWide{margin-left:calc(50% + 16px)}
+  body.race #slotWind{clear:both}
+  #map{height:480px}
+  #fxMap{height:520px}
+}
 </style>
 </head>
 <body>
@@ -266,6 +293,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <div id="legs"></div>
   <div class="plot" id="plotWrap" hidden><div class="viewTabs"><button type="button" id="viewSketch" aria-pressed="true">Sketch</button><button type="button" id="viewChart" aria-pressed="false">Chart</button></div><div id="plot"></div><div id="mapWrap" hidden><div id="map"></div></div><p class="status" id="mapStatus" role="status" aria-live="polite"></p></div>
 
+  <!-- at 1100 px and up "Check recorded marks" moves here, beside the legs, in both views -->
+  <div id="slotFixWide"></div>
   <div class="raceOnly" id="slotWind"></div>
 
   <h2>5 · Wind shift</h2>
@@ -304,7 +333,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-05.3';
+const PAGE_VERSION='2026-10-05.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -345,6 +374,8 @@ function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
+// the page's two layout breakpoints (see the CSS media queries), set before anything can render
+const MQ_MID=window.matchMedia('(min-width:700px)'), MQ_WIDE=window.matchMedia('(min-width:1100px)');
 /* The series name belongs to the whole series and is kept on the server (marks.php ?type=series); it is set here, by the RO.
    The last value seen is kept on this phone outside S, so Clear everything keeps it and it shows without signal.
    An edit not yet sent ("dirty") wins over the server's copy until it has been sent. */
@@ -959,12 +990,14 @@ function commit(){save();render();if(typeof scheduleSave==='function')scheduleSa
 const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB'],['fixCheck','slotFix']];
 const homes={};
 SHARED.forEach(([id])=>{const h=document.createElement('span');h.hidden=true;$(id).before(h);homes[id]=h;});
+// at 1100 px and up (the two-column layout) "Check recorded marks" sits in #slotFixWide, after the sketch, in both views
 function applyMode(){
   const race=S.mode==='race';
   document.body.classList.toggle('race',race);
   document.querySelectorAll('.modebar button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===(race?'race':'setup'))));
   SHARED.forEach(([id,slot])=>{const n=$(id);
-    if(race){if(n.parentNode!==$(slot))$(slot).appendChild(n);}
+    if(id==='fixCheck'&&MQ_WIDE.matches)slot='slotFixWide';
+    if(race||slot==='slotFixWide'){if(n.parentNode!==$(slot))$(slot).appendChild(n);}
     else if(homes[id].nextSibling!==n)homes[id].after(n);});
 }
 function setMode(m){S.mode=m;save();render();if(m==='race')window.scrollTo(0,0);}
@@ -1540,6 +1573,10 @@ $('fixCheck').addEventListener('click',async e=>{const b=e.target.closest('[data
   if(pt){fxSel=fxSel===pt.dataset.k?'':pt.dataset.k;renderFix();if(b&&fxSel)$('fxDet').scrollIntoView({block:'nearest'});}});
 $('fxAll').onchange=e=>{fxAll=e.target.checked;fxFit='';renderFix();};
 $('fxSketchB').onclick=()=>setFxView(false);
+// crossing 700 or 1100 px (a tablet turned, a window resized, the zoom changed) changes the column widths: put the
+// shared box in its slot for the new layout, and let both charts measure their boxes again
+function onBreakpoint(){applyMode();setTimeout(()=>{if(LMap)LMap.invalidateSize();if(FxMap)FxMap.invalidateSize();},0);}
+[MQ_MID,MQ_WIDE].forEach(q=>q.addEventListener?q.addEventListener('change',onBreakpoint):q.addListener(onBreakpoint));
 $('fxChartB').onclick=()=>setFxView(true);
 
 /* ---------- pull from server ---------- */
