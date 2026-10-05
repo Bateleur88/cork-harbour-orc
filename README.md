@@ -179,7 +179,14 @@ footer "© Pat Tanner ORC Ireland".
   one flag each, however many flags they have; a note about the race as a whole (no
   committee boat of its own) is counted apart as a race note. Shape and colour give the race;
   a typed position (±0, no phone) is hollow, an estimate; a fix carried in from an
-  earlier race (such as Race 1's committee boat) is dashed. Tapping a fix gives its
+  earlier race (such as Race 1's committee boat) is dashed. With *All races* ticked
+  each fix has a short label (`R2 L 13:21`: race, mark initial, time; CB, SP and FP
+  for the committee boat, start pin and finish pin, with a key under the sketch), a
+  thin line in each race's colour joins its latest Windward and Leeward, and chips
+  (R1, R2, R3…) switch races on and off in the sketch, chart and list; the closed
+  line still counts every race, and the choice is not saved. A switched-off race's
+  committee boat stays, dashed, while a race shown carries it forward, and a selected
+  fix of a switched-off race is deselected. Tapping a fix gives its
   name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
   recorder, position, and how old the position was when saved: the fix id starts
   with the phone's clock, so id time minus the fix's time, falling back to when the
@@ -241,7 +248,9 @@ footer "© Pat Tanner ORC Ireland".
 
 **Wide screens.** Under 700 CSS px (phones) the page is one 560 px column, as it
 always was. From 700 px it is one 760 px column with larger sketches. From 1100 px
-(tablet landscape, PC) it is two columns, up to 1400 px in all, centred, so the scorer
+(tablet landscape, PC) it is two columns, up to 1400 px in all, centred (the "Check
+recorded marks" sketch is drawn on a larger canvas there, up to 85% of the screen
+height, so its labels have more room), so the scorer
 can check the recorded marks and the legs together: in Setup, sections 1 to 3 on the
 left and section 4, "Check recorded marks", wind shift and send on the right; in Race
 view, the legs table on the left and the sketch with "Check recorded marks" on the
