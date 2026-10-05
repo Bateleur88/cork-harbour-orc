@@ -107,6 +107,26 @@ The ORC IRL watermark behind the page is embedded in it as a data URI, so it is
 there offline; `pages/record/assets/orc-irl-watermark.png` is its source and is
 not uploaded.
 
+*A fresh position only.* Android Chrome can hand over the phone's last known
+position first, with its own old time, even when asked not to (`maximumAge:0`): on
+4 Oct 2026 half the fixes carried a position 24 s to 12.5 minutes old. So every
+position is checked against the moment Record was tapped, and one more than 5 s
+older (`FRESH_MS`) is ignored while the page keeps listening. A fresh position at
+±5 m or better is saved at once, otherwise the most accurate fresh one after 10 s;
+with none by 20 s (`GIVE_UP_MS`) nothing is saved and a red panel asks the driver to
+stay at the mark and tap Record again. Cancel, the screen locking or the page being
+left also stop the fix with nothing saved and the mark name kept. A large panel says
+"HOLD STILL at the mark…" with a countdown while waiting, and "Saved ✓" (green, one
+buzz on Android) only once a fresh position is stored on the phone; sending is shown
+separately, as before. The fix keeps the position's own time (`time`) and the tap
+(`tap`), so the age of a position can be measured exactly.
+*Clock risk:* the check compares GPS time with the phone's clock. A phone whose
+clock is more than 5 s out would refuse every fix; if that happens, set the phone to
+automatic time, or raise `FRESH_MS`. The tap time shows any offset afterwards.
+*Possible later check:* a position taken while the RIB is still moving towards the
+mark is fresh but not at the mark. A later version could also require two fresh
+positions a few metres apart, or a low speed, before saving.
+
 *Opening with no signal.* A service worker (`pages/record/sw.js`, served as
 `/record/sw.js`, controlling `/record/` and nothing else on the site) keeps a copy
 of the page and `key.js`. Opening the page always tries the network first. The

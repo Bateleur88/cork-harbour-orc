@@ -37,6 +37,16 @@ label.lbl{display:block;font-weight:700;margin-bottom:6px}
 @media (prefers-reduced-motion:no-preference){.record[aria-busy="true"]{background-size:40px 40px;animation:slide 1s linear infinite}@keyframes slide{to{background-position:40px 0}}}
 #cancel{display:none;margin-top:8px;background:none;border:none;color:var(--muted);text-decoration:underline;padding:6px 0}
 .status{margin:10px 0 0;min-height:1.4em;font-size:.95rem}
+/* what the driver sees while a fix is taken and after: fixed colours, not themed, so they read in sunlight in light and
+   dark mode alike; each state also says so in words and a symbol, never by colour alone */
+.fixpanel{margin:10px 0 0;padding:14px 16px;border-radius:14px;font-size:1.35rem;font-weight:700;line-height:1.25}
+.fixpanel small{display:block;margin-top:4px;font-size:1rem}
+.fixpanel.hold{background:#FFC21A;color:#1A1400}
+.fixpanel.ok{background:#14532D;color:#FFFFFF}
+.fixpanel.bad{background:#8B1A12;color:#FFFFFF}
+.fixpanel.info{background:var(--surface);color:var(--ink);border:2px solid var(--ink)}
+.fixbar{height:8px;margin-top:10px;border-radius:4px;background:rgba(26,20,0,.25);overflow:hidden}
+.fixbar i{display:block;height:100%;width:100%;background:#1A1400}
 .status.err{color:var(--warn)}.status.ok{color:var(--ok)}
 ul.list{list-style:none;margin:18px 0 0;padding:0;border-top:1px solid var(--line)}
 ul.list li{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
@@ -86,6 +96,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <div class="chips" id="chips"></div>
   <button class="record" id="record">Record mark here</button>
   <button id="cancel">Cancel fix</button>
+  <div class="fixpanel" id="fixPanel" role="status" aria-live="assertive" aria-atomic="true" hidden></div>
   <p class="status" id="status" role="status" aria-live="polite"></p>
 
   <div class="sync" id="sync" aria-live="polite"><span class="dot"></span><span id="syncText">Nothing recorded yet</span></div>
@@ -111,7 +122,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-03.5';
+const PAGE_VERSION='2026-10-05.1';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -179,7 +190,7 @@ const pad=(n,w)=>String(n).padStart(w,'0');
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2);}
 function fresh(){return{date:todayISO(),race:1,marks:[],deletes:[],csv:true};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks)){s.deletes=s.deletes||[];return s;}}}catch(e){}return fresh();}
-function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
+function save(){try{localStorage.setItem(K,JSON.stringify(S));return true;}catch(e){return false;}}   // false: not stored (storage full)
 let S=load(),text='';
 let newDayNote='';
 if(S.date!==todayISO()){            // phone left over from a previous race day
@@ -205,7 +216,7 @@ async function sync(){
   if(busy)return; busy=true; lastErr='';
   try{
     for(const m of S.marks.filter(m=>!m.sent)){
-      await post({action:'add',id:m.id,date:m.date,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc,time:m.time,device:DEVICE,recorder:m.recorder||''});
+      await post({action:'add',id:m.id,date:m.date,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc,time:m.time,tap:m.tap,device:DEVICE,recorder:m.recorder||''});
       m.sent=true; save(); renderSync(); renderList();
     }
     while(S.deletes.length){
@@ -255,41 +266,73 @@ function render(){
 }
 function commit(){save();render();}
 
-/* ---------- GPS ---------- */
-let watchId=null,timer=null;
+/* ---------- GPS: a fresh position only ----------
+   Android Chrome can hand over the phone's last known position first, with its own old time, even with maximumAge:0:
+   on 4 Oct 2026 half the fixes carried a position 24 s to 12.5 min old, because the first position at ±5 m or better
+   was saved whatever its age. Now every position is checked against the moment Record was tapped. One older than
+   FRESH_MS before the tap is ignored, and the page keeps listening. A fresh position at GOOD_ACC_M or better is saved
+   at once; otherwise the most accurate fresh one once SETTLE_MS have passed. With no fresh position by GIVE_UP_MS
+   nothing is saved and the driver is asked to try again: a missing fix is seen at the mark, a wrong one is not.
+   The check compares the position's time with the phone's clock, so a phone whose clock is more than FRESH_MS out
+   would refuse every fix (see the README). Cancel, a refusal, the screen locking or the page being left all stop the
+   watch, put the button back and keep the mark name; nothing is saved in any of those cases. */
+const FRESH_MS=5000, GOOD_ACC_M=5, SETTLE_MS=10000, GIVE_UP_MS=20000;
+const BUZZ_OK=200, BUZZ_FAIL=[120,80,120,80,120];   // vibration where the phone has it (Android); silent elsewhere
+let watchId=null,timer=null,ticker=null,run=null;   // run: the fix being taken; a callback from any other is ignored
 function recLabel(){return 'Record mark – Race '+S.race;}
-function stop(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}clearTimeout(timer);$('record').removeAttribute('aria-busy');$('record').textContent=recLabel();$('cancel').style.display='none';}
+function buzz(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(_){}}
+function panel(kind,head,more,bar){const el=$('fixPanel');el.hidden=false;el.className='fixpanel '+kind;
+  el.innerHTML=esc(head)+(more?'<small>'+esc(more)+'</small>':'')+(bar==null?'':'<div class="fixbar" aria-hidden="true"><i style="width:'+Math.round(bar*100)+'%"></i></div>');}
+function stop(){if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}clearTimeout(timer);clearInterval(ticker);run=null;
+  $('record').removeAttribute('aria-busy');$('record').textContent=recLabel();$('cancel').style.display='none';}
+function showHold(r){const left=Math.max(0,GIVE_UP_MS-(Date.now()-r.tap));
+  panel('hold','HOLD STILL at the mark…',[Math.ceil(left/1000)+' s',r.best?'±'+Math.round(r.best.coords.accuracy)+' m':'waiting for GPS',
+    r.stale&&!r.best?'old position ignored':''].filter(Boolean).join(' · '),left/GIVE_UP_MS);}
+function refuse(r,why){const nm=r.name;stop();
+  panel('bad','Not saved ✕',why+' Stay at '+nm+' and tap Record again.');buzz(BUZZ_FAIL);}
+function finishFix(r){if(r!==run)return;
+  if(!r.best){refuse(r,r.stale?'Only an old GPS position came in.':'No GPS position came in.');return;}
+  const p=r.best, c=p.coords;stop();
+  const prior=S.marks.some(m=>m.race===r.race&&m.name.toLowerCase()===r.name.toLowerCase());
+  S.marks.push({id:uid(),date:r.date,race:r.race,name:r.name,lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:p.timestamp,tap:r.tap,
+    recorder:recorder.trim(),sent:false});
+  if(!save()){S.marks.pop();panel('bad','Not saved ✕','The phone could not store it (storage full). Tell the scorer.');buzz(BUZZ_FAIL);return;}
+  $('markName').value='';
+  panel('ok','Saved ✓',r.name+', Race '+r.race+', ±'+Math.round(c.accuracy)+' m'+(prior?'. Moved: the earlier fix is kept too; delete it with ✕ if it was a mistake.':''));
+  buzz(BUZZ_OK);render();sync();}
+function abandon(why){if(!run)return;stop();panel('info','Not saved',why);}
 $('record').onclick=()=>{
-  if(watchId!==null)return;
+  if(run)return;
   const name=$('markName').value.trim();
   if(!name){setStatus('Enter or tap a mark name first.','err');$('markName').focus();return;}
   if(!('geolocation' in navigator)){setStatus('This browser has no location access. Try Chrome or Safari.','err');return;}
-  let best=null;const t0=Date.now();
-  $('record').setAttribute('aria-busy','true');$('record').textContent='Getting fix…';$('cancel').style.display='block';setStatus('Hold position beside the mark.');
-  const finish=()=>{stop();if(!best){setStatus('No fix received. Check location is on and allowed for this page.','err');return;}
-    const c=best.coords;
-    const prior=raceMarks().some(m=>m.name.toLowerCase()===name.toLowerCase());
-    S.marks.push({id:uid(),date:S.date,race:S.race,name,lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now(),recorder:recorder.trim(),sent:false});
-    $('markName').value='';
-    setStatus(prior?name+' moved: new fix kept alongside the earlier one. If the earlier fix was a mistake, delete it with ✕.':name+' recorded for Race '+S.race+', ±'+Math.round(c.accuracy)+' m.','ok');
-    commit(); sync();};
-  watchId=navigator.geolocation.watchPosition(p=>{
-    if(!best||p.coords.accuracy<best.coords.accuracy)best=p;
-    $('record').textContent='Fix ±'+Math.round(best.coords.accuracy)+' m… improving';
-    if(best.coords.accuracy<=5||Date.now()-t0>10000)finish();
-  },err=>{if(best){finish();return;}stop();
-    setStatus(err.code===1?'Location permission was refused. Allow location for this page, then try again.':err.code===3?'GPS timed out. Try again.':'Position unavailable. Check the phone’s location setting.','err');
-  },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
-  timer=setTimeout(finish,12000);
+  setStatus('');
+  const r=run={name,race:S.race,date:S.date,tap:Date.now(),best:null,stale:0};
+  $('record').setAttribute('aria-busy','true');$('record').textContent='Hold still…';$('cancel').style.display='block';showHold(r);
+  watchId=navigator.geolocation.watchPosition(p=>{if(r!==run)return;
+    if(!(p.timestamp>=r.tap-FRESH_MS)){r.stale++;showHold(r);return;}   // an old (cached) position: ignore it, keep listening
+    if(!r.best||p.coords.accuracy<r.best.coords.accuracy)r.best=p;
+    showHold(r);
+    if(r.best.coords.accuracy<=GOOD_ACC_M||Date.now()-r.tap>=SETTLE_MS)finishFix(r);
+  },err=>{if(r!==run)return;if(r.best){finishFix(r);return;}
+    refuse(r,err.code===1?'Location is blocked for this page: allow it in the browser settings.':err.code===3?'No fresh GPS position came in.':'Position unavailable: check the phone’s location setting.');
+  },{enableHighAccuracy:true,maximumAge:0,timeout:GIVE_UP_MS});
+  ticker=setInterval(()=>{if(r!==run)return;if(r.best&&Date.now()-r.tap>=SETTLE_MS)finishFix(r);else showHold(r);},500);
+  timer=setTimeout(()=>finishFix(r),GIVE_UP_MS);
 };
-$('cancel').onclick=()=>{stop();setStatus('Fix cancelled.');};
+$('cancel').onclick=()=>abandon('Cancelled. Nothing was saved.');
+// a screen lock or another app stops the GPS in the background: give up cleanly rather than save whatever came last
+document.addEventListener('visibilitychange',()=>{if(document.hidden)abandon('The screen locked or the page was left while waiting, so nothing was saved. Tap Record again at the mark.');});
+window.addEventListener('pagehide',()=>abandon('The page was left while waiting, so nothing was saved.'));
 PRESETS.forEach(n=>{const b=document.createElement('button');b.className='chip';b.textContent=n;b.onclick=()=>{$('markName').value=n;};$('chips').appendChild(b);});
-document.querySelectorAll('.races button').forEach(b=>b.onclick=()=>{S.race=+b.dataset.r;setStatus('');commit();});
+// changing race (or date) while waiting stops that fix: it would otherwise be saved under the race it was tapped for
+document.querySelectorAll('.races button').forEach(b=>b.onclick=()=>{const was=!!run;abandon('The race was changed while waiting, so nothing was saved. Tap Record again at the mark.');
+  S.race=+b.dataset.r;setStatus('');if(!was)$('fixPanel').hidden=true;commit();});
 $('list').onclick=e=>{const b=e.target.closest('.del');if(!b)return;
   const m=S.marks.find(x=>x.id===b.dataset.id); if(!m)return;
   if(m.sent)S.deletes.push({id:m.id,date:m.date});
   S.marks=S.marks.filter(x=>x.id!==m.id); commit(); sync();};
-$('date').onchange=e=>{S.date=e.target.value||todayISO();commit();};
+$('date').onchange=e=>{abandon('The date was changed while waiting, so nothing was saved. Tap Record again at the mark.');S.date=e.target.value||todayISO();commit();};
 $('csv').onchange=e=>{S.csv=e.target.checked;commit();};
 $('recorder').value=recorder;   // kept outside S so "Start a new day" doesn't clear it
 $('recorder').oninput=e=>{recorder=e.target.value;try{localStorage.setItem(RECORDER_KEY,recorder.trim());}catch(_){}};
@@ -305,7 +348,7 @@ $('newDay').onclick=()=>{
   stop();   // a fix still in progress would otherwise land in the new day
   S=fresh();armed=false;$('newDay').textContent='Start a new day (clears this phone)';
   $('markName').value='';document.querySelector('details.backup').open=false;   // not held in S, so render() leaves them
-  setStatus('New day started.','ok');commit();};
+  $('fixPanel').hidden=true;setStatus('New day started.','ok');commit();};
 render(); if(newDayNote)setStatus(newDayNote); save(); sync();
 })();
 </script>
