@@ -156,6 +156,13 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 .moverow small{color:var(--muted)}
 .moverow select{width:auto;margin:0;padding:8px}
 .moverow button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
+/* Long text must not widen Setup. A grid item's minimum width is its content, so a picker listing long fix descriptions
+   pushed the course rows, and the whole page, past the screen. The pickers now fit the column and cut their shown text
+   with "…"; the chosen fix is written out in full in the line under each line-end picker, and every option is shown in
+   full when a picker is opened. The workbook name and a moved fix's name wrap instead. */
+ol.course li>div,.moverow>span{min-width:0}
+.endSel,.laidSel{max-width:100%;text-overflow:ellipsis}
+#cardSrc,.moverow>span{overflow-wrap:anywhere}
 .clear{margin-top:24px;background:none;border:none;color:var(--warn);text-decoration:underline;padding:8px 0}
 /* ORC IRL watermark: fixed behind everything, never takes a tap, and not part of any text the page sends.
    Embedded, so it is there with no signal; the same image as the RIB page (pages/record/assets/orc-irl-watermark.png).
@@ -297,7 +304,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-05.2';
+const PAGE_VERSION='2026-10-05.3';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1138,7 +1145,7 @@ function endPicker(w,cardStandIn){
   return esc(label)+' <select class="endSel" data-w="'+w+'" aria-label="'+esc(label)+' fix">'+
     opt('auto',a.reason+(a.m?': '+fixText(a.m,w):''))+opt('none','None: this end not used')+
     list.map(m=>opt(refFor(m),fixText(m,w))).join('')+'</select>'+
-    '<div class="meta" style="font-size:.85rem">'+esc(e.reason)+(e.m&&e.how!=='chosen'?': '+esc(fixText(e.m,w)):'')+
+    '<div class="meta" style="font-size:.85rem">'+esc(e.reason)+(e.m?': '+esc(fixText(e.m,w)):'')+
       (e.how==='chosen'||e.how==='none'?' <button type="button" class="ghost endAuto" data-w="'+w+'">Back to auto</button>':'')+'</div>'+
     (e.warn?'<div class="meta warnTxt">⚠ '+esc(e.warn)+'</div>':'')+
     (e.m&&accWarn(e.m)?'<div class="meta warnTxt">⚠ '+esc(label)+' in use is '+esc(fixText(e.m,w))+'</div>':'')+
