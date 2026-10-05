@@ -148,6 +148,27 @@ footer "© Pat Tanner ORC Ireland".
   opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
   40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
   Whether it is open is not saved.
+- *Check recorded marks* (end of section 1, closed by default): a read-only plot of
+  every fix loaded for the race selected, or for all races, for the RO or scorer to
+  spot one out of place. It is one element shown in both views (at the bottom of Race
+  view). Its closed line counts fixes: "2 fixes to check" is two fixes with at least
+  one flag each, however many flags they have; a note about the race as a whole (no
+  committee boat of its own) is counted apart as a race note. Shape and colour give the race;
+  a typed position (±0, no phone) is hollow, an estimate; a fix carried in from an
+  earlier race (such as Race 1's committee boat) is dashed. Tapping a fix gives its
+  name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
+  recorder, position, and how old the position was when saved: the fix id starts
+  with the phone's clock, so id time minus the fix's time, falling back to when the
+  server received it. The checks, with their thresholds as named constants at the
+  top of that code and tuned to one day's fixes (4 Oct 2026), are advice only and
+  never block anything: a position 20 s to 5 min old (check) or over 5 min (likely
+  wrong, the only one in the warning colour); a Start or Finish Pin within 60 m of a
+  mark of its race; a start line more than 45° off square to the leg to the race's
+  first mark; a mark more than 500 m from the nearest fix of its name in another
+  race (line ends left out); a Start Pin later than its race's Finish Pin, or a
+  Finish Pin later than the next race's first start; a race with no committee boat
+  of its own. Each has a WhatsApp, Share or Copy button with a short message asking
+  for the mark to be recorded again. Sketch by default; Chart needs signal.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands

@@ -19,9 +19,9 @@
 .viewTabs{display:flex;gap:8px;margin:8px 0}
 .viewTabs button{flex:1}
 .viewTabs button[aria-pressed="true"]{background:var(--sea);color:#fff;border-color:var(--sea)}
-:root{--paper:#F5F8FA;--surface:#FFFFFF;--ink:#0F2940;--muted:#5B6B7A;--line:#D5DEE6;--buoy:#FFC21A;--buoy-ink:#1A1400;--sea:#1D5C8C;--warn:#B3261E;--ok:#1E7A45;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;color-scheme:dark}}
-:root[data-theme="dark"]{--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;color-scheme:dark}
+:root{--paper:#F5F8FA;--surface:#FFFFFF;--ink:#0F2940;--muted:#5B6B7A;--line:#D5DEE6;--buoy:#FFC21A;--buoy-ink:#1A1400;--sea:#1D5C8C;--warn:#B3261E;--ok:#1E7A45;--r1:#1D5C8C;--r2:#B45309;--r3:#7C3AED;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;--r1:#6FB3E6;--r2:#F59E57;--r3:#B79CF5;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#0C1823;--surface:#12222F;--ink:#E8EEF3;--muted:#93A3B1;--line:#22364A;--sea:#6FB3E6;--warn:#FF8A80;--ok:#6FD39A;--r1:#6FB3E6;--r2:#F59E57;--r3:#B79CF5;color-scheme:dark}
 [hidden]{display:none!important}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--paper);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:17px;line-height:1.4;-webkit-text-size-adjust:100%}
@@ -113,6 +113,22 @@ details.sec>summary h2{border-top:1px solid var(--line);padding-top:14px}
 details.sec>summary h2::before{content:"▸ ";color:var(--muted)}
 details.sec[open]>summary h2::before{content:"▾ "}
 .secSrc{font-weight:400;font-size:.85rem;color:var(--muted);overflow-wrap:anywhere}
+/* check recorded marks: --r1..--r3 colour the races (the shape says the race too); the warning colour is kept for "likely wrong" */
+.fixchk{margin-top:12px}
+.fixchk>summary{cursor:pointer;color:var(--muted);padding:6px 0}
+.fixchk>summary.bad{color:var(--warn)}
+.fxAll{display:flex;align-items:center;gap:8px;font-size:.92rem;margin:2px 4px}
+.fxAll input{width:20px;height:20px;margin:0}
+#fxMap{height:320px;border-radius:12px;overflow:hidden}
+.fxList{list-style:none;margin:8px 0 0;padding:0 4px}
+.fxList li{padding:6px 0;border-top:1px solid var(--line)}
+.fxList li.sel .fxRow{font-weight:700}
+.fxRow{display:block;width:100%;text-align:left;padding:4px 0;border:none;background:none;font-size:.9rem}
+.fxFlag{margin:2px 0 0;font-size:.88rem}
+.fxFlag.bad{color:var(--warn);font-weight:700}
+.fxAsk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.fxBtn{padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.85rem;text-decoration:none}
+pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 0}
 .starts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .starts button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.9rem}
 .starts button[aria-pressed="true"]{background:var(--sea);color:var(--paper)}
@@ -182,6 +198,19 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <textarea id="paste" placeholder="Paste one or more WhatsApp messages here, then tap Read marks." style="margin-top:10px"></textarea>
     <button class="ghost" id="read">Read marks from a WhatsApp message</button>
     <button class="ghost" id="addManual">Add a mark by typing its position</button>
+  </details>
+  <!-- read-only; one element for both views: in Race view it moves to slotFix, at the bottom -->
+  <details class="fixchk" id="fixCheck">
+    <summary id="fixSum">Check recorded marks</summary>
+    <div class="plot">
+      <label class="fxAll"><input type="checkbox" id="fxAll"> All races</label>
+      <div class="viewTabs"><button type="button" id="fxSketchB" aria-pressed="true">Sketch</button><button type="button" id="fxChartB" aria-pressed="false">Chart</button></div>
+      <div id="fxPlot"></div><div id="fxMapWrap" hidden><div id="fxMap"></div></div>
+      <p class="status" id="fxStatus" role="status" aria-live="polite"></p>
+      <div id="fxDet"></div>
+      <ul class="fxList" id="fxList"></ul>
+      <p class="cardnote">Tap a fix for its detail. Nothing here changes a course or a recorded fix. The checks are advice only, tuned to one day's fixes.</p>
+    </div>
   </details>
 
   <!-- closed on every load, and left as the RO sets it until the page is reloaded: the state is not saved -->
@@ -258,6 +287,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <div class="row"><button class="btn" id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button></div>
 
   <div class="raceOnly" id="slotCB"></div>
+  <div class="raceOnly" id="slotFix"></div>
 
   <button class="clear setupOnly" id="clear">Clear everything</button>
   <p class="foot">© Pat Tanner ORC Ireland</p>
@@ -267,7 +297,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-05.1';
+const PAGE_VERSION='2026-10-05.2';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -868,7 +898,7 @@ function render(){
          ' <button type="button" class="ghost lineAct" data-act="markFinish">Mark finish line</button>'):'');}}
   $('toRace').hidden=!cs.length;
   buildLegs();
-  applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum();
+  applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix();
 }
 /* section 2 after import: one line (course, card distance, laid marks and flags) instead of the chooser;
    "Choose another course" reopens it until the next import. The section's own summary line names the card in use
@@ -919,7 +949,7 @@ function commit(){save();render();if(typeof scheduleSave==='function')scheduleSa
    in Setup and a slot in Race view, so there is only ever one of each. Anything that changes during a race and needs
    the RO (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh stopping) is collected in the
    alert strip at the top of Race view, with the same buttons as in Setup. The view never switches by itself. */
-const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB']];
+const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB'],['fixCheck','slotFix']];
 const homes={};
 SHARED.forEach(([id])=>{const h=document.createElement('span');h.hidden=true;$(id).before(h);homes[id]=h;});
 function applyMode(){
@@ -1334,6 +1364,177 @@ function plot(cs,segs){
   if(chartOn)drawChart();
 }
 
+/* ---------- check recorded marks ----------
+   Read-only: every fix the page has loaded is plotted for the race selected (or for all races), so the RO or scorer can
+   spot one that looks out of place. Nothing here is sent to the server or changes a course or a fix. The checks are
+   advice in plain words and never block anything; their thresholds are tuned to one day's fixes (4 Oct 2026).
+   One element, shown in both views: it is moved between section 1 and the bottom of Race view like the other SHARED
+   controls, so it keeps whether it is open. */
+const FIX_AGE_CHECK_S=20, FIX_AGE_BAD_S=300;   // position age when the phone saved the fix: "check" from 20 s, "likely wrong" over 5 min
+const PIN_NEAR_M=60;        // a Start or Finish Pin this close to a mark of the same race
+const LINE_SQUARE_DEG=45;   // a start line this far off square to the leg to the race's first mark
+const SAME_NAME_M=500;      // a mark (not a line end) this far from the nearest fix of its name in another race
+let fxAll=false, fxChart=false, fxSel='', fxFit='', FxMap=null, FxLayer=null;
+const FX_SHAPE=['●','■','▲','◆'];
+function fxCol(r){return r<=3?'var(--r'+r+')':'var(--ink)';}
+function fxShape(r,x,y,s,attr){const k=(r-1)%4;
+  if(k===0)return '<circle cx="'+x+'" cy="'+y+'" r="'+s+'" '+attr+'/>';
+  if(k===1)return '<rect x="'+(x-s)+'" y="'+(y-s)+'" width="'+2*s+'" height="'+2*s+'" '+attr+'/>';
+  const p=k===2?[[0,-1.25],[1.15,.85],[-1.15,.85]]:[[0,-1.35],[1.35,0],[0,1.35],[-1.35,0]];
+  return '<polygon points="'+p.map(q=>(x+q[0]*s).toFixed(1)+','+(y+q[1]*s).toFixed(1)).join(' ')+'" '+attr+'/>';}
+// how old the position was when the phone saved it. A fix id starts with the phone's clock, Date.now() in base 36, on
+// both pages, so: id time minus the position's own time, which a move to another race does not change. For an id that
+// is not time-based, when the server received it instead (a fix sent later, after no signal, then also shows a gap).
+function fixAge(m){if(typeof m.tms!=='number')return null;
+  const id=String(m.sid||''), t=/^[0-9a-z]{9,}$/.test(id)?parseInt(id.slice(0,-6),36):NaN;
+  if(t>=m.tms-60000&&t<=m.tms+86400000)return {s:(t-m.tms)/1000,by:'id'};
+  return typeof m.rcv==='number'?{s:m.rcv-m.tms/1000,by:'server'}:null;}
+function fmtAge(s){return s<120?Math.round(s)+' s':(s/60).toFixed(1)+' min';}
+function fxTyped(m){return m.acc===0&&!m.device;}
+function fxHms(m){return typeof m.tms==='number'?hhmm(m.tms)+':'+pad(new Date(m.tms).getSeconds(),2):(m.time||'');}
+function askText(name,r){return name+', Race '+r+': please go back to the mark, wait ten seconds, then tap Record again.';}
+// every check, on every fix of the day: per fix (keyed by refFor) and per race
+function fxChecks(list){
+  const fl=new Map(), rf=[], at=m=>m.time||'?';
+  const add=(m,lvl,txt)=>{const k=refFor(m);if(!fl.has(k))fl.set(k,[]);fl.get(k).push({lvl,txt});};
+  const latestOf=(r,test)=>{let b=null;list.forEach(m=>{if(m.race<=r&&test(m.name)&&(!b||m.race>b.race||
+    (m.race===b.race&&(fixMoment(m)||0)>(fixMoment(b)||0))))b=m;});return b;};
+  list.forEach(m=>{const a=fixAge(m);if(!a||a.s<FIX_AGE_CHECK_S)return;const bad=a.s>FIX_AGE_BAD_S;
+    add(m,bad?'bad':'check','Position '+fmtAge(a.s)+' old when '+(a.by==='id'?'the phone saved it':
+      'the server received it (a fix sent later, after no signal, also shows this)')+(bad?': probably not where the mark is.':': the phone may have used an earlier position.'));});
+  [...new Set(list.map(m=>m.race))].sort((a,b)=>a-b).forEach(r=>{const own=list.filter(m=>m.race===r);
+    own.filter(m=>isStartPin(m.name)||isFinishPin(m.name)).forEach(p=>own.filter(x=>!isLineMark(x.name)).forEach(x=>{const d=rhumb(p,x).m;
+      if(d<PIN_NEAR_M)add(p,'check',Math.round(d)+' m from the Race '+r+' '+x.name+' ('+at(x)+'): a pin this close may have been recorded at the mark.');}));
+    // the start line against the leg to the first mark of the race's first course; the line ends as the race has them
+    const cb=latestOf(r,isCB), pin=latestOf(r,isStartPin); let first=null;
+    for(let st=0;!first&&st<9;st++){const e=(S.courses[ckey(r,st)]||[])[0];if(e)first=markById(typeof e==='string'?e:e.id)||null;}
+    if(cb&&pin&&first){const ln=rhumb(cb,pin).brg, lg=rhumb({lat:(cb.lat+pin.lat)/2,lon:(cb.lon+pin.lon)/2},first).brg;
+      const off=Math.abs((((lg-ln)%180)+180)%180-90);
+      if(off>LINE_SQUARE_DEG){const t='Race '+r+' start line (committee boat '+at(cb)+(cb.race<r?' from Race '+cb.race:'')+', pin '+at(pin)+
+          (pin.race<r?' from Race '+pin.race:'')+') is '+Math.round(off)+'° off square to the leg to '+first.name+': one end may be wrong.';
+        if(pin.race===r)add(pin,'check',t);else rf.push({race:r,txt:t,ask:askText('Start Pin',r)});}}
+    // no finish time is kept: a Start Pin later than the race's last Finish Pin, or a Finish Pin later than the next race's first start
+    const fp=own.filter(x=>isFinishPin(x.name)&&fixMoment(x)!==null).sort((a,b)=>fixMoment(b)-fixMoment(a))[0];
+    if(fp)own.filter(m=>isStartPin(m.name)&&fixMoment(m)>fixMoment(fp)).forEach(p=>
+      add(p,'check','Recorded at '+at(p)+', after the Race '+r+' Finish Pin ('+at(fp)+'). Where one line serves as start and finish this can be expected; otherwise check which race it belongs to.'));
+    const nx=startMoment(r+1,0);
+    if(nx!==null)own.filter(m=>isFinishPin(m.name)&&fixMoment(m)>nx).forEach(p=>
+      add(p,'check','Recorded at '+at(p)+', after Race '+(r+1)+' started ('+S.startTimes[ckey(r+1,0)]+'). Check which race it belongs to.'));
+    if(!own.some(m=>isCB(m.name))){const c=latestOf(r,isCB);
+      rf.push({race:r,txt:'Race '+r+' has no committee boat fix of its own'+(c?'; the Race '+c.race+' committee boat ('+at(c)+') is carried forward.':', and none from an earlier race.'),
+        ask:'Committee boat, Race '+r+': please record it from the committee boat. Wait ten seconds, then tap Record.'});}
+  });
+  // the same mark in different races: a fix far from every other race's fix of that name
+  list.filter(m=>!isLineMark(m.name)).forEach(m=>{let b=null;
+    list.forEach(x=>{if(x.race===m.race||isLineMark(x.name)||norm(x.name)!==norm(m.name))return;const d=rhumb(m,x).m;if(!b||d<b.d)b={d,x};});
+    if(b&&b.d>SAME_NAME_M)add(m,'check',Math.round(b.d)+' m from the nearest '+m.name+' in another race (Race '+b.x.race+', '+at(b.x)+
+      '): check it is the same mark, or that it was moved.');});
+  return {fl,rf};
+}
+function fxFlag(f){return '<p class="fxFlag'+(f.lvl==='bad'?' bad':'')+'">⚠ '+(f.lvl==='bad'?'Likely wrong: ':'Check: ')+esc(f.txt)+'</p>';}
+// the same three ways out as section 6: a WhatsApp link, the phone's Share sheet where there is one, and Copy
+function fxAsk(t){return '<div class="fxAsk"><a class="fxBtn" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(t)+'">Ask in WhatsApp</a>'+
+  (navigator.share?'<button type="button" class="fxBtn" data-fx="share" data-t="'+esc(t)+'">Share…</button>':'')+
+  '<button type="button" class="fxBtn" data-fx="copy" data-t="'+esc(t)+'">Copy</button></div>';}
+function renderFix(){
+  const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
+  const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
+  const shown=own.concat(carried).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
+  const rflags=rf.filter(f=>fxAll||f.race===r), flagged=shown.filter(m=>fl.has(refFor(m)));
+  // the closed line counts fixes (a fix with several flags is one); a race-level note (no committee boat, a carried
+  // line end off square) is not a fix of the race shown, so it is counted apart
+  const nBad=flagged.filter(m=>fl.get(refFor(m)).some(f=>f.lvl==='bad')).length, n=flagged.length, nr=rflags.length;
+  $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+own.length+' fix'+(own.length===1?'':'es')+
+    (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+' fix'+(n===1?'':'es')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
+    (nr?' · '+nr+' race note'+(nr===1?'':'s'):'');
+  $('fixSum').className=nBad?'bad':'';
+  if(!$('fixCheck').open)return;
+  // phones lettered A, B, C… in the order of their first fix of the day: the id itself is a long random string
+  const ph={}; all.slice().sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0)).forEach(m=>{if(m.device&&!ph[m.device])ph[m.device]=String.fromCharCode(65+Object.keys(ph).length);});
+  const car=m=>!fxAll&&m.race<r;
+  const lab1=m=>[m.name,m.time,fxTyped(m)?'estimate (typed)':accOf(m)].filter(Boolean).join(' ');
+  const lab2=m=>[fxAll?'Race '+m.race:car(m)?'from Race '+m.race:'',m.recorder||(m.device?'Phone '+ph[m.device]:''),m.pending?'waiting to send':''].filter(Boolean).join(' · ');
+  $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart;
+  if(fxChart)setTimeout(()=>fxDrawChart(shown,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):'')),0);
+  else $('fxPlot').innerHTML=fxSketch(shown,fl,lab1,lab2,car);
+  const sm=shown.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm);
+  $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+(car(sm)?' (carried into Race '+r+')':'')+
+    '<br>Time '+esc(fxHms(sm)||'not known')+' · '+(fxTyped(sm)?'estimate, typed in':accOf(sm)||'accuracy not known')+
+    '<br>Phone '+(sm.device?esc(ph[sm.device]):'none (unattributed)')+' · Recorder: '+esc(sm.recorder||'not given')+
+    '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+
+    '<br>'+(sm.pending?'Waiting to send from this phone':a?'Position '+fmtAge(Math.max(0,a.s))+' old when '+(a.by==='id'?'the phone saved it':'the server received it'):'Age of the position not known')+
+    (fl.get(fxSel)||[]).map(fxFlag).join('')+'</div>':'';
+  $('fxList').innerHTML=rflags.map(f=>'<li>'+fxFlag({lvl:'check',txt:f.txt})+fxAsk(f.ask)+'</li>').concat(shown.map(m=>{const k=refFor(m), f=fl.get(k)||[];
+    return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
+      FX_SHAPE[(m.race-1)%4]+'</span> '+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+'</button>'+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
+    '<li class="empty">No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.</li>';
+}
+// the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
+// dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong)
+function fxSketch(shown,fl,lab1,lab2,car){
+  if(!shown.length)return '';
+  const W=340,H=360,P=34, lat0=shown.reduce((s,m)=>s+m.lat,0)/shown.length, k=Math.cos(rad(lat0));
+  const xs=shown.map(m=>m.lon*k), ys=shown.map(m=>m.lat), x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  // the fixes keep clear of a band at the foot for the scale bar (B px), so a label never sits on it
+  const B=24, s=Math.min((W-2*P)/Math.max(x1-x0,.002),(H-2*P-B)/Math.max(y1-y0,.002)), cx=(x0+x1)/2, cy=(y0+y1)/2;
+  const pts=shown.map(m=>({m,x:+(W/2+(m.lon*k-cx)*s).toFixed(1),y:+((H-B)/2-(m.lat-cy)*s).toFixed(1)}));
+  // t: labels, which never take a tap; h: a wide tap area round each fix; g: the fixes, drawn over every tap area,
+  // so tapping a drawn fix always picks that fix even where two are close together
+  let g='', t='', h='';
+  pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race);
+    const attr=car(m)?'fill="none" stroke="'+col+'" stroke-width="2" stroke-dasharray="3 2" opacity=".6"':
+      fxTyped(m)?'fill="var(--surface)" stroke="'+col+'" stroke-width="2"':'fill="'+col+'" stroke="var(--surface)" stroke-width="1"';
+    h+='<circle data-k="'+esc(key)+'" cx="'+p.x+'" cy="'+p.y+'" r="16" fill="transparent" style="cursor:pointer"/>';
+    g+='<g data-k="'+esc(key)+'" style="cursor:pointer">'+
+      (key===fxSel?'<circle cx="'+p.x+'" cy="'+p.y+'" r="14" fill="none" stroke="var(--sea)" stroke-width="2"/>':'')+
+      (f.length?'<circle cx="'+p.x+'" cy="'+p.y+'" r="10.5" fill="none" stroke="'+(f.some(x=>x.lvl==='bad')?'var(--warn)" stroke-width="2.5"':'var(--muted)" stroke-width="1.5"')+'/>':'')+
+      fxShape(m.race,p.x,p.y,6,attr)+'</g>';});
+  // labels right of the point (left near the right edge), nudged down where two on the same side would overlap
+  const labs=pts.map(p=>({p,right:p.x<W*.55,y:p.y+4})).sort((a,b)=>a.y-b.y);
+  labs.forEach((a,i)=>{for(let j=0;j<i;j++){const b=labs[j];if(a.right===b.right&&Math.abs(a.p.x-b.p.x)<130&&a.y-b.y<25)a.y=b.y+25;}});
+  labs.forEach(a=>{const p=a.p, x=a.right?p.x+11:p.x-11, an=a.right?'':' text-anchor="end"', l2=lab2(p.m);
+    if(a.y-p.y>12)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+x+'" y2="'+(a.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
+    t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+an+'>'+esc(lab1(p.m))+'</text>'+
+      (l2?'<text x="'+x+'" y="'+(a.y+12)+'" font-size="10" fill="var(--muted)"'+an+'>'+esc(l2)+'</text>':'');});
+  const mpx=s/111320; let bar=20; [50,100,200,500,1000,2000].forEach(b=>{if(b*mpx<=W*.35)bar=b;});
+  t+='<g stroke="var(--ink)" stroke-width="2"><line x1="14" y1="'+(H-14)+'" x2="'+(14+bar*mpx).toFixed(1)+'" y2="'+(H-14)+'"/></g>'+
+    '<text x="14" y="'+(H-20)+'" font-size="11" fill="var(--muted)">'+(bar<1000?bar+' m':bar/1000+' km')+'</text>'+
+    '<text x="'+(W-10)+'" y="16" font-size="12" text-anchor="end" fill="var(--ink)">N ↑</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Recorded fixes, north up; the list below has the same fixes"><g pointer-events="none">'+t+'</g>'+h+g+'</svg>';
+}
+// the chart: the same Leaflet as the course chart, a map of its own; fitted again only when the fixes shown change
+function fxDrawChart(shown,fl,lab){
+  if(!FxMap||!fxChart)return; FxMap.invalidateSize(); FxLayer.clearLayers();
+  const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(), key=shown.map(refFor).join(',');
+  if(key!==fxFit&&shown.length){fxFit=key;FxMap.fitBounds(shown.map(m=>[m.lat,m.lon]),{padding:[30,30],maxZoom:17});}
+  shown.forEach(m=>{const f=fl.get(refFor(m))||[], bad=f.some(x=>x.lvl==='bad'), col=m.race<=3?cv('--r'+m.race):cv('--ink'), c=!fxAll&&m.race<S.race;
+    L.circleMarker([m.lat,m.lon],{radius:7,color:bad?cv('--warn'):col,weight:bad?4:f.length?3:2,fillColor:col,fillOpacity:c||fxTyped(m)?0:.9,dashArray:c?'3,3':null})
+      .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();}).addTo(FxLayer);});
+}
+// the sketch stays up until Leaflet has loaded, so a refresh while it loads never leaves the box empty
+async function setFxView(chart){
+  $('fxStatus').className='status'; $('fxStatus').textContent=chart?'Loading chart…':'';
+  const ok=!chart||await loadLeaflet(); $('fxStatus').textContent='';
+  fxChart=chart&&ok;
+  if(!ok){$('fxStatus').className='status err';$('fxStatus').textContent='The chart needs a data connection, so the sketch is shown instead.';}
+  if(fxChart&&!FxMap){FxMap=L.map('fxMap').setView([51.82,-8.27],13);
+    L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(FxMap);
+    L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',{maxZoom:18,attribution:'OpenSeaMap'}).addTo(FxMap);
+    FxLayer=L.layerGroup().addTo(FxMap);}
+  $('fxSketchB').setAttribute('aria-pressed',String(!fxChart)); $('fxChartB').setAttribute('aria-pressed',String(fxChart));
+  fxFit=''; renderFix();
+}
+$('fixCheck').addEventListener('toggle',renderFix);
+$('fixCheck').addEventListener('click',async e=>{const b=e.target.closest('[data-fx]'), pt=e.target.closest('[data-k]');
+  if(b&&b.dataset.fx==='share'){try{await navigator.share({text:b.dataset.t});}catch(_){}return;}
+  if(b&&b.dataset.fx==='copy'){try{await navigator.clipboard.writeText(b.dataset.t);b.textContent='Copied';setTimeout(()=>{b.textContent='Copy';},1500);}
+    catch(_){$('fxDet').innerHTML='<pre class="fxTxt">'+esc(b.dataset.t)+'</pre>';const rg=document.createRange();rg.selectNodeContents($('fxDet').firstChild);
+      const sl=getSelection();sl.removeAllRanges();sl.addRange(rg);}return;}
+  if(pt){fxSel=fxSel===pt.dataset.k?'':pt.dataset.k;renderFix();if(b&&fxSel)$('fxDet').scrollIntoView({block:'nearest'});}});
+$('fxAll').onchange=e=>{fxAll=e.target.checked;fxFit='';renderFix();};
+$('fxSketchB').onclick=()=>setFxView(false);
+$('fxChartB').onclick=()=>setFxView(true);
+
 /* ---------- pull from server ---------- */
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2);}
 function hhmm(t){const d=new Date(t);return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2);}
@@ -1375,7 +1576,7 @@ async function pull(quiet){
     S.marks=S.marks.filter(m=>!m.server);
     const n={};
     list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
-      push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,server:true,sid:m.id,
+      push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,rcv:typeof m.received==='number'?m.received:null,server:true,sid:m.id,
         device:typeof m.device==='string'?m.device:'',recorder:typeof m.recorder==='string'?m.recorder:''});});
     if(list.length)S.date=longDate(day);
     S.pulledDay=day;
