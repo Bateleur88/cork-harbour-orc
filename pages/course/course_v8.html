@@ -105,6 +105,14 @@ tr.segRow td:first-child{padding-left:18px}
 pre#out,pre#ssOut{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
 details.backup{margin-top:12px}
 details.backup summary{cursor:pointer;color:var(--muted);padding:6px 0}
+/* a section that folds away: its heading is the summary, with its own marker. Inside <summary> the h2 is the first of its
+   type, so h2:first-of-type would drop the rule above it: put it back */
+details.sec>summary{list-style:none;cursor:pointer}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary h2{border-top:1px solid var(--line);padding-top:14px}
+details.sec>summary h2::before{content:"▸ ";color:var(--muted)}
+details.sec[open]>summary h2::before{content:"▾ "}
+.secSrc{font-weight:400;font-size:.85rem;color:var(--muted);overflow-wrap:anywhere}
 .starts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .starts button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.9rem}
 .starts button[aria-pressed="true"]{background:var(--sea);color:var(--paper)}
@@ -176,7 +184,9 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <button class="ghost" id="addManual">Add a mark by typing its position</button>
   </details>
 
-  <h2>2 · Import a harbour course</h2>
+  <!-- closed on every load, and left as the RO sets it until the page is reloaded: the state is not saved -->
+  <details class="sec" id="cardSec">
+  <summary><h2>2 · Import a harbour course <span class="secSrc" id="cardSecSrc"></span></h2></summary>
   <!-- once a course is imported for this race and start, the section shrinks to one line; the button reopens it -->
   <div class="cardsum" id="cardSum" hidden><span id="cardSumText"></span><button type="button" id="cardReopen">Choose another course</button></div>
   <div id="cardBody">
@@ -192,6 +202,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <button class="act" id="cardImport">Import this course</button>
   <p class="status" id="cardStatus" role="status" aria-live="polite"></p>
   </div>
+  </details>
 
   <h2>3 · Build the course</h2>
   <div class="tabs" id="tabs" role="group" aria-label="Race"></div>
@@ -256,7 +267,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-03.2';
+const PAGE_VERSION='2026-10-05.1';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -860,12 +871,18 @@ function render(){
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum();
 }
 /* section 2 after import: one line (course, card distance, laid marks and flags) instead of the chooser;
-   "Choose another course" reopens it until the next import */
+   "Choose another course" reopens it until the next import. The section's own summary line names the card in use
+   and, once a course is imported for this race and start, says so, with ⚠ when the one line inside would be flagged,
+   so a card condition is not hidden by the closed section. */
 let cardOpen=false;
+// the card's workbook name up to its version: RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx -> ..._v3_19
+function cardShort(){return String(CARD.meta.source).replace(/\.xlsx$/i,'').replace(/^(.*_v\d+_\d+)_.*$/,'$1');}
 function renderCardSum(){
-  const cfg=(S.cardCfg||{})[ckey(S.race,S.start)], show=!!(cfg&&course().length&&!cardOpen);
+  const cfg=(S.cardCfg||{})[ckey(S.race,S.start)], has=!!(cfg&&course().length), show=has&&!cardOpen;
   $('cardSum').hidden=!show; $('cardBody').hidden=show;
-  if(!show)return;
+  const src='('+cardShort()+', '+Object.keys(CARD.courses).length+' courses)';
+  $('cardSecSrc').textContent=src;
+  if(!has)return;
   const d=CARD.courses[cfg.c], seq=d&&d.cfg[cfg.s+'|'+cfg.f];
   let nm=0; if(seq)for(let i=0;i<seq.length-1;i++){const p=CARD.pairs[seq[i]+'|'+seq[i+1]];if(p)nm+=p.nm;}
   const notes=[];
@@ -873,9 +890,12 @@ function renderCardSum(){
     if(cm.laid){const lm=markById(cardId(S.race,n));if(lm&&lm.laidSt)notes.push(n+(lm.atFix?': RIB fix '+lm.laidSt.use.time:': planning position'));}
     else if(cm.flag)notes.push(n+' flagged');});
   if(d&&d.cond)notes.push('Condition: '+d.cond);
+  const flag=notes.some(t=>!/RIB fix/.test(t));
+  $('cardSecSrc').textContent=src+' · Course '+cfg.c+' imported'+(flag?' ⚠':'');
+  if(!show)return;
   $('cardSumText').textContent=['Course '+cfg.c+' imported',cfg.s===cfg.f?cfg.s:cfg.s+' start, '+cfg.f+' finish',
     nm?nm.toFixed(2)+' nm on the card route':''].filter(Boolean).concat(notes).join(' · ');
-  $('cardSum').className='cardsum'+(notes.some(t=>!/RIB fix/.test(t))?' flag':'');
+  $('cardSum').className='cardsum'+(flag?' flag':'');
 }
 /* Remove start i of the current race only. Its groups, course and settings go, and the race's later starts move down one,
    each taking everything kept for it. Other races are not touched. The server keeps one record per race|start, so the

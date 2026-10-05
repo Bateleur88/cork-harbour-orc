@@ -144,6 +144,10 @@ footer "© Pat Tanner ORC Ireland".
   never taken from the RIBs' fixes or from a pasted WhatsApp backup. Unset, the
   field is empty with a red border and says so. An edit made without signal is
   kept on the phone and saved when there is signal.
+- *Import a harbour course* (section 2) is folded away, closed each time the page
+  opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
+  40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
+  Whether it is open is not saved.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
