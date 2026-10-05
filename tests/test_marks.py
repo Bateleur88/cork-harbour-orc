@@ -25,6 +25,9 @@ still present and unchanged:
                 refused 400, a body that is not UTF-8 refused 400 before it is read; a write failing part-way
                 is refused 500 by save_json; each refusal leaves series.json unchanged; a fix carrying a long
                 "series" (an old page) is accepted and stored without one
+  9  tap        the tap time (when Record was tapped) is stored and returned by GET; a fix without one (an old
+                page) has none; a bad tap (a string, negative, zero, INF, a boolean, more than a day from the
+                position's time) is dropped and the fix still accepted; moving a fix keeps its tap
 
 Each throwaway folder gets its own key.js with a test key; the real key is never in this repository.
 Fixture positions have 7 decimals, as marks.php stores them: PHP before 7.1 writes JSON numbers to 14
@@ -314,13 +317,45 @@ def t8_series():
            f'old-page fix {"stored without series" if stored and "series" not in stored else stored}; {detail}')
 
 
+def t9_tap():
+    d = setup('t9')
+    t = 1790099999000
+    s = [req(d, body=fix('tapfix', device=DEVICE, recorder='Pat', tap=t + 2000))[0],
+         req(d, body=fix('notap', device=DEVICE))[0]]                  # an old RIB page: no tap
+    st, g = req(d, 'GET', query=f'date={DAY}')
+    got = {m['id']: m for m in g.get('marks', [])}
+    stored, returned = load(day_file(d)).get('tapfix', {}).get('tap'), got.get('tapfix', {}).get('tap')
+    # each bad tap: the fix is accepted, stored without a tap
+    bad = {'string': '1790100001000', 'negative': -5, 'zero': 0, 'boolean': True, 'null': None,
+           'two days off': t + 2 * 86400000}
+    dropped = {}
+    for label, v in bad.items():
+        mid = 'bad' + ''.join(c for c in label if c.isalnum())
+        s_bad, _ = req(d, body=fix(mid, tap=v))
+        dropped[label] = (s_bad, 'tap' in load(day_file(d)).get(mid, {'tap': 'MISSING FIX'}))
+    raw = json.dumps(fix('badinf', tap=1)).replace('"tap": 1', '"tap": 1e400').encode()   # decodes to INF
+    s_inf, _ = req(d, body=raw)
+    dropped['INF'] = (s_inf, 'tap' in load(day_file(d)).get('badinf', {'tap': 'MISSING FIX'}))
+    # the RO page moving the fix re-posts it without a tap: the tap stays
+    s_move, _ = req(d, body={'action': 'add', 'id': 'tapfix', 'date': DAY, 'race': 2, 'name': 'Gybe',
+                             'lat': 51.81, 'lon': -8.31, 'acc': 3.5, 'time': t})
+    moved = load(day_file(d))['tapfix']
+    ok, detail = intact(d)
+    good = (ok and s == [200, 200] and st == 200 and stored == t + 2000 and returned == t + 2000
+            and 'tap' not in got.get('notap', {'tap': 1}) and all(v == (200, False) for v in dropped.values())
+            and s_move == 200 and moved['race'] == 2 and moved.get('tap') == t + 2000)
+    report('9 tap time', good,
+           f'statuses {s}; stored {stored!r}, GET {returned!r}; old page no tap {"tap" not in got.get("notap", {})}; '
+           f'bad taps (status, kept?) {dropped}; after move race {moved["race"]} tap {moved.get("tap")!r}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
         return 2
     print(subprocess.run([PHPCGI, '-v'], capture_output=True, text=True).stdout.splitlines()[0])
     try:
-        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series):
+        for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

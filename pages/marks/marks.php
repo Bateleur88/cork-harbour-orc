@@ -15,6 +15,9 @@
  * Fixes from the RIB page also carry "device" (a random id per phone) and "recorder" (an optional
  * typed name, may be ""). Older fixes, and fixes added from the RO page, have neither: read a
  * missing field as unattributed. Neither field is ever a reason to refuse a fix.
+ * Fixes from the RIB page also carry "tap": when the Record button was tapped (ms, the phone's clock),
+ * so the age of the position ("time", the position's own time) can be measured exactly. Older fixes and
+ * the RO page's have none. A tap that is not a number within a day of "time" is dropped, never refused.
  */
 function race_key() {                 // '' if key.js is missing, unreadable, too short or still the placeholder
   $f = dirname(__FILE__) . '/key.js';
@@ -166,6 +169,9 @@ if ($action === 'add') {
     $who = trim(strip_tags($who));
     $rec['recorder'] = preg_match('/^.{0,60}/us', $who, $mm) ? trim($mm[0]) : '';   // cut on a character, not a byte
   }
+  // when Record was tapped: kept only if a number within a day of the position's time, otherwise dropped silently
+  $tap = arg($in, 'tap', null);
+  if ((is_int($tap) || is_float($tap)) && $tap > 0 && abs($tap - $time) < 86400000) $rec['tap'] = (float)$tap;
 } elseif ($action !== 'delete') {
   out(400, array('ok' => false, 'error' => 'bad action'));
 }
@@ -176,8 +182,8 @@ $marks = load_json($f);
 
 if ($action === 'add') {
   if (!isset($marks[$id]) && count($marks) >= MAX_FIXES) out(429, array('ok' => false, 'error' => 'day full'));
-  if (isset($marks[$id]) && is_array($marks[$id])) {   // a re-post (the RO page moving a fix to another race) keeps who recorded it
-    foreach (array('device', 'recorder') as $k)
+  if (isset($marks[$id]) && is_array($marks[$id])) {   // a re-post (the RO page moving a fix to another race) keeps who recorded it, and when
+    foreach (array('device', 'recorder', 'tap') as $k)
       if (!isset($rec[$k]) && isset($marks[$id][$k])) $rec[$k] = $marks[$id][$k];
   }
   $marks[$id] = $rec;                 // same id twice (a retry) just overwrites
