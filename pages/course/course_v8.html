@@ -105,6 +105,8 @@ tr.segRow td:first-child{padding-left:18px}
 pre#out,pre#ssOut{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:.9rem;max-height:220px;overflow:auto;margin:10px 0 0}
 details.backup{margin-top:12px}
 details.backup summary{cursor:pointer;color:var(--muted);padding:6px 0}
+details.review{margin-top:4px}details.review>summary{cursor:pointer;color:var(--muted);padding:6px 0}
+.rvBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.rvBtns button{padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
 /* a section that folds away: its heading is the summary, with its own marker. Inside <summary> the h2 is the first of its
    type, so h2:first-of-type would drop the rule above it: put it back */
 details.sec>summary{list-style:none;cursor:pointer}
@@ -224,6 +226,17 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <label>Series name<input id="series" maxlength="60" autocomplete="off" placeholder="Not set – type the series name"></label>
   </div>
   <p class="status" id="seriesStatus" role="status" aria-live="polite"></p>
+  <!-- typed once per device, kept outside S (Clear everything keeps both); closed on every load, the state is not saved -->
+  <details class="review" id="reviewSec">
+    <summary>Review: RO or scorer name and key <span id="reviewState"></span></summary>
+    <p class="cardnote">Typed once on this device and kept here, also by Clear everything. The name is saved with each course sent from this device. The RO key is for the scoring review and is never shown again.</p>
+    <div class="fields"><label>RO or Scorer name<input id="roName" autocomplete="off" placeholder="Not set"></label></div>
+    <div class="rvBtns"><button type="button" id="roNameSave">Save name</button><button type="button" id="roNameDel">Remove name</button></div>
+    <p class="status" id="roNameStatus" role="status" aria-live="polite"></p>
+    <div class="fields"><label>RO key<input id="roKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Not set"></label></div>
+    <div class="rvBtns"><button type="button" id="roKeySave">Save key</button><button type="button" id="roKeyDel">Remove key</button></div>
+    <p class="status" id="roKeyStatus" role="status" aria-live="polite"></p>
+  </details>
 
   <h2>1 · Marks from the RIBs</h2>
   <div class="fields" style="margin-top:0">
@@ -349,7 +362,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.8';
+const PAGE_VERSION='2026-10-06.9';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -399,6 +412,26 @@ const SERIES_KEY=STORE+'course-series';
 let series=(()=>{try{const o=JSON.parse(localStorage.getItem(SERIES_KEY)||'{}');
   if(o&&typeof o.name==='string')return{name:o.name,dirty:!!o.dirty};}catch(e){}return{name:'',dirty:false};})();
 function saveSeries(){try{localStorage.setItem(SERIES_KEY,JSON.stringify(series));}catch(e){}}
+/* Review: the RO or scorer's name and the RO key, typed once on this phone and kept outside S, so Clear everything keeps
+   them. The name goes as "by" with every course save while it is valid. The RO key is for the review decisions only, sent
+   by a later version as the X-RO-Key header of a decision write and nowhere else: it is never shown, logged, put in a URL
+   or in any text this page builds, and its field is emptied as soon as Save is tapped. */
+const RO_NAME_KEY=STORE+'ro-name', RO_KEY_KEY=STORE+'ro-key';
+const RO_KEY_RX=/^[A-Za-z0-9_-]{16,64}$/;   // as marks.php checks data/ro-key.php
+// a name as marks.php keeps "by" and "who": runs of white space become one space, ends trimmed
+const roNameClean=v=>String(v).replace(/\s+/g,' ').trim();
+// what is wrong with a cleaned name, in plain words; '' if it is valid. As marks.php: 1 to 40 characters, no < or >, no
+// control characters; C1 controls (U+0080 to U+009F) are refused here too, which marks.php would accept
+function roNameProblem(v){
+  if(!v)return 'Type a name, or tap Remove name.';
+  if(/[<>]/.test(v))return 'The name cannot contain < or >.';
+  if(/[\u0000-\u001f\u007f-\u009f]/.test(v))return 'The name cannot contain control characters.';
+  if(Array.from(v).length>40)return 'Use at most 40 characters.';
+  return '';}
+// the saved name, or '' when there is none or it is not valid
+function roName(){let v='';try{v=localStorage.getItem(RO_NAME_KEY)||'';}catch(e){}v=roNameClean(v);return roNameProblem(v)?'':v;}
+// whether a key of the right form is saved; the key itself is not returned
+function roKeySaved(){try{return RO_KEY_RX.test(localStorage.getItem(RO_KEY_KEY)||'');}catch(e){return false;}}
 
 
 /* ---------- geometry (rhumb line) ---------- */
@@ -1920,8 +1953,10 @@ async function saveCourses(force,only){
   // the day's S.synced has been rebuilt since, and the same key (1|0) can exist on both days
   const gen=dayGen;
   try{
-    for(const [k,rec] of recs){const js=JSON.stringify(rec);
-      await postFix({action:'course',date:day,key:k,data:rec});
+    for(const [k,rec] of recs){const js=JSON.stringify(rec), by=roName();
+      // "by" only with a valid name: without one the request is exactly as before
+      const body={action:'course',date:day,key:k,data:rec}; if(by)body.by=by;
+      await postFix(body);
       if(gen===dayGen&&S.pulledDay===day){S.synced[k]=js; save();}}
   }catch(e){}
   savingC=false;
@@ -2014,6 +2049,30 @@ async function syncSeries(){
   if(refused)syncSeries();   // put the saved name back now, not at the next refresh
 }
 $('series').onchange=e=>{series.name=e.target.value.trim();series.dirty=true;saveSeries();showSeries();render();syncSeries();};
+/* ---------- Review: name and RO key (see RO_NAME_KEY) ---------- */
+function rvStatus(id,msg,cls){$(id).textContent=msg;$(id).className='status'+(cls?' '+cls:'');}
+function showReview(){const n=roName(), k=roKeySaved();
+  if(document.activeElement!==$('roName'))$('roName').value=n;
+  $('roKey').placeholder=k?'●●●●●●●● saved – type a new key to change it':'Not set';
+  $('reviewState').textContent='· '+(n?'name set':'no name')+' · '+(k?'key saved':'no key');}
+$('roNameSave').onclick=()=>{const v=roNameClean($('roName').value), p=roNameProblem(v);
+  if(p){rvStatus('roNameStatus',p,'err');return;}
+  try{localStorage.setItem(RO_NAME_KEY,v);}catch(e){rvStatus('roNameStatus','Could not keep the name on this device.','err');return;}
+  $('roName').value=v; rvStatus('roNameStatus','Name saved on this device. It goes with each course saved from now on.','ok'); showReview();};
+$('roNameDel').onclick=()=>{try{localStorage.removeItem(RO_NAME_KEY);}catch(e){}
+  $('roName').value=''; rvStatus('roNameStatus','Name removed from this device.','ok'); showReview();};
+// the field is emptied whatever was typed, valid or not, before any message is shown
+$('roKeySave').onclick=()=>{const el=$('roKey'), ok=RO_KEY_RX.test(el.value.trim()); let kept=false;
+  if(ok){try{localStorage.setItem(RO_KEY_KEY,el.value.trim());kept=true;}catch(e){}}
+  el.value='';
+  if(!ok)rvStatus('roKeyStatus','That is not an RO key: it is 16 to 64 letters, digits, - or _, with no spaces. Type it again.','err');
+  else if(!kept)rvStatus('roKeyStatus','Could not keep the RO key on this device.','err');
+  else rvStatus('roKeyStatus','RO key saved on this device. It is not shown again.','ok');
+  showReview();};
+$('roKeyDel').onclick=()=>{try{localStorage.removeItem(RO_KEY_KEY);}catch(e){}
+  $('roKey').value=''; rvStatus('roKeyStatus','RO key removed from this device.','ok'); showReview();};
+$('roName').onkeydown=e=>{if(e.key==='Enter')$('roNameSave').click();};
+$('roKey').onkeydown=e=>{if(e.key==='Enter')$('roKeySave').click();};
 var cbWatch=null, cbStop=null;   // cbStop ends a committee boat fix in progress without saving it (Clear everything)
 $('recCB').onclick=()=>{
   if(cbWatch!==null)return;
@@ -2132,7 +2191,7 @@ $('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeT
    (module variables, inputs and panels render() does not set, work under way). Together they must leave the page as a
    reload would. THE ONE PLACE TO UPDATE: a change that adds page state outside S resets it in clearPageState(), or Clear
    everything leaves it on screen until the page is reloaded. Kept on purpose, outside S: the series name and the race
-   key (last values seen). Nothing here is sent to the server. */
+   key (last values seen), and the RO or scorer name and RO key (Review). Nothing here is sent to the server. */
 function clearPageState(){
   pullSeq++; pullOk=false; lastPullAt=0; dayGen++; clearTimeout(saveTimer);   // a load or save under way changes nothing now
   if(cbWatch!==null&&cbStop)cbStop();                                         // a committee boat fix in progress is dropped
@@ -2146,11 +2205,13 @@ function clearPageState(){
   $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
   cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;
   $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
-  ['readStatus','cbStatus','seriesStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
+  ['readStatus','cbStatus','seriesStatus','roNameStatus','roKeyStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
+  $('reviewSec').open=false; $('roKey').value=''; $('roName').value=''; showReview();   // Review: kept, shown as on a load
 }
 // what this phone holds that the server does not have yet, which a clear would lose: fixes waiting to send (committee
 // boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
-// saveCourses would send them; '' when there is none. The series name is not counted: a clear keeps it.
+// saveCourses would send them; '' when there is none. The series name, the Review name and the RO key are not counted:
+// a clear keeps them.
 function unsentText(){const n=S.outbox.length, c=allKeys().filter(isDirty).length, count=(x,one,many)=>x+' '+(x===1?one:many);
   return [n&&count(n,'fix','fixes'),c&&count(c,'course edit','course edits')].filter(Boolean).join(' and ');}
 let armed=false;
@@ -2162,7 +2223,7 @@ $('clear').onclick=()=>{if(!armed){armed=true;const u=unsentText();$('clear').te
 render();
 $('recCB').textContent=cbLabel();
 sendOutbox();
-showSeries(); syncSeries();
+showSeries(); syncSeries(); showReview();
 setInterval(()=>{if(!document.hidden)syncSeries();},30000);
 window.addEventListener('online',syncSeries);
 })();

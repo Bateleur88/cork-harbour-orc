@@ -172,8 +172,9 @@ edits unsent, and Clear everything warns about them); to unblock that day's save
 put that day's `courses-history-YYYY-MM-DD.json` back from a dated backup of `data/`,
 or remove it (the history then starts again from the next save). A course save may
 carry `by`, the name of whoever saved it (text, cut to 40 characters, dropped if not
-text); it is stored with that version and moves into the history with it. Older
-pages send none, and an older `marks.php` ignores it. Read with
+text); it is stored with that version and moves into the history with it. The RO
+page sends its Review name (below) as `by`; with no name set, and from older pages,
+there is none, and an older `marks.php` ignores it. Read with
 `GET ?type=coursehistory&date=` and the race key; comparing and restoring versions
 is for a later page.
 
@@ -211,6 +212,32 @@ footer "© 2026 Pat Tanner ORC Ireland".
   never taken from the RIBs' fixes or from a pasted WhatsApp backup. Unset, the
   field is empty with a red border and says so. An edit made without signal is
   kept on the phone and saved when there is signal.
+- *Review* (under the series name, closed on every load): "RO or Scorer name" and
+  "RO key", each typed once per device and kept on it outside the saved state, so
+  Clear everything keeps them, like the series name and race key. Each has Save and
+  Remove; a new value replaces the old one. The name follows the rules of
+  `marks.php` (1 to 40 characters, white space runs made one space, no `<` or `>`, no
+  control characters, and here no U+0080 to U+009F either) and goes as `by` with
+  every course save while it is valid; with no name the request is as before. The
+  RO key must be 16 to 64 letters, digits, `-` or `_`; its field is a password field,
+  emptied when Save is tapped whether or not the key was valid, and the key is never
+  shown again, never put in a URL, a message or any text the page builds. Nothing
+  sends it yet: it is for the review decisions still to come, which will send it only
+  as the `X-RO-Key` header of a decision write.
+  Both are stored in clear text in this device's browser storage, like the race key,
+  so anyone with the device can read them: if a device that holds the RO key is
+  lost, change the RO key on the server. A name sent as `by` is stored with that
+  course version and is readable through `?type=courses` and `?type=coursehistory`
+  with the race key, so it is effectively public to anyone with the race key.
+  *For the decision writes still to come:* `keyFetch` treats every 403 as a race key
+  that may have changed, re-reads `key.js` and sends again. That retry is left as it
+  is; a decision write must read the error first. "RO key not set on the server…"
+  shows "Not saved: the RO key has not been set up on the server yet. The decision is
+  kept on this phone."; "bad RO key" shows "Not saved: the server did not accept this
+  phone's RO key. Enter it again in Setup → Review." and the Review line reads "key
+  refused by the server" (the key is kept, not deleted). Each shows beside the
+  decision in the fix detail and in Review. With no key saved, the decision actions
+  say "Enter the RO key in Setup → Review to record decisions."
 - *Import a harbour course* (section 2) is folded away, closed each time the page
   opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
   40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
@@ -324,7 +351,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
   courses saved there come back with Get latest marks. The series name and race key
-  last seen are kept. If this phone holds fixes not yet sent or course edits not
+  last seen, and the Review name and RO key, are kept (none of them is counted as
+  not sent). If this phone holds fixes not yet sent or course edits not
   yet saved, the first tap says so ("1 fix and 2 course edits not sent yet – tap
   again to clear anyway"). A change that adds page state outside the saved state `S`
   must reset it in `clearPageState()`, the one place the clear is kept in step with
@@ -448,7 +476,10 @@ banner shows its `PAGE_VERSION`, the title says TEST, it is `noindex`, `marks.ph
 is copied byte for byte and nothing else in the page changed. Then it feeds the
 script pages it must refuse (a storage key without `STORE`, a stray `/marks/` path,
 a missing or doubled key.js tag, no `STORE` line, no title) and checks each is
-refused and leaves an earlier build untouched. Needs no PHP and no browser.
+refused and leaves an earlier build untouched. It also checks that the page's
+storage key names (what follows `STORE+`) are exactly the known list, `pv-`,
+`race-key`, `course-plot-v1`, `course-series`, `ro-name` and `ro-key`, so a key
+added or dropped must update the test. Needs no PHP and no browser.
 
 ## Deploying the pages
 

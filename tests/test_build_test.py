@@ -9,7 +9,8 @@ altered in ways it must refuse and checks that it writes nothing:
   0  build      the test page talks only to /marks-test/, prefixes every browser storage key with "test-", shows
                 the red TEST banner with its PAGE_VERSION, "TEST" in the title and noindex; marks.php is copied
                 byte for byte; nothing else in the page changed; BUILD.txt names the version and both hashes
-  1  live page  the live page itself uses no browser storage key without STORE (so a key added later is caught)
+  1  live page  the live page itself uses no browser storage key without STORE (so a key added later is caught), and
+                the STORE+ key names in its code are exactly STORE_NAMES (a key added or dropped must update the list)
   2  refusals   a storage key without STORE (setItem, getItem, removeItem), any other use of localStorage or
                 sessionStorage (bracket access, .clear(), .key(), an alias, window['localStorage'],
                 window.localStorage, typeof, passing it as an argument), IndexedDB, document.cookie (also
@@ -32,6 +33,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, 'scripts', 'build_test.py')
 PAGE = os.path.join(ROOT, 'pages', 'course', 'course_v8.html')
 MARKS = os.path.join(ROOT, 'pages', 'marks', 'marks.php')
+# every browser storage key name the page writes after STORE ('pv-' is followed by a PAGE_VERSION). ro-name and ro-key
+# are the Review name and RO key, kept on the device outside S; the test copy must keep them under 'test-' like the rest
+STORE_NAMES = {'pv-', 'race-key', 'course-plot-v1', 'course-series', 'ro-name', 'ro-key'}
 failed = []
 
 
@@ -87,6 +91,9 @@ def t1_live_page():
     import build_test
     problems = build_test.storage_problems(read(PAGE))
     report('1 live page: every storage key uses STORE', not problems, '; '.join(problems))
+    names = set(re.findall(r"\bSTORE\s*\+\s*'([^']*)'", build_test.strip_comments(read(PAGE))))
+    report('1 live page: STORE+ key names are exactly STORE_NAMES', names == STORE_NAMES,
+           f'unexpected {sorted(names - STORE_NAMES)}, missing {sorted(STORE_NAMES - names)}')
 
 
 def t2_refusals(tmp):
