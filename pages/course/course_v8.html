@@ -336,14 +336,14 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <div class="raceOnly" id="slotFix"></div>
 
   <button class="clear setupOnly" id="clear">Clear everything</button>
-  <p class="foot">© Pat Tanner ORC Ireland</p>
+  <p class="foot">© 2026 Pat Tanner ORC Ireland</p>
 </div>
 <script>
 (function(){
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.1';
+const PAGE_VERSION='2026-10-06.2';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
