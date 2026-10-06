@@ -327,6 +327,7 @@ more or less than the legs table's total.
     scripts/make_snapshot.py  Builds the JSON the race officer page bundles.
     scripts/rebuild_page.py   Embeds that snapshot in the race officer page and bumps PAGE_VERSION.
     scripts/xlsx_edit.py      Surgical workbook edits, and a cell-level diff of two workbooks.
+    scripts/build_test.py     Builds the parallel TEST copy of the RO page and marks.php (see below).
 
 Command lines:
 
@@ -389,6 +390,16 @@ Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
 package on Linux), found on PATH or through the `PHP_CGI` environment variable.
 Tested with PHP 8.4 on Windows; the live host may differ.
 
+    tests/test_build_test.py  Tests for scripts/build_test.py.
+
+Builds a test copy into a throwaway folder and checks it: it talks only to
+`/marks-test/`, every browser storage key carries the `test-` prefix, the red TEST
+banner shows its `PAGE_VERSION`, the title says TEST, it is `noindex`, `marks.php`
+is copied byte for byte and nothing else in the page changed. Then it feeds the
+script pages it must refuse (a storage key without `STORE`, a stray `/marks/` path,
+a missing or doubled key.js tag, no `STORE` line, no title) and checks each is
+refused and leaves an earlier build untouched. Needs no PHP and no browser.
+
 ## Deploying the pages
 
     pages/course/index.html      ->  /course/index.html  (generated: see below)
@@ -419,6 +430,70 @@ name.
 
 `marks.php` keeps its data in `/marks/data/` and writes an `.htaccess` there that
 denies web access. That only works on Apache or LiteSpeed; check it on the live server.
+
+## Parallel test install
+
+A full copy of the RO page and `marks.php` that runs beside the live ones on the same
+site, on a copy of a day's files, so the live RIB page, live `marks.php` and live data
+are never touched. The RIB page has no test copy: its service worker deletes every
+other `record-` cache on the site, which would remove the live page's offline copy.
+
+    python scripts/build_test.py        ->  build/test/   (ignored by git)
+    build/test/course-test/index.html   ->  /course-test/index.html
+    build/test/marks-test/marks.php     ->  /marks-test/marks.php   (unchanged copy)
+
+The test page differs from the live one only in its `key.js` tag and `MARKS_BASE`
+(`/marks-test/`), `STORE` (`test-`, so every browser storage key it writes is
+`test-...` and it never reads or writes the live page's keys on the same phone),
+`PAGE_VERSION` (`...-test`), "TEST" in the title, `noindex`, and a red banner at
+the top showing its `PAGE_VERSION`. The script refuses, and writes nothing, if any
+storage key in the page lacks `STORE` or if any path could still reach `/marks/`.
+For every test build, also open it, use it, and list the browser's stored keys:
+every key it wrote must start with `test-`.
+
+Upload, in this order:
+
+1. Create `/course-test/` and `/marks-test/` beside `/course/` and `/marks/`, and
+   upload the two built files above.
+2. Place `/marks-test/key.js` by hand, in the format of `key.example.js`:
+   `window.RACE_KEY='...';` with a TEST race key, 6 characters or more, no quote
+   marks, and **different from the live key**. It is never part of the build.
+3. Open `https://tradboats.ie/course-test/` once. Its first request reaches
+   `/marks-test/marks.php` with the test key, and that creates `/marks-test/data/`
+   with its deny-all `.htaccess` (a request without the key is refused before that).
+   Check `https://tradboats.ie/marks-test/data/` is refused (403 Forbidden).
+4. Copy the day's files from `/marks/data/` into `/marks-test/data/` by FTP:
+   download `marks-2026-10-04.json`, `courses-2026-10-04.json` and `series.json`
+   and upload them to `/marks-test/data/`. Only a copy: nothing in `/marks/` changes.
+   Check `https://tradboats.ie/marks-test/data/marks-2026-10-04.json` is refused (403).
+5. Once a `marks.php` with the RO key is installed there: place
+   `/marks-test/data/ro-key.php` by hand, exactly two lines, `<?php` and
+   `return '...';`, with a TEST RO key of 16 to 64 letters, digits, `-` or `_`,
+   **different from the live RO key**. Check
+   `https://tradboats.ie/marks-test/data/ro-key.php` is refused (403) or blank,
+   never showing the key.
+
+`/marks-test/data/` then holds a copy of real fixes, with recorder names and phone
+ids: delete it (with the whole `/marks-test/`) when the rehearsal ends, and keep any
+download of it outside the repository.
+
+To remove it, delete `/course-test/` and `/marks-test/` on the server.
+
+## Live install: backup and rollback
+
+Before uploading `marks.php` or the RO page to the live paths (never within 12 hours
+of a race), keep, outside the repository and dated:
+
+1. `/marks/marks.php`, downloaded as `marks.php.live-YYYY-MM-DD`;
+2. `/course/index.html`, downloaded as `index.html.live-YYYY-MM-DD`;
+3. the whole `/marks/data/` folder, downloaded as `marks-data-YYYY-MM-DD/`.
+
+Upload `marks.php` first, then the page. To roll back, upload the saved `marks.php`
+and `index.html` again. Files a newer `marks.php` added to `data/` are ignored by the
+older one and can stay. Put a day's file back from the dated copy only if that file
+itself must be restored: it removes anything recorded or saved since the copy.
+Backups of `/marks/data/` will contain the RO key file (`data/ro-key.php`) once it is
+in place: keep them outside the repository and never share them.
 
 ## Before any release
 
