@@ -343,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.3';
+const PAGE_VERSION='2026-10-06.4';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1429,6 +1429,9 @@ const FX_W=340, FX_H=360, FX_W_WIDE=460, FX_H_WIDE=540;
 // All races labels ("R2 L 13:21"): width allowed per character at font size 11, the step a crowded label moves by,
 // and how many steps (alternately down and up) are tried before it is left where it first went
 const FX_LAB_CHAR=6.2, FX_LAB_STEP=13, FX_LAB_TRIES=12;
+// a fix label's halo: an outline in the box's background colour drawn under the letters (paint-order), so a race line
+// running under a label does not cut through the text; width in viewBox units
+const FX_HALO=3;
 // the lines the page's automatic rules would create, in the race's colour, under the fixes: width and dash pattern on
 // the sketch (viewBox units) and on the chart (px). wlc: a W-L leg with an end carried from an earlier race; cand: a
 // candidate start line (a fix recorded after the start), never used by default
@@ -1656,6 +1659,8 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
   // t: labels, which never take a tap; h: a wide tap area round each fix; g: the fixes, drawn over every tap area,
   // so tapping a drawn fix always picks that fix even where two are close together
   let g='', t='', h='';
+  // the fix labels' halo (not the scale or N: no line can reach the corners they sit in)
+  const halo=' stroke="var(--surface)" stroke-width="'+FX_HALO+'" stroke-linejoin="round" paint-order="stroke"';
   const at=new Map(pts.map(p=>[refFor(p.m),p]));
   res.lines.forEach(l=>{const a=at.get(l.a), b=at.get(l.b);if(!a||!b)return;
     const d=FX_LINE[l.kind==='candidate'?'cand':l.kind==='wl'&&l.carried.length?'wlc':l.kind];
@@ -1680,15 +1685,15 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
           if(b.x0>=2&&b.x1<=W-2&&b.y0>=2&&b.y1<=H-B&&!box.some(o=>hit(o,b))){pick=c;break;}}}
       const c=pick||first; box.push(c.b);
       if(Math.abs(c.y-p.y-4)>6)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+c.x+'" y2="'+(c.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
-      t+='<text x="'+c.x+'" y="'+c.y+'" font-size="11" fill="var(--ink)"'+(c.right?'':' text-anchor="end"')+'>'+esc(s)+'</text>';});
+      t+='<text x="'+c.x+'" y="'+c.y+'" font-size="11" fill="var(--ink)"'+halo+(c.right?'':' text-anchor="end"')+'>'+esc(s)+'</text>';});
   } else {
   // labels right of the point (left near the right edge), nudged down where two on the same side would overlap
   const labs=pts.map(p=>({p,right:p.x<W*.55,y:p.y+4})).sort((a,b)=>a.y-b.y);
   labs.forEach((a,i)=>{for(let j=0;j<i;j++){const b=labs[j];if(a.right===b.right&&Math.abs(a.p.x-b.p.x)<130&&a.y-b.y<25)a.y=b.y+25;}});
   labs.forEach(a=>{const p=a.p, x=a.right?p.x+11:p.x-11, an=a.right?'':' text-anchor="end"', l2=lab2(p.m);
     if(a.y-p.y>12)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+x+'" y2="'+(a.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
-    t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+an+'>'+esc(lab1(p.m))+'</text>'+
-      (l2?'<text x="'+x+'" y="'+(a.y+12)+'" font-size="10" fill="var(--muted)"'+an+'>'+esc(l2)+'</text>':'');});
+    t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+halo+an+'>'+esc(lab1(p.m))+'</text>'+
+      (l2?'<text x="'+x+'" y="'+(a.y+12)+'" font-size="10" fill="var(--muted)"'+halo+an+'>'+esc(l2)+'</text>':'');});
   }
   const mpx=s/111320; let bar=20; [50,100,200,500,1000,2000].forEach(b=>{if(b*mpx<=W*.35)bar=b;});
   t+='<g stroke="var(--ink)" stroke-width="2"><line x1="14" y1="'+(H-14)+'" x2="'+(14+bar*mpx).toFixed(1)+'" y2="'+(H-14)+'"/></g>'+
