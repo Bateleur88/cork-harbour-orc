@@ -233,7 +233,11 @@ footer "© 2026 Pat Tanner ORC Ireland".
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
   in for it, and the page says so. A course built before the day's marks could be
-  loaded, at the dock say, is kept when they load.
+  loaded, at the dock say, is kept when they load. A course row whose fix comes
+  from another race, earlier or later, names it, e.g. "Leeward (R3 14:39)"; a second
+  fix of the same race reads "(fix 2)". Tapping a fix in *Check recorded marks* also
+  lists the starts of that race that use a different fix of the same mark
+  (information only).
 - *Race view*: what is needed after the gun. A header with race and start pickers,
   the course and its total; an alert strip for anything that changes during a race
   (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh

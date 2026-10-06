@@ -343,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.6';
+const PAGE_VERSION='2026-10-06.7';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -563,6 +563,10 @@ function laidState(cm){
 function resolveLaid(cm){const st=laidState(cm),u=st.use;
   return Object.assign({},cm,{lat:u?u.lat:cm.lat,lon:u?u.lon:cm.lon,acc:u?u.acc:null,atFix:!!u,laidSt:st});}
 function fixLabel(x,race){return [x.time,accOf(x),whoOf(x)].filter(Boolean).join(' · ')+(x.race<race?' (Race '+x.race+')':'');}
+// a course row's fix: one from another race (earlier, carried as the page does by default, or later) says which race and
+// when it was recorded, e.g. "Leeward (R3 14:39)"; a second fix of the same race keeps "(fix 2)"; card marks say nothing
+function fixSrc(m){if(!m||m.card)return '';
+  return m.race!==S.race?' (R'+m.race+(m.time?' '+m.time:'')+')':m.fix>1?' (fix '+m.fix+')':'';}
 function laidTag(m){return m&&m.laidSt?(m.atFix?' (RIB fix '+m.laidSt.use.time+')':' (planning position)'):'';}
 function laidSrc(m){const u=m.laidSt.use;return u?'RIB fix '+fixLabel(u,m.race):'planning position until laid';}
 function laidCur(m){const u=m.laidSt.use;
@@ -923,8 +927,7 @@ function render(){
         (st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
           ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></div>':'')+
         (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
-    li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+'</b>'+
-      (m.race<S.race?'<div class="meta" style="color:var(--muted);font-size:.85rem">from Race '+m.race+'</div>':'')+flag+laid+'</div>'+
+    li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+fixSrc(m)+'</b>'+flag+laid+'</div>'+
       '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>'+
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
@@ -1584,6 +1587,20 @@ function fxResolve(all,scope,decisions){
   return {lines:[...lines.values()], joined, outline, candidates:[...cands.values()].filter(c=>!ownJoin(c)),
     flags:[...flags.values()].map(f=>({race:f.race,starts:f.starts,text:pre(f)+f.body}))};
 }
+/* For the fix tapped in Check recorded marks: which starts of race r use a DIFFERENT fix of the same mark, as the page
+   has them now (course rows, laid marks at their RIB fix, and the line ends each start uses, chosen or automatic).
+   Information only: nothing is copied or changed. r is the selected race, or with All races the fix's own race. */
+function fxOtherUses(sm,r){
+  const same=m=>m&&!m.card&&norm(m.name)===norm(sm.name), line=isLineMark(sm.name), out=[];
+  const tag=m=>'the '+esc(m.time||'untimed')+' fix'+(m.race!==r?' (R'+m.race+')':'');
+  classesOf(r).forEach((_,st)=>{const used=new Map();
+    if(line){const ends=isCB(sm.name)?['cb']:isStartPin(sm.name)?['pin']:['fpin'];
+      ends.forEach(w=>{const m=endPick(w,r,st).m;if(m&&norm(m.name)===norm(sm.name))used.set(m.id,m);});}
+    else (S.courses[ckey(r,st)]||[]).forEach(e=>{let m=markById(typeof e==='string'?e:e.id);if(m&&m.laidSt)m=m.laidSt.use;if(same(m))used.set(m.id,m);});
+    const diff=[...used.values()].filter(m=>m.id!==sm.id);
+    if(diff.length)out.push('Start '+(st+1)+(!fxAll&&st===S.start?' (selected)':'')+' uses '+diff.map(tag).join(' and '));});
+  return out.length?'<p class="fxFlag" style="color:var(--muted)">Other '+esc(sm.name)+' fixes in use in Race '+r+': '+out.join('; ')+'. Information only.</p>':'';
+}
 function renderFix(){
   const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
   const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
@@ -1639,7 +1656,7 @@ function renderFix(){
     '<br>Phone '+(sm.device?esc(ph[sm.device]):'none (unattributed)')+' · Recorder: '+esc(sm.recorder||'not given')+
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+
     '<br>'+(sm.pending?'Waiting to send from this phone':a?'Position '+fmtAge(Math.max(0,a.s))+' old when '+(a.by==='id'?'the phone saved it':'the server received it'):'Age of the position not known')+
-    (fl.get(fxSel)||[]).map(fxFlag).join('')+'</div>':'';
+    (fl.get(fxSel)||[]).map(fxFlag).join('')+fxOtherUses(sm,fxAll?sm.race:r)+'</div>':'';
   $('fxList').innerHTML=notes.map(f=>'<li>'+fxFlag({lvl:'check',txt:f.txt})+fxAsk(f.ask)+'</li>').concat(seen.map(m=>{const k=refFor(m), f=fl.get(k)||[];
     return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
       FX_SHAPE[(m.race-1)%4]+'</span> '+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+'</button>'+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
