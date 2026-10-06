@@ -343,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.4';
+const PAGE_VERSION='2026-10-06.5';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -380,7 +380,7 @@ async function keyFetch(url,opts){
 const K='course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},mode:'setup'};}
+function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},lineFlags:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -1950,15 +1950,18 @@ async function postFix(body){
 let sending=false;
 async function sendOutbox(){
   if(sending||!S.outbox.length)return; sending=true;
+  // Clear everything replaces S: a send already under way finishes with the state it started with, and then neither
+  // writes to the cleared page nor starts a load that would bring the day back
+  const s0=S;
   try{
-    while(S.outbox.length){
-      const f=S.outbox[0]; await postFix(f);
-      S.outbox.shift(); S.marks=S.marks.filter(m=>m.pid!==f.id); save();
+    while(S===s0&&s0.outbox.length){
+      const f=s0.outbox[0]; await postFix(f);
+      s0.outbox.shift(); s0.marks=s0.marks.filter(m=>m.pid!==f.id); if(S===s0)save();
     }
-    $('cbStatus').textContent='Committee boat sent.'; $('cbStatus').className='status ok';
-    await pull(true);
+    if(S===s0){$('cbStatus').textContent='Committee boat sent.'; $('cbStatus').className='status ok';
+      await pull(true);}
   }catch(e){
-    $('cbStatus').textContent='Committee boat fix saved on this phone – will send when there is signal.'; $('cbStatus').className='status';
+    if(S===s0){$('cbStatus').textContent='Committee boat fix saved on this phone – will send when there is signal.'; $('cbStatus').className='status';}
   }
   sending=false;
 }
@@ -1987,13 +1990,15 @@ async function syncSeries(){
   if(refused)syncSeries();   // put the saved name back now, not at the next refresh
 }
 $('series').onchange=e=>{series.name=e.target.value.trim();series.dirty=true;saveSeries();showSeries();render();syncSeries();};
-var cbWatch=null;
+var cbWatch=null, cbStop=null;   // cbStop ends a committee boat fix in progress without saving it (Clear everything)
 $('recCB').onclick=()=>{
   if(cbWatch!==null)return;
   if(!('geolocation' in navigator)){$('cbStatus').textContent='No location access in this browser.';$('cbStatus').className='status err';return;}
   let best=null; const t0=Date.now(), btn=$('recCB');
   btn.textContent='Getting fix…';
-  const done=()=>{navigator.geolocation.clearWatch(cbWatch);cbWatch=null;clearTimeout(tm);btn.textContent=cbLabel();
+  const stop=()=>{navigator.geolocation.clearWatch(cbWatch);cbWatch=null;clearTimeout(tm);btn.textContent=cbLabel();};
+  cbStop=stop;
+  const done=()=>{stop();
     if(!best){$('cbStatus').textContent='No fix received. Check location is allowed for this page.';$('cbStatus').className='status err';return;}
     const c=best.coords, day=$('day').value||todayISO();
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -2098,11 +2103,31 @@ $('ssCopy').onclick=async()=>{if(!ssText)return;
   try{await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);}
   catch(e){const r=document.createRange();r.selectNodeContents($('ssOut'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 $('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
+/* ---------- Clear everything ----------
+   S=fresh() resets what is saved on this phone; clearPageState() resets what a fresh load starts with that is NOT in S
+   (module variables, inputs and panels render() does not set, work under way). Together they must leave the page as a
+   reload would. THE ONE PLACE TO UPDATE: a change that adds page state outside S resets it in clearPageState(), or Clear
+   everything leaves it on screen until the page is reloaded. Kept on purpose, outside S: the series name and the race
+   key (last values seen). Nothing here is sent to the server. */
+function clearPageState(){
+  pullSeq++; pullOk=false; lastPullAt=0; dayGen++; clearTimeout(saveTimer);   // a load or save under way changes nothing now
+  if(cbWatch!==null&&cbStop)cbStop();                                         // a committee boat fix in progress is dropped
+  fxAll=false; $('fxAll').checked=false; fxHide.clear(); fxSel=''; fxChart=false; fxFit='';   // Check recorded marks
+  $('fxSketchB').setAttribute('aria-pressed','true'); $('fxChartB').setAttribute('aria-pressed','false'); $('fxStatus').textContent='';
+  $('fixCheck').open=false;
+  ['fxPlot','fxDet','fxList','fxChips','fxLineNotes','fxKey','plot'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
+  $('fxChips').hidden=$('fxLineNotes').hidden=$('fxKey').hidden=$('fxMapWrap').hidden=true; $('fxPlot').hidden=false;
+  if(FxLayer)FxLayer.clearLayers();
+  chartOn=false; $('viewChart').setAttribute('aria-pressed','false'); $('viewSketch').setAttribute('aria-pressed','true');   // course plot
+  $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
+  cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;
+  $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
+  ['readStatus','cbStatus','seriesStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
+}
 let armed=false;
 $('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
-  S=fresh();armed=false;classOpen=false;$('clear').textContent='Clear everything';
-  ['readStatus','cbStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
-  $('newWind').value='';$('paste').value='';
+  S=fresh();armed=false;$('clear').textContent='Clear everything';
+  clearPageState();
   commit();
   $('readStatus').textContent='Cleared from this device. Marks and courses saved on the server come back with Get latest marks.';};
 render();

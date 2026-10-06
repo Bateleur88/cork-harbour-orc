@@ -274,6 +274,12 @@ footer "© 2026 Pat Tanner ORC Ireland".
   coordinates are in question. The Marks sheet Type says which is which.
 - *Outputs* (section 6): a WhatsApp message of the course, legs and positions; and
   the **leg table for SailScoring**, below.
+- *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
+  leaves the page as a reload would; nothing is sent to the server, and marks and
+  courses saved there come back with Get latest marks. The series name and race key
+  last seen are kept. A change that adds page state outside the saved state `S`
+  must reset it in `clearPageState()`, the one place the clear is kept in step with
+  a fresh load.
 
 **Wide screens.** Under 700 CSS px (phones) the page is one 560 px column, as it
 always was. From 700 px it is one 760 px column with larger sketches. From 1100 px
