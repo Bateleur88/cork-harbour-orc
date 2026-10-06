@@ -169,7 +169,7 @@ select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;b
 ol.course li>div,.moverow>span{min-width:0}
 .endSel,.laidSel{max-width:100%;text-overflow:ellipsis}
 #cardSrc,.moverow>span{overflow-wrap:anywhere}
-.clear{margin-top:24px;background:none;border:none;color:var(--warn);text-decoration:underline;padding:8px 0}
+.clear{margin-top:24px;background:none;border:none;color:var(--warn);text-decoration:underline;padding:8px 0;white-space:pre-line}
 /* ORC IRL watermark: fixed behind everything, never takes a tap, and not part of any text the page sends.
    Embedded, so it is there with no signal; the same image as the RIB page (pages/record/assets/orc-irl-watermark.png).
    Solid boxes (plot and chart, notes, outputs, chips, inputs) cover it. In dark mode a white silhouette. */
@@ -343,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.5';
+const PAGE_VERSION='2026-10-06.6';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1951,7 +1951,8 @@ let sending=false;
 async function sendOutbox(){
   if(sending||!S.outbox.length)return; sending=true;
   // Clear everything replaces S: a send already under way finishes with the state it started with, and then neither
-  // writes to the cleared page nor starts a load that would bring the day back
+  // writes to the cleared page nor starts a load that would bring the day back. After a clear, the request already in
+  // flight completes, but the rest of the old outbox is not sent.
   const s0=S;
   try{
     while(S===s0&&s0.outbox.length){
@@ -2124,8 +2125,13 @@ function clearPageState(){
   $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
   ['readStatus','cbStatus','seriesStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
 }
+// what this phone holds that the server does not have yet, which a clear would lose: fixes waiting to send (committee
+// boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
+// saveCourses would send them; '' when there is none. The series name is not counted: a clear keeps it.
+function unsentText(){const n=S.outbox.length, c=allKeys().filter(isDirty).length, count=(x,one,many)=>x+' '+(x===1?one:many);
+  return [n&&count(n,'fix','fixes'),c&&count(c,'course edit','course edits')].filter(Boolean).join(' and ');}
 let armed=false;
-$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
+$('clear').onclick=()=>{if(!armed){armed=true;const u=unsentText();$('clear').textContent=u?u+' not sent yet –\ntap again to clear anyway':'Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
   S=fresh();armed=false;$('clear').textContent='Clear everything';
   clearPageState();
   commit();

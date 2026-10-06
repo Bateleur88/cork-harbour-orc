@@ -277,7 +277,9 @@ footer "© 2026 Pat Tanner ORC Ireland".
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
   courses saved there come back with Get latest marks. The series name and race key
-  last seen are kept. A change that adds page state outside the saved state `S`
+  last seen are kept. If this phone holds fixes not yet sent or course edits not
+  yet saved, the first tap says so ("1 fix and 2 course edits not sent yet – tap
+  again to clear anyway"). A change that adds page state outside the saved state `S`
   must reset it in `clearPageState()`, the one place the clear is kept in step with
   a fresh load.
 
