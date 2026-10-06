@@ -156,6 +156,49 @@ fix from an older page has none, a malformed `tap` is dropped rather than refuse
 moving a fix keeps it. Writes go
 to a temporary file renamed into place, so a failed write cannot empty a day; a
 damaged day file is refused rather than overwritten.
+
+*Course history.* Before a course save replaces a version, `marks.php` keeps the
+replaced version in `/marks/data/courses-history-YYYY-MM-DD.json` (never inside the
+courses file, which older pages read course by course), under the same lock: per
+race and start, and per race's start groups, the first version of the day plus the
+last 5 replaced versions; each version is at most 50 KB, as every course is, and the
+file is capped at 5 MB, the oldest versions other than a first of the day going first.
+A save identical to the current version writes nothing. If the history cannot be
+written (a damaged history file, a failed write) the course save is refused too, so
+no course is ever replaced without its earlier version being kept; the page keeps
+the edit and sends it again. A damaged history file shows as course saves refused with
+"courses-history-YYYY-MM-DD.json is damaged, not overwritten" (the RO page keeps the
+edits unsent, and Clear everything warns about them); to unblock that day's saves,
+put that day's `courses-history-YYYY-MM-DD.json` back from a dated backup of `data/`,
+or remove it (the history then starts again from the next save). A course save may
+carry `by`, the name of whoever saved it (text, cut to 40 characters, dropped if not
+text); it is stored with that version and moves into the history with it. Older
+pages send none, and an older `marks.php` ignores it. Read with
+`GET ?type=coursehistory&date=` and the race key; comparing and restoring versions
+is for a later page.
+
+*Review decisions.* The scoring review (use as, do not use, accept, and revoke to
+undo) is kept in `/marks/data/decisions-YYYY-MM-DD.json`, append-only, keyed by the
+record id the page makes (a retry writes nothing), at most 2000 a day. Decisions are
+**written only with the RO key** and **read with the race key**
+(`GET ?type=decisions&date=`). `key.js` is public, so names and notes in decisions
+are effectively readable by anyone with the race key: no personal details in notes.
+Each record names a fix by its server id and never changes it; `marks.php` adds its
+own time and the series name. Course and series writes stay on the race key.
+A decision can only name a fix already on the server (`s:` and its server id), so a
+page must say "not on the server yet" for a fix still waiting in a phone's outbox.
+The `from` of a "use as" record is what the page says it replaced: the server checks
+its format only and does not verify it against the course. A name (`who`) or note
+containing `<` or `>` is refused with 400 "bad decision: who" or "bad decision:
+note", so a page must check both before sending.
+
+*RO key.* `pages/marks/ro-key.example.php`, copied on the server to
+`/marks/data/ro-key.php` with `CHANGE_ME` replaced: 16 to 64 letters, digits, `-` or
+`_`. `marks.php` reads it as text, never runs it, and takes the RO key only from the
+`X-RO-Key` header, never from the URL. While it is missing, malformed or still
+`CHANGE_ME`, every decision write is refused ("RO key not set on the server"). The
+real file is never committed. Backups of `/marks/data/` contain it: keep them outside
+the repository and never share them.
 `tests/test_marks.py` checks all of this.
 
 **Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
@@ -384,7 +427,14 @@ part-way, the RO page moving a fix (device, recorder and tap must survive), the 
 time (stored, returned, a bad one dropped while the fix is kept), the series
 name (saved, read back and cleared; a wrong key, a bad name or a failed write leaves
 `series.json` unchanged), and 60 fixes, 10 courses and 30 reads arriving at once.
-Run it before uploading any change to `marks.php`.
+It also checks the RO key (missing, malformed, wrong, right, header only), the course
+history (first plus last 5, the 5 MB cap, an identical save writing nothing, a failed
+history write refusing the save, saves arriving at once), the decisions (every field
+validated, a malformed record writing nothing, a retry writing nothing, the daily
+cap, revoke) and that every request the current RIB and RO pages send is accepted
+as before. The race key and RO key in its throwaway folders are made at run time.
+Run it, on PHP 8.4 and on PHP 5.5 like the live host, before uploading any change to
+`marks.php`.
 
 Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
 package on Linux), found on PATH or through the `PHP_CGI` environment variable.
@@ -407,6 +457,7 @@ refused and leaves an earlier build untouched. Needs no PHP and no browser.
     pages/record/record.html     ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
     pages/marks/key.js           ->  /marks/key.js      (not in the repository)
+    data/ro-key.php                  ->  /marks/data/ro-key.php  (placed by hand, never in the repository)
 
 `pages/course/index.html` is not in the repository: `rebuild_page.py` writes it on
 every run as a byte-identical copy of `course_v8.html`, which stays the source. Upload
