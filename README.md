@@ -196,8 +196,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   wrong, the only one in the warning colour); a Start or Finish Pin within 60 m of a
   mark of its race; a start line more than 45° off square to the leg to the race's
   first mark; a mark more than 500 m from the nearest fix of its name in another
-  race (line ends left out); a Start Pin later than its race's Finish Pin, or a
-  Finish Pin later than the next race's first start; a race with no committee boat
+  race (line ends left out); a Start Pin later than its race's Finish Pin (not for
+  a candidate, below: its neutral candidate note is the only message about it, and
+  it is not counted among the fixes to check), or a Finish Pin later than the next
+  race's first start; a race with no committee boat
   of its own. Each has a WhatsApp, Share or Copy button with a short message asking
   for the mark to be recorded again. Sketch by default; Chart needs signal.
   **Lines (view only).** The sketch and the chart draw the same lines, in the race's
@@ -221,8 +223,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   give. With no start time set nothing is before or after the start, so there is no
   line and no candidate, only "no start time set". Where a mark has several fixes in
   a race every one is plotted and listed; the line joins the latest, which has a dark
-  outline, and the note gives the count. A Windward, Leeward or Gybe recorded after
-  the start (Start 1 with *All races*) is noted, as the mark may have been moved.
+  outline, and the note gives the count. A Windward or Leeward recorded after the
+  start (Start 1 with *All races*) is noted, as a fact. A pin can be a candidate for
+  one start and not another, so in single-race mode the closed line's "fixes to
+  check" count can change with the selected start.
   Anything missing is listed in plain words under the plot, in both views; the
   closed line counts candidates apart.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card

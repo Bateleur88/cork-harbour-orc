@@ -343,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.2';
+const PAGE_VERSION='2026-10-06.3';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1460,7 +1460,7 @@ function askText(name,r){return name+', Race '+r+': please go back to the mark, 
 // every check, on every fix of the day: per fix (keyed by refFor) and per race
 function fxChecks(list){
   const fl=new Map(), rf=[], at=m=>m.time||'?';
-  const add=(m,lvl,txt)=>{const k=refFor(m);if(!fl.has(k))fl.set(k,[]);fl.get(k).push({lvl,txt});};
+  const add=(m,lvl,txt,id)=>{const k=refFor(m);if(!fl.has(k))fl.set(k,[]);fl.get(k).push({lvl,txt,id});};
   const latestOf=(r,test)=>{let b=null;list.forEach(m=>{if(m.race<=r&&test(m.name)&&(!b||m.race>b.race||
     (m.race===b.race&&(fixMoment(m)||0)>(fixMoment(b)||0))))b=m;});return b;};
   list.forEach(m=>{const a=fixAge(m);if(!a||a.s<FIX_AGE_CHECK_S)return;const bad=a.s>FIX_AGE_BAD_S;
@@ -1480,7 +1480,7 @@ function fxChecks(list){
     // no finish time is kept: a Start Pin later than the race's last Finish Pin, or a Finish Pin later than the next race's first start
     const fp=own.filter(x=>isFinishPin(x.name)&&fixMoment(x)!==null).sort((a,b)=>fixMoment(b)-fixMoment(a))[0];
     if(fp)own.filter(m=>isStartPin(m.name)&&fixMoment(m)>fixMoment(fp)).forEach(p=>
-      add(p,'check','Recorded at '+at(p)+', after the Race '+r+' Finish Pin ('+at(fp)+'). Where one line serves as start and finish this can be expected; otherwise check which race it belongs to.'));
+      add(p,'check','Recorded at '+at(p)+', after the Race '+r+' Finish Pin ('+at(fp)+'). Where one line serves as start and finish this can be expected; otherwise check which race it belongs to.','afterFinish'));
     const nx=startMoment(r+1,0);
     if(nx!==null)own.filter(m=>isFinishPin(m.name)&&fixMoment(m)>nx).forEach(p=>
       add(p,'check','Recorded at '+at(p)+', after Race '+(r+1)+' started ('+S.startTimes[ckey(r+1,0)]+'). Check which race it belongs to.'));
@@ -1560,7 +1560,8 @@ function fxResolve(all,scope,decisions){
     else{if(fo.length>1){outline.add(refFor(fp));flag(r,null,fo.length+' Finish Pin fixes recorded; the line joins the latest ('+at(fp)+'); the others are shown but not joined.');}
       if(t1!==null&&tm(fp)<t1)flag(r,null,'the Finish Pin ('+at(fp)+') was recorded before Start 1 ('+hmOf(r,0)+'); it is joined by default.');}
     ['cb','pin','fpin'].forEach(w=>ownOf(r,w).filter(x=>tm(x)===null).forEach(x=>flag(r,null,ROLE[w].nm+' fix '+x.fix+' has no recorded time; not used by default.')));
-    // Windward, Leeward, Gybe: no time test in the default, so the latest; a fix after the start may be a moved mark
+    // Windward, Leeward, Gybe: no time test in the default, so the latest; a Windward or Leeward after the start is
+    // stated as a fact (no line uses a Gybe, so not for it)
     const pick={}, t0=startMoment(r,ref0);
     ['w','l','g'].forEach(w=>{const R=ROLE[w], o=ownOf(r,w);let m=latestT(o);
       if(!m&&w!=='g'){m=all.filter(x=>x.race<r&&R.test(x.name)).sort((a,b)=>a.race-b.race||a.fix-b.fix).pop()||null;
@@ -1569,7 +1570,7 @@ function fxResolve(all,scope,decisions){
       if(o.length>1){if(w==='g')flag(r,null,o.length+' Gybe fixes recorded ('+o.map(at).join(', ')+'); no line uses a Gybe.');
         else{outline.add(refFor(m));flag(r,null,o.length+' '+R.nm+' fixes recorded; the line joins the latest ('+at(m)+'); the others are shown but not joined.');}}
       o.filter(x=>tm(x)===null).forEach(x=>flag(r,null,R.nm+' fix '+x.fix+' has no recorded time; '+(x===m&&w!=='g'?'joined, as no '+R.nm+' of this race has one.':'not used by default.')));
-      if(t0!==null)o.filter(x=>tm(x)!==null&&tm(x)>t0).forEach(x=>flag(r,null,R.nm+' ('+at(x)+') recorded after Start '+(ref0+1)+' ('+hmOf(r,ref0)+'): the mark may have been moved.'));});
+      if(t0!==null&&w!=='g')o.filter(x=>tm(x)!==null&&tm(x)>t0).forEach(x=>flag(r,null,R.nm+' ('+at(x)+') recorded after Start '+(ref0+1)+' ('+hmOf(r,ref0)+').'));});
     if(pick.w&&pick.l)line('wl',r,null,pick.w,pick.l);
   });
   const span=s=>s.every((x,i)=>!i||x===s[i-1]+1)?(s[0]+1)+'–'+(s[s.length-1]+1):s.map(x=>x+1).join(', ');
@@ -1584,13 +1585,16 @@ function renderFix(){
   const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
   const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
   const shown=own.concat(carried).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
+  // candidates (fixes recorded after the start) are counted apart: they are not faults and no default line uses them.
+  // For a fix the box calls a candidate (selected start; with All races, every race), the "after the Finish Pin" check
+  // is not shown or counted: the neutral candidate note says it. Its other flags stay as they are.
+  const days=[...new Set(all.map(m=>m.race))].sort((a,b)=>a-b), scope=fxAll?{races:days}:{race:r,start:S.start};
+  const cands=fxResolve(all,scope).candidates, nc=cands.length;
+  cands.forEach(c=>{const f=(fl.get(c.ref)||[]).filter(x=>x.id!=='afterFinish');if(f.length)fl.set(c.ref,f);else fl.delete(c.ref);});
   const rflags=rf.filter(f=>fxAll||f.race===r), flagged=shown.filter(m=>fl.has(refFor(m)));
   // the closed line counts fixes (a fix with several flags is one); a race-level note (no committee boat, a carried
   // line end off square) is not a fix of the race shown, so it is counted apart
   const nBad=flagged.filter(m=>fl.get(refFor(m)).some(f=>f.lvl==='bad')).length, n=flagged.length, nr=rflags.length;
-  // candidates (fixes recorded after the start) are counted apart: they are not faults and no default line uses them
-  const days=[...new Set(all.map(m=>m.race))].sort((a,b)=>a-b), scope=fxAll?{races:days}:{race:r,start:S.start};
-  const nc=fxResolve(all,scope).candidates.length;
   $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+own.length+' fix'+(own.length===1?'':'es')+
     (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+' fix'+(n===1?'':'es')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
     (nr?' · '+nr+' race note'+(nr===1?'':'s'):'')+(nc?' · '+nc+' candidate'+(nc===1?'':'s'):'');
