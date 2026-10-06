@@ -123,6 +123,9 @@ details.sec[open]>summary h2::before{content:"▾ "}
 .fxChips button{padding:7px 14px;border-radius:999px;border:2px solid;background:var(--surface);font-weight:700;font-size:.9rem}
 .fxChips button[aria-pressed="false"]{border-color:var(--line)!important;color:var(--muted)!important;text-decoration:line-through}
 #fxMap{height:320px;border-radius:12px;overflow:hidden}
+.fxK svg{display:inline-block;width:30px;height:8px;vertical-align:middle;margin:0 4px 0 8px}
+.fxNotes{list-style:none;margin:8px 0 0;padding:0 4px;font-size:.88rem}
+.fxNotes li{padding:3px 0}
 .fxList{list-style:none;margin:8px 0 0;padding:0 4px}
 .fxList li{padding:6px 0;border-top:1px solid var(--line)}
 .fxList li.sel .fxRow{font-weight:700}
@@ -245,7 +248,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
       <div class="fxChips" id="fxChips" hidden></div>
       <div class="viewTabs"><button type="button" id="fxSketchB" aria-pressed="true">Sketch</button><button type="button" id="fxChartB" aria-pressed="false">Chart</button></div>
       <div id="fxPlot"></div><div id="fxMapWrap" hidden><div id="fxMap"></div></div>
-      <p class="cardnote" id="fxKey" hidden>W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · a thin line joins each race's W and L · a grey ring: check · a ring in the warning colour: likely wrong</p>
+      <p class="cardnote" id="fxKey" hidden></p>
+      <ul class="fxNotes" id="fxLineNotes" hidden></ul>
       <p class="status" id="fxStatus" role="status" aria-live="polite"></p>
       <div id="fxDet"></div>
       <ul class="fxList" id="fxList"></ul>
@@ -339,7 +343,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-05.5';
+const PAGE_VERSION='2026-10-06.1';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1425,6 +1429,12 @@ const FX_W=340, FX_H=360, FX_W_WIDE=460, FX_H_WIDE=540;
 // All races labels ("R2 L 13:21"): width allowed per character at font size 11, the step a crowded label moves by,
 // and how many steps (alternately down and up) are tried before it is left where it first went
 const FX_LAB_CHAR=6.2, FX_LAB_STEP=13, FX_LAB_TRIES=12;
+// the lines the page's automatic rules would create, in the race's colour, under the fixes: width and dash pattern on
+// the sketch (viewBox units) and on the chart (px). wlc: a W-L leg with an end carried from an earlier race; cand: a
+// candidate start line (a fix recorded after the start), never used by default
+const FX_LINE={wl:{w:1.8,dash:''},wlc:{w:1.8,dash:'10 4'},start:{w:1.2,dash:'5 3'},finish:{w:1.2,dash:'6 3 1.5 3'},cand:{w:1,dash:'1.5 3',op:.55}};
+const FX_LINE_CHART={wl:{w:3,dash:null},wlc:{w:3,dash:'14,6'},start:{w:2,dash:'8,5'},finish:{w:2,dash:'10,5,2,5'},cand:{w:1.5,dash:'2,5',op:.55}};
+const FX_OP=.8;             // the lines' opacity, but for a candidate
 let fxAll=false, fxChart=false, fxSel='', fxFit='', FxMap=null, FxLayer=null;
 const fxHide=new Set();     // races switched off by the chips in All races mode; not saved
 // the short All races label: race, mark initial (CB, SP, FP for the line ends), time
@@ -1490,6 +1500,86 @@ function fxFlag(f){return '<p class="fxFlag'+(f.lvl==='bad'?' bad':'')+'">⚠ '+
 function fxAsk(t){return '<div class="fxAsk"><a class="fxBtn" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(t)+'">Ask in WhatsApp</a>'+
   (navigator.share?'<button type="button" class="fxBtn" data-fx="share" data-t="'+esc(t)+'">Share…</button>':'')+
   '<button type="button" class="fxBtn" data-fx="copy" data-t="'+esc(t)+'">Copy</button></div>';}
+/* ---------- the default lines: what the recorded fixes would create, used by default ----------
+   Works out, and only works out (it draws nothing and saves nothing), the lines the page's AUTOMATIC rules give, never
+   the RO's choices (S.lineSel) or the finish setting: the one exception is a card course with Card mark chosen for the
+   start, whose recorded start line is not used. Anything missing is said in plain words; nothing is substituted.
+   - Start line, per start: autoEnd's committee boat and Start Pin, the latest of each in this race or an earlier one
+     with fixMoment <= startMoment. An end from an earlier race is carried, as the page does by default, and said so.
+     This race's own committee boat or pin recorded after the start is a candidate: shown, never joined by default.
+     With no default line, a dotted candidate line joins the default end or else the latest candidate; with a default
+     line for any start of the race there is none, so a race never shows two start lines. No start time: nothing is
+     before or after the start, so there is no line and no candidate, only "no start time set".
+   - Recorded finish line, per start: the start's committee boat to autoEnd's Finish Pin (latest, no time limit).
+     The page's default finish is the start line; this line only shows where a recorded Finish Pin is.
+   - W-L, per race: the latest own Windward and Leeward by fixMoment (an untimed one only if none is timed), else the
+     one carried from an earlier race (latest by race, then fix number, as bank() does).
+   - Where a mark has several fixes in a race, every one stays plotted; only the default is joined, and outline marks it.
+   scope: {race, start} (one start) or {races} (every start, classesOf, of each race given). Fixes are named by refFor.
+   decisions: reserved for a later stage (accepting marks, moving one to another race, "not to be used"), kept apart
+   from the fixes as Map(refFor -> [{action: 'accepted'|'not-used'|'use-as', race, role, who, when, note}]). Not read yet.
+   Returns lines {kind: 'wl'|'start'|'finish'|'candidate', race, starts, a, b, carried}, joined and outline (sets of
+   refFor), candidates {ref, race, role, starts} and flags {race, starts, text}. */
+function fxResolve(all,scope,decisions){
+  decisions=decisions||new Map();
+  const tm=fixMoment, at=m=>m.time||'no time', hmOf=(r,st)=>S.startTimes[ckey(r,st)]||'';
+  const ROLE={cb:{test:isCB,nm:'committee boat'},pin:{test:isStartPin,nm:'Start Pin'},fpin:{test:isFinishPin,nm:'Finish Pin'},
+    w:{test:n=>/windward/i.test(n),nm:'Windward'},l:{test:n=>/leeward/i.test(n),nm:'Leeward'},g:{test:n=>/gybe/i.test(n),nm:'Gybe'}};
+  const ownOf=(r,w)=>all.filter(m=>m.race===r&&ROLE[w].test(m.name));
+  const latestT=list=>{const t=list.filter(m=>tm(m)!==null).sort((a,b)=>tm(a)-tm(b));return t.length?t[t.length-1]:list.slice().sort((a,b)=>a.fix-b.fix).pop()||null;};
+  const lines=new Map(), joined=new Set(), outline=new Set(), cands=new Map(), flags=new Map();
+  const flag=(r,st,body)=>{const k=r+'|'+body;if(!flags.has(k))flags.set(k,{race:r,starts:[],body});const f=flags.get(k);if(st!==null&&!f.starts.includes(st))f.starts.push(st);};
+  const line=(kind,r,st,a,b)=>{const k=r+'|'+kind+'|'+refFor(a)+'|'+refFor(b);
+    if(!lines.has(k))lines.set(k,{kind,race:r,starts:[],a:refFor(a),b:refFor(b),carried:[a,b].filter(m=>m.race<r).map(refFor)});
+    const l=lines.get(k);if(st!==null&&!l.starts.includes(st))l.starts.push(st);if(kind!=='candidate'){joined.add(l.a);joined.add(l.b);}};
+  const races=scope.races||[scope.race];
+  races.forEach(r=>{const sts=scope.races?classesOf(r).map((_,i)=>i):[scope.start], ref0=scope.races?0:scope.start, candLines=[];
+    sts.forEach(st=>{const t=startMoment(r,st), cfg=(S.cardCfg||{})[ckey(r,st)];
+      if(t===null){flag(r,st,'no start time set.');return;}
+      const cb=autoEnd('cb',r,st).m, pin=autoEnd('pin',r,st).m, late={};
+      [['cb',cb],['pin',pin]].forEach(([w,m])=>{const nm=ROLE[w].nm, own=ownOf(r,w);
+        late[w]=own.filter(x=>tm(x)!==null&&tm(x)>t).sort((a,b)=>tm(a)-tm(b));
+        if(!m)flag(r,st,'no '+nm+' recorded at or before the start.');
+        else if(m.race<r)flag(r,st,'no '+nm+' of its own at or before the start; the Race '+m.race+' '+nm+' ('+at(m)+') is carried forward by default.');
+        else if(own.length>1){outline.add(refFor(m));flag(r,st,own.length+' '+nm+' fixes recorded; the line joins '+at(m)+', the latest at or before the start; the others are shown but not joined.');}
+        const lt=late[w];lt.forEach(x=>{const k=refFor(x);if(!cands.has(k))cands.set(k,{ref:k,race:r,role:w,starts:[]});cands.get(k).starts.push(st);});
+        if(lt.length)flag(r,st,lt.length===1?'Candidate: a '+nm+' recorded at '+at(lt[0])+', after the start. Not used by default.':
+          'Candidates: '+lt.length+' '+nm+' fixes recorded after the start ('+lt.map(at).join(', ')+'). Not used by default.');});
+      if(cfg&&cfg.ls==='card')flag(r,st,'Card mark chosen; the recorded start line is not used.');
+      else if(cb&&pin)line('start',r,st,cb,pin);
+      else{const a=cb||late.cb[late.cb.length-1], b=pin||late.pin[late.pin.length-1];if(a&&b)candLines.push({st,a,b});}
+      const fp=autoEnd('fpin',r,st).m;if(fp&&cb)line('finish',r,st,cb,fp);});
+    // a candidate line only where no start of the race has a default start line
+    if(![...lines.values()].some(l=>l.race===r&&l.kind==='start'))candLines.forEach(c=>{line('candidate',r,c.st,c.a,c.b);
+      const d=(m,w)=>'the '+ROLE[w].nm+' ('+at(m)+(cands.has(refFor(m))?', candidate':m.race<r?', carried from Race '+m.race:'')+')';
+      flag(r,c.st,'A dotted candidate line joins '+d(c.a,'cb')+' and '+d(c.b,'pin')+'; not used by default.');});
+    // the Finish Pin: no time limit, so one per race
+    const fp=autoEnd('fpin',r,ref0).m, fo=ownOf(r,'fpin'), t1=startMoment(r,0);
+    if(!fp)flag(r,null,'no Finish Pin recorded.');
+    else if(fp.race<r)flag(r,null,'no Finish Pin of its own; the Race '+fp.race+' Finish Pin ('+at(fp)+') is carried forward by default.');
+    else{if(fo.length>1){outline.add(refFor(fp));flag(r,null,fo.length+' Finish Pin fixes recorded; the line joins the latest ('+at(fp)+'); the others are shown but not joined.');}
+      if(t1!==null&&tm(fp)<t1)flag(r,null,'the Finish Pin ('+at(fp)+') was recorded before Start 1 ('+hmOf(r,0)+'); it is joined by default.');}
+    ['cb','pin','fpin'].forEach(w=>ownOf(r,w).filter(x=>tm(x)===null).forEach(x=>flag(r,null,ROLE[w].nm+' fix '+x.fix+' has no recorded time; not used by default.')));
+    // Windward, Leeward, Gybe: no time test in the default, so the latest; a fix after the start may be a moved mark
+    const pick={}, t0=startMoment(r,ref0);
+    ['w','l','g'].forEach(w=>{const R=ROLE[w], o=ownOf(r,w);let m=latestT(o);
+      if(!m&&w!=='g'){m=all.filter(x=>x.race<r&&R.test(x.name)).sort((a,b)=>a.race-b.race||a.fix-b.fix).pop()||null;
+        flag(r,null,m?'no '+R.nm+' of its own; the Race '+m.race+' '+R.nm+' ('+at(m)+') is carried forward by default.':'no '+R.nm+' recorded.');}
+      pick[w]=m;
+      if(o.length>1){if(w==='g')flag(r,null,o.length+' Gybe fixes recorded ('+o.map(at).join(', ')+'); no line uses a Gybe.');
+        else{outline.add(refFor(m));flag(r,null,o.length+' '+R.nm+' fixes recorded; the line joins the latest ('+at(m)+'); the others are shown but not joined.');}}
+      o.filter(x=>tm(x)===null).forEach(x=>flag(r,null,R.nm+' fix '+x.fix+' has no recorded time; '+(x===m&&w!=='g'?'joined, as no '+R.nm+' of this race has one.':'not used by default.')));
+      if(t0!==null)o.filter(x=>tm(x)!==null&&tm(x)>t0).forEach(x=>flag(r,null,R.nm+' ('+at(x)+') recorded after Start '+(ref0+1)+' ('+hmOf(r,ref0)+'): the mark may have been moved.'));});
+    if(pick.w&&pick.l)line('wl',r,null,pick.w,pick.l);
+  });
+  const span=s=>s.every((x,i)=>!i||x===s[i-1]+1)?(s[0]+1)+'–'+(s[s.length-1]+1):s.map(x=>x+1).join(', ');
+  const pre=f=>{if(!f.starts.length)return 'Race '+f.race+': ';const s=f.starts.slice().sort((a,b)=>a-b), tt=s.map(st=>hmOf(f.race,st)).filter(Boolean);
+    return 'Race '+f.race+', '+(s.length>1?'Starts '+span(s):'Start '+(s[0]+1))+(tt.length?' ('+tt.join(', ')+')':'')+': ';};
+  // a candidate stays one unless a default line of its own race joins it (another race may carry it by default)
+  const ownJoin=c=>[...lines.values()].some(l=>l.race===c.race&&l.kind!=='candidate'&&(l.a===c.ref||l.b===c.ref));
+  return {lines:[...lines.values()], joined, outline, candidates:[...cands.values()].filter(c=>!ownJoin(c)),
+    flags:[...flags.values()].map(f=>({race:f.race,starts:f.starts,text:pre(f)+f.body}))};
+}
 function renderFix(){
   const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
   const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
@@ -1498,19 +1588,22 @@ function renderFix(){
   // the closed line counts fixes (a fix with several flags is one); a race-level note (no committee boat, a carried
   // line end off square) is not a fix of the race shown, so it is counted apart
   const nBad=flagged.filter(m=>fl.get(refFor(m)).some(f=>f.lvl==='bad')).length, n=flagged.length, nr=rflags.length;
+  // candidates (fixes recorded after the start) are counted apart: they are not faults and no default line uses them
+  const days=[...new Set(all.map(m=>m.race))].sort((a,b)=>a-b), scope=fxAll?{races:days}:{race:r,start:S.start};
+  const nc=fxResolve(all,scope).candidates.length;
   $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+own.length+' fix'+(own.length===1?'':'es')+
     (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+' fix'+(n===1?'':'es')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
-    (nr?' · '+nr+' race note'+(nr===1?'':'s'):'');
+    (nr?' · '+nr+' race note'+(nr===1?'':'s'):'')+(nc?' · '+nc+' candidate'+(nc===1?'':'s'):'');
   $('fixSum').className=nBad?'bad':'';
   if(!$('fixCheck').open)return;
-  // All races: the chips switch races on and off for the sketch, the chart and the list (the closed line above still
-  // counts every race). A switched-off race's committee boat stays while a race shown uses it (has none of its own and
-  // carries it forward), drawn as carried; usedBy lists those races.
-  const days=[...new Set(all.map(m=>m.race))].sort((a,b)=>a-b), on=x=>!fxAll||!fxHide.has(x), usedBy=new Map();
-  if(fxAll)days.filter(on).forEach(v=>{if(all.some(m=>m.race===v&&isCB(m.name)))return;let c=null;
-    all.forEach(m=>{if(m.race<v&&isCB(m.name)&&(!c||m.race>c.race||(m.race===c.race&&(fixMoment(m)||0)>(fixMoment(c)||0))))c=m;});
-    if(c&&!on(c.race)){const k=refFor(c);if(!usedBy.has(k))usedBy.set(k,[]);usedBy.get(k).push(v);}});
-  const seen=shown.filter(m=>on(m.race)||usedBy.has(refFor(m))), notes=rflags.filter(f=>on(f.race));
+  // All races: the chips switch races on and off for the sketch, the chart and the lists (the closed line above still
+  // counts every race). A line end that is not otherwise shown (a switched-off race's committee boat a race shown uses,
+  // or an earlier race's fix the default takes although bank() does not carry it) is added, drawn as carried.
+  const on=x=>!fxAll||!fxHide.has(x), res=fxResolve(all,fxAll?{races:days.filter(on)}:scope), byRef=new Map(all.map(m=>[refFor(m),m]));
+  const base=shown.filter(m=>on(m.race)), have=new Set(base.map(refFor)), usedBy=new Map();
+  res.lines.forEach(l=>[l.a,l.b].forEach(k=>{const m=byRef.get(k);if(m&&m.race!==l.race){if(!usedBy.has(k))usedBy.set(k,[]);if(!usedBy.get(k).includes(l.race))usedBy.get(k).push(l.race);}}));
+  const seen=base.concat([...usedBy.keys()].filter(k=>!have.has(k)).map(k=>byRef.get(k))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
+  const notes=rflags.filter(f=>on(f.race)), cset=new Set(res.candidates.map(c=>c.ref));
   if(fxAll&&fxSel&&!seen.some(m=>refFor(m)===fxSel))fxSel='';
   $('fxChips').hidden=!fxAll;
   $('fxChips').innerHTML=fxAll?days.map(x=>'<button type="button" data-fx="race" data-r="'+x+'" aria-pressed="'+on(x)+'" style="color:'+fxCol(x)+';border-color:'+fxCol(x)+
@@ -1519,10 +1612,20 @@ function renderFix(){
   const ph={}; all.slice().sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0)).forEach(m=>{if(m.device&&!ph[m.device])ph[m.device]=String.fromCharCode(65+Object.keys(ph).length);});
   const car=m=>fxAll?!on(m.race):m.race<r, into=m=>fxAll?(usedBy.get(refFor(m))||[]).join(', '):r;
   const lab1=m=>[m.name,m.time,fxTyped(m)?'estimate (typed)':accOf(m)].filter(Boolean).join(' ');
-  const lab2=m=>[fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'from Race '+m.race:'',m.recorder||(m.device?'Phone '+ph[m.device]:''),m.pending?'waiting to send':''].filter(Boolean).join(' · ');
-  $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart; $('fxKey').hidden=fxChart||!fxAll||!seen.length;
-  if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):''),car),0);
-  else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll);
+  const lab2=m=>[fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'carried from Race '+m.race:'',cset.has(refFor(m))?'candidate':'',
+    m.recorder||(m.device?'Phone '+ph[m.device]:''),m.pending?'waiting to send':''].filter(Boolean).join(' · ');
+  $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart; $('fxKey').hidden=!seen.length;
+  // the key: a sample of each line, in both views; the short labels and rings only where the All races sketch uses them
+  const smp=(k,txt)=>{const d=FX_LINE[k];return '<span class="fxK"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="var(--ink)" stroke-width="'+(d.w*1.4)+'"'+
+    (d.dash?' stroke-dasharray="'+d.dash+'"':'')+' opacity="'+(d.op||FX_OP)+'"/></svg>'+txt+'</span>';};
+  $('fxKey').innerHTML=smp('wl','W–L leg')+smp('wlc','W–L leg carried from an earlier race')+smp('start','start line')+
+    smp('finish','recorded finish line (committee boat to Finish Pin)')+smp('cand','candidate start line, not used by default')+
+    '. The page\'s default finish is the start line. The lines are the page\'s automatic defaults, not the RO\'s choices. A dark outline: the fix a line joins where a mark has several.'+
+    (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'');
+  const ln=res.flags.filter(f=>on(f.race));
+  $('fxLineNotes').hidden=!ln.length; $('fxLineNotes').innerHTML=ln.map(f=>'<li>'+esc(f.text)+'</li>').join('');
+  if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):''),car,res),0);
+  else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll,res,cset);
   const sm=seen.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm);
   $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+(car(sm)?' (carried into Race '+into(sm)+')':'')+
     '<br>Time '+esc(fxHms(sm)||'not known')+' · '+(fxTyped(sm)?'estimate, typed in':accOf(sm)||'accuracy not known')+
@@ -1536,9 +1639,10 @@ function renderFix(){
     '<li class="empty">'+(shown.length?'Every race is switched off above.':'No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.')+'</li>';
 }
 // the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
-// dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong).
-// All races (short): one short label per fix, and a thin line in each race's colour from its latest Windward to its latest Leeward
-function fxSketch(shown,fl,lab1,lab2,car,short){
+// dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong),
+// a dark outline for the fix a line joins where its mark has several fixes. The lines are fxResolve's, under the fixes.
+// All races (short): one short label per fix, "cand." for a candidate
+function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
   if(!shown.length)return '';
   const wide=MQ_WIDE.matches, W=wide?FX_W_WIDE:FX_W, H=wide?FX_H_WIDE:FX_H, P=34, lat0=shown.reduce((s,m)=>s+m.lat,0)/shown.length, k=Math.cos(rad(lat0));
   const xs=shown.map(m=>m.lon*k), ys=shown.map(m=>m.lat), x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
@@ -1548,24 +1652,24 @@ function fxSketch(shown,fl,lab1,lab2,car,short){
   // t: labels, which never take a tap; h: a wide tap area round each fix; g: the fixes, drawn over every tap area,
   // so tapping a drawn fix always picks that fix even where two are close together
   let g='', t='', h='';
-  pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race);
+  const at=new Map(pts.map(p=>[refFor(p.m),p]));
+  res.lines.forEach(l=>{const a=at.get(l.a), b=at.get(l.b);if(!a||!b)return;
+    const d=FX_LINE[l.kind==='candidate'?'cand':l.kind==='wl'&&l.carried.length?'wlc':l.kind];
+    t+='<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+fxCol(l.race)+'" stroke-width="'+d.w+'"'+(d.dash?' stroke-dasharray="'+d.dash+'"':'')+' opacity="'+(d.op||FX_OP)+'"/>';});
+  pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race), ol=res.outline.has(key)&&!car(m);
     const attr=car(m)?'fill="none" stroke="'+col+'" stroke-width="2" stroke-dasharray="3 2" opacity=".6"':
-      fxTyped(m)?'fill="var(--surface)" stroke="'+col+'" stroke-width="2"':'fill="'+col+'" stroke="var(--surface)" stroke-width="1"';
+      fxTyped(m)?'fill="var(--surface)" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':'fill="'+col+'" stroke="'+(ol?'var(--ink)" stroke-width="2"':'var(--surface)" stroke-width="1"');
     h+='<circle data-k="'+esc(key)+'" cx="'+p.x+'" cy="'+p.y+'" r="16" fill="transparent" style="cursor:pointer"/>';
     g+='<g data-k="'+esc(key)+'" style="cursor:pointer">'+
       (key===fxSel?'<circle cx="'+p.x+'" cy="'+p.y+'" r="14" fill="none" stroke="var(--ink)" stroke-width="2"/>':'')+
       (f.length?'<circle cx="'+p.x+'" cy="'+p.y+'" r="10.5" fill="none" stroke="'+(f.some(x=>x.lvl==='bad')?'var(--warn)" stroke-width="2.5"':'var(--muted)" stroke-width="1.5"')+'/>':'')+
       fxShape(m.race,p.x,p.y,6,attr)+'</g>';});
   if(short){
-    // each race's axis: its own latest Windward and Leeward (a carried fix is not the race's own), under the labels
-    const last=(v,re)=>pts.filter(p=>p.m.race===v&&!car(p.m)&&re.test(p.m.name)).sort((a,b)=>(fixMoment(b.m)||0)-(fixMoment(a.m)||0))[0];
-    [...new Set(pts.map(p=>p.m.race))].forEach(v=>{const w=last(v,/windward/i), l=last(v,/leeward/i);
-      if(w&&l)t+='<line x1="'+w.x+'" y1="'+w.y+'" x2="'+l.x+'" y2="'+l.y+'" stroke="'+fxCol(v)+'" stroke-width="1.5" opacity=".75"/>';});
     // one line each, beside the fix: right, then left, then moved a step at a time (down, up, further down…) until it
     // clears every label placed so far, every fix, and the edges; a moved label gets a leader line to its fix
     const box=[{x0:W-34,x1:W,y0:0,y1:22}], hit=(a,b)=>a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1;
     pts.forEach(p=>box.push({x0:p.x-11,x1:p.x+11,y0:p.y-11,y1:p.y+11}));   // a fix with its flag ring
-    pts.slice().sort((a,b)=>a.y-b.y||a.x-b.x).forEach(p=>{const s=fxShort(p.m), w=s.length*FX_LAB_CHAR; let pick=null, first=null;
+    pts.slice().sort((a,b)=>a.y-b.y||a.x-b.x).forEach(p=>{const s=fxShort(p.m)+(cset.has(refFor(p.m))?' cand.':''), w=s.length*FX_LAB_CHAR; let pick=null, first=null;
       for(let i=0;i<=FX_LAB_TRIES&&!pick;i++){const dy=(i%2?1:-1)*Math.ceil(i/2)*FX_LAB_STEP, y=p.y+4+dy;
         for(const right of p.x<W*.55?[true,false]:[false,true]){const x=right?p.x+13:p.x-13, b={x0:right?x:x-w,x1:right?x+w:x,y0:y-10,y1:y+2};
           const c={x,y,right,b}; if(!first)first=c;
@@ -1589,12 +1693,17 @@ function fxSketch(shown,fl,lab1,lab2,car,short){
   return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Recorded fixes, north up; the list below has the same fixes"><g pointer-events="none">'+t+'</g>'+h+g+'</svg>';
 }
 // the chart: the same Leaflet as the course chart, a map of its own; fitted again only when the fixes shown change
-function fxDrawChart(shown,fl,lab,car){
+function fxDrawChart(shown,fl,lab,car,res){
   if(!FxMap||!fxChart)return; FxMap.invalidateSize(); FxLayer.clearLayers();
   const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(), key=shown.map(refFor).join(',');
   if(key!==fxFit&&shown.length){fxFit=key;FxMap.fitBounds(shown.map(m=>[m.lat,m.lon]),{padding:[30,30],maxZoom:17});}
+  // the same lines as the sketch, added first so they lie under the fixes, and never taking a tap
+  const at=new Map(shown.map(m=>[refFor(m),m]));
+  res.lines.forEach(l=>{const a=at.get(l.a), b=at.get(l.b);if(!a||!b)return;
+    const d=FX_LINE_CHART[l.kind==='candidate'?'cand':l.kind==='wl'&&l.carried.length?'wlc':l.kind];
+    L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:l.race<=3?cv('--r'+l.race):cv('--ink'),weight:d.w,dashArray:d.dash,opacity:d.op||FX_OP,interactive:false}).addTo(FxLayer);});
   shown.forEach(m=>{const f=fl.get(refFor(m))||[], bad=f.some(x=>x.lvl==='bad'), col=m.race<=3?cv('--r'+m.race):cv('--ink'), c=car(m);
-    L.circleMarker([m.lat,m.lon],{radius:7,color:bad?cv('--warn'):col,weight:bad?4:f.length?3:2,fillColor:col,fillOpacity:c||fxTyped(m)?0:.9,dashArray:c?'3,3':null})
+    L.circleMarker([m.lat,m.lon],{radius:res.outline.has(refFor(m))&&!c?8:7,color:bad?cv('--warn'):col,weight:bad?4:f.length?3:2,fillColor:col,fillOpacity:c||fxTyped(m)?0:.9,dashArray:c?'3,3':null})
       .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();}).addTo(FxLayer);});
 }
 // the sketch stays up until Leaflet has loaded, so a refresh while it loads never leaves the box empty

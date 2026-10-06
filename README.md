@@ -200,6 +200,31 @@ footer "© Pat Tanner ORC Ireland".
   Finish Pin later than the next race's first start; a race with no committee boat
   of its own. Each has a WhatsApp, Share or Copy button with a short message asking
   for the mark to be recorded again. Sketch by default; Chart needs signal.
+  **Lines (view only).** The sketch and the chart draw the same lines, in the race's
+  colour and under the fixes, from the page's *automatic* rules applied to the
+  recorded fixes: never from the RO's line-end choices or the finish setting, so they
+  can differ from the course sketch above, which follows the chips the RO tapped and
+  the line ends the RO chose. The box only shows what the recorded fixes would give
+  by default; the RO or scorer chooses. Per start (selected start; with *All races*,
+  every start of each race shown, identical lines drawn once): the start line joins
+  the latest committee boat and the latest Start Pin recorded at or before that
+  start's time (fix time ≤ start time, the start time to the minute); the recorded
+  finish line joins that committee boat to the latest Finish Pin (no time limit; the
+  page's default finish is the start line, so this only shows where a Finish Pin is).
+  Per race: the W–L leg joins the latest Windward and Leeward. Carrying: where a race
+  has no fix of its own, the page by default carries the same mark from an earlier
+  race (committee boat, pin, Windward, Leeward); such a line is drawn and the note
+  says "carried forward by default"; a carried W–L leg is long-dashed. A mark is never
+  used for another type. A committee boat or Start Pin recorded after the start is a
+  *candidate*: shown and labelled, never joined by default, and described neutrally;
+  where a race has no default start line a dotted candidate line shows what it would
+  give. With no start time set nothing is before or after the start, so there is no
+  line and no candidate, only "no start time set". Where a mark has several fixes in
+  a race every one is plotted and listed; the line joins the latest, which has a dark
+  outline, and the note gives the count. A Windward, Leeward or Gybe recorded after
+  the start (Start 1 with *All races*) is noted, as the mark may have been moved.
+  Anything missing is listed in plain words under the plot, in both views; the
+  closed line counts candidates apart.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
