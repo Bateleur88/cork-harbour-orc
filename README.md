@@ -299,6 +299,36 @@ footer "© 2026 Pat Tanner ORC Ireland".
   check" count can change with the selected start.
   Anything missing is listed in plain words under the plot, in both views; the
   closed line counts candidates apart.
+  **Review decisions (read only).** With every Get latest marks and 30 s refresh,
+  after the fixes and courses, the page reads the loaded day's review decisions
+  (`?type=decisions`, race key only) and shows them as a separate layer; it sends
+  nothing else, never uses the RO key, and changes no line, line-end pick, course,
+  leg or output. They are held in memory for that day only (nothing is stored on
+  the phone) and Clear everything empties them; a past day gets no 30 s refresh, so
+  tap Get latest marks again there. A line under the plot gives their state: how
+  many are in force, undone and replaced, and "as of" the last read; with no signal
+  or a refused key the last read is kept and says it could not refresh; an older
+  `marks.php` gives "This server does not keep review decisions yet". What is in
+  force, in the order written: an undo (revoke) cancels the record it names; for
+  each race, start and role (committee boat, Start Pin, finish committee boat,
+  Finish Pin, Windward, Leeward, Gybe) the latest use-as or accept not undone
+  applies and earlier ones are "replaced by a later decision" (undoing the latest
+  lets the one before apply again); a fix is "do not use" for the whole day while it
+  has a do-not-use not undone. Records the page does not understand are counted and
+  ignored. Under each fix in the list: "✓ accepted as Race 1 Start 1 Leeward",
+  "→ used for Race 1 Start 1 Leeward" or "✗ do not use: reason" (the fix's row struck
+  through), with who and when; the fix's detail gives its whole review history,
+  undone and replaced records included. Under the plot, kept apart from the page's
+  own checks, the review flags (⚑), never corrected by the page: the start's course
+  rows or its line end in use (chosen, inherited or automatic) differ from the use-as
+  or accept that applies; a do-not-use fix still used by a course row (directly or
+  as a laid mark) or by a start's line end in use; a decision naming a fix no longer
+  on the server. Information only, not counted: the box's default lines still
+  joining a do-not-use fix (the defaults ignore the review); a decision for a fix of
+  another race or recorded after that start; two decisions for one start and role;
+  do not use and use as on the same fix. The closed line adds "N review decisions"
+  (in force, for the race shown or all races) and "N review flags", never adding
+  them to the fixes to check or the candidates.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands

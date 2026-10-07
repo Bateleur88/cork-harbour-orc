@@ -134,6 +134,14 @@ details.sec[open]>summary h2::before{content:"▾ "}
 .fxRow{display:block;width:100%;text-align:left;padding:4px 0;border:none;background:none;font-size:.9rem}
 .fxFlag{margin:2px 0 0;font-size:.88rem}
 .fxFlag.bad{color:var(--warn);font-weight:700}
+/* review decisions: a separate layer, a rule at the left, never the warning colour */
+.fxRev{margin:3px 0 0;padding-left:8px;border-left:3px solid var(--line);font-size:.88rem}
+.fxRevFlag{border-left-color:var(--ink)}
+.fxRevInfo{color:var(--muted)}
+.fxDnu{text-decoration:line-through}
+.fxHist{list-style:none;margin:4px 0 0;padding:0}
+.fxHist li{padding:2px 0}
+.fxHist li.fxOff{color:var(--muted)}
 .fxAsk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
 .fxBtn{padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.85rem;text-decoration:none}
 pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 0}
@@ -263,6 +271,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
       <div id="fxPlot"></div><div id="fxMapWrap" hidden><div id="fxMap"></div></div>
       <p class="cardnote" id="fxKey" hidden></p>
       <ul class="fxNotes" id="fxLineNotes" hidden></ul>
+      <p class="cardnote" id="fxRevStatus"></p>
+      <ul class="fxNotes" id="fxRevNotes" hidden></ul>
       <p class="status" id="fxStatus" role="status" aria-live="polite"></p>
       <div id="fxDet"></div>
       <ul class="fxList" id="fxList"></ul>
@@ -362,7 +372,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.9';
+const PAGE_VERSION='2026-10-06.10';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1561,8 +1571,8 @@ function fxAsk(t){return '<div class="fxAsk"><a class="fxBtn" target="_blank" re
      one carried from an earlier race (latest by race, then fix number, as bank() does).
    - Where a mark has several fixes in a race, every one stays plotted; only the default is joined, and outline marks it.
    scope: {race, start} (one start) or {races} (every start, classesOf, of each race given). Fixes are named by refFor.
-   decisions: reserved for a later stage (accepting marks, moving one to another race, "not to be used"), kept apart
-   from the fixes as Map(refFor -> [{action: 'accepted'|'not-used'|'use-as', race, role, who, when, note}]). Not read yet.
+   decisions: not read. The review decisions are a separate layer (decResolve, decFlags) that never changes these lines:
+   they are the page's automatic defaults, which ignore the review.
    Returns lines {kind: 'wl'|'start'|'finish'|'candidate', race, starts, a, b, carried}, joined and outline (sets of
    refFor), candidates {ref, race, role, starts} and flags {race, starts, text}. */
 function fxResolve(all,scope,decisions){
@@ -1640,6 +1650,158 @@ function fxOtherUses(sm,r){
     if(diff.length)out.push('Start '+(st+1)+(!fxAll&&st===S.start?' (selected)':'')+' uses '+diff.map(tag).join(' and '));});
   return out.length?'<p class="fxFlag" style="color:var(--muted)">Other '+esc(sm.name)+' fixes in use in Race '+r+': '+out.join('; ')+'. Information only.</p>':'';
 }
+/* ---------- review decisions: a read-only layer over Check recorded marks ----------
+   The scorer's review (use as, do not use, accept, and revoke to undo) is read from marks.php (?type=decisions, with the
+   race key) for the loaded day, and only SHOWN. Nothing here sends anything else, uses the RO key, writes S or browser
+   storage, or changes a line, a line-end pick, a course, a leg or an output; fxResolve's lines stay the page's automatic
+   defaults. dec is server data held in memory for the loaded day only; Clear everything empties it. */
+const DEC_ROLE={cb:'committee boat',pin:'Start Pin',fcb:'finish committee boat',fpin:'Finish Pin',windward:'Windward',leeward:'Leeward',gybe:'Gybe'};
+const DEC_TEST={windward:n=>/windward/i.test(n),leeward:n=>/leeward/i.test(n),gybe:n=>/gybe/i.test(n)};
+function decEmpty(){return {day:'',list:null,at:0,status:'none',err:''};}   // status: none | ok | old (no decisions kept) | err
+let dec=decEmpty();
+/* Read after the day's fixes and courses. An older marks.php ignores the type and answers with the day's fixes: no
+   decisions array, which is said quietly, never as an error. A failed read keeps what was read for the same day. */
+async function decLoad(day,stale){
+  const fail=why=>{if(stale())return;if(dec.day!==day)dec=Object.assign(decEmpty(),{day});
+    if(dec.status==='old')return;dec.status=dec.list?'ok':'err';dec.err=why;};
+  let r,j=null;
+  try{r=await keyFetch(ENDPOINT+'?type=decisions&date='+encodeURIComponent(day),{});}
+  catch(e){return fail(e.message==='no race key'?'key':'net');}
+  try{j=await r.json();}catch(e){}
+  if(stale())return;
+  if(r.status===403)return fail('key');
+  if(!r.ok||!j||j.ok!==true)return fail('read');
+  if(!Array.isArray(j.decisions)){dec=Object.assign(decEmpty(),{day,status:'old'});return;}
+  dec={day,list:j.decisions,at:Date.now(),status:'ok',err:''};
+}
+/* The current state from the append-only list, in the order written (the server's order; "when" is whole seconds):
+   - a record that is not understood is set aside ('bad') and changes nothing;
+   - each record is rebuilt from the fields the page knows (DEC_FIELDS), so a field from the server can never stand in
+     for the page's own (i, status, by, undoneBy, target);
+   - a revoke undoes the record it names, if that is an earlier record of the same fix, not itself a revoke and not
+     already undone (the first such revoke counts); an undone record no longer applies;
+   - per slot (race, start, role) the latest use-as or accept not undone applies ('live'), whatever fix it names; the
+     earlier ones of the slot are 'superseded'. Undoing the one that applies lets the one before it apply again;
+   - a fix is "do not use" for the whole day while it has a do-not-use not undone; the latest gives the reason shown.
+   Returns {recs (each with i, status, and undoneBy, by or target), bad, byRef: Map(ref -> its records, revokes too),
+   slots: Map('race|start|role' -> {r, st, role, cur, live}), dnu: Map(ref -> record)}. Pure: reads nothing else. */
+const DEC_FIELDS=['id','ref','action','race','start','role','from','who','when','client_when','note','series','revokes'];
+function decResolve(list){
+  const int=(v,lo,hi)=>Number.isInteger(v)&&v>=lo&&v<=hi, opt=(v,lo,hi)=>v===undefined||v===null||int(v,lo,hi);
+  const ok=x=>{if(!x||typeof x!=='object'||typeof x.id!=='string'||!x.id||typeof x.ref!=='string'||!/^s:[A-Za-z0-9]{4,40}$/.test(x.ref)||
+      typeof x.who!=='string'||(x.note!==undefined&&typeof x.note!=='string'))return false;
+    if(x.action==='use-as'||x.action==='accept')return int(x.race,1,9)&&int(x.start,0,9)&&DEC_ROLE.hasOwnProperty(x.role);
+    if(x.action==='do-not-use')return opt(x.race,1,9)&&opt(x.start,0,9);
+    return x.action==='revoke'&&typeof x.revokes==='string';};
+  const recs=[], byId=new Map(), byRef=new Map(), slots=new Map(), dnu=new Map(); let bad=0;
+  (Array.isArray(list)?list:[]).forEach((x,i)=>{
+    if(!ok(x)||byId.has(x.id)){bad++;return;}
+    const d={}; DEC_FIELDS.forEach(f=>{if(Object.prototype.hasOwnProperty.call(x,f))d[f]=x[f];}); d.i=i; d.status='live';
+    recs.push(d); byId.set(d.id,d);
+    if(!byRef.has(d.ref))byRef.set(d.ref,[]); byRef.get(d.ref).push(d);
+    if(d.action!=='revoke')return;
+    const t=byId.get(d.revokes);
+    if(t&&t!==d&&t.action!=='revoke'&&t.ref===d.ref&&t.status!=='undone'){t.status='undone';t.undoneBy=d;d.status='revoke';d.target=t;}
+    else{d.status='bad';bad++;}});
+  recs.forEach(d=>{if(d.status!=='live')return;
+    if(d.action==='do-not-use'){dnu.set(d.ref,d);return;}
+    const k=d.race+'|'+d.start+'|'+d.role;
+    if(!slots.has(k))slots.set(k,{r:d.race,st:d.start,role:d.role,cur:null,live:[]});
+    const s=slots.get(k); s.live.push(d); s.cur=d;});
+  slots.forEach(s=>s.live.forEach(d=>{if(d!==s.cur){d.status='superseded';d.by=s.cur;}}));
+  return {recs,bad,byRef,slots,dnu};
+}
+// plain words for the review; these build plain text, escaped once where it is shown
+function decWhen(d){return typeof d.when==='number'?hhmm(d.when*1000):'time not known';}
+function decSlot(r,st,role){return 'Race '+r+' Start '+(st+1)+' '+DEC_ROLE[role];}
+function decFixName(m){return m?'the R'+m.race+' '+(m.time||'untimed')+' '+m.name:'a fix no longer on the server';}
+function decSays(d){
+  if(d.action==='accept')return '✓ accepted as '+decSlot(d.race,d.start,d.role);
+  if(d.action==='use-as')return '→ used for '+decSlot(d.race,d.start,d.role);
+  if(d.action==='do-not-use')return '✗ do not use: “'+(d.note||'')+'”'+(Number.isInteger(d.race)?' (decided in Race '+d.race+
+    (Number.isInteger(d.start)?' Start '+(d.start+1):'')+')':'');
+  return '↶ undo'+(d.target?' of the '+decWhen(d.target)+' decision ('+decSays(d.target)+')':': names no earlier decision of this fix, ignored');}
+function decLine(d){return decSays(d)+' — '+d.who+', '+decWhen(d)+(d.note&&d.action!=='do-not-use'?' · note: “'+d.note+'”':'');}
+/* What the review says against what the page has, in plain words; nothing is corrected. Each {race (null: the whole
+   day), ref, counted, text}. Counted (fixed by the RO or scorer changing the course, a line end, or the review):
+   (a) the use-as or accept that applies to a start and role does not match what that start uses: its course rows for
+       Windward, Leeward or Gybe, or the line end the outputs use (endPick: chosen, inherited or automatic);
+   (b) a do-not-use fix still used by an output: a course row (directly, or a laid mark following it) or the line end
+       a start's outputs use;
+   (c) a decision that applies names a fix not on the server (deleted).
+   Information only: the box's default lines still joining a do-not-use fix (the defaults ignore the review); a decision
+   for a fix carried or borrowed from another race, or recorded after that start (a candidate); two decisions for one
+   start and role; do not use and use as on the same fix. Reads the page's state; changes nothing (course() would). */
+function decFlags(R,all,days){
+  const out=[], bySid=new Map(all.filter(m=>m.sid).map(m=>['s:'+m.sid,m])), fx=ref=>bySid.get(ref)||null;
+  const add=(race,ref,counted,text)=>out.push({race,ref,counted,text});
+  const keys=[S.courses,S.lineSel,S.startTimes].flatMap(o=>Object.keys(o||{})).filter(k=>/^\d+\|\d+$/.test(k)).map(k=>k.split('|').map(Number));
+  const raceList=[...new Set(races().concat(keys.map(k=>k[0])))].sort((a,b)=>a-b);
+  const startsOf=r=>[...new Set(classesOf(r).map((_,i)=>i).concat(keys.filter(k=>k[0]===r).map(k=>k[1])))].sort((a,b)=>a-b);
+  // the line ends a start's outputs use, as the line-end rows offer them: the start ends unless a card course uses the
+  // card mark; the finish ends only for a committee boat and Finish Pin finish (or a card course's laid finish line)
+  const endsOf=(r,st)=>{const k=ckey(r,st), c=(S.cardCfg||{})[k], md=e=>{if(!c)return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';};
+    return (md('s')==='card'?[]:['cb','pin']).concat((!c&&(S.finishes[k]||'start')==='finishpin')||md('f')==='laid'?['fcb','fpin']:[]);};
+  // a course row's fix: the fix itself, or the RIB fix a laid mark follows; a card position is not a fix
+  const rowFix=e=>{const m=markById(typeof e==='string'?e:e.id);if(!m)return null;
+    if(m.laidSt)return m.laidSt.use?{m:m.laidSt.use,laid:m.card,mode:m.laidSt.mode}:null;return m.card?null:{m};};
+  const how=p=>p.how==='chosen'?'chosen by the RO':p.how==='inherited'?'inherited from Start '+(p.from+1):'picked automatically';
+  const rowsTxt=n=>(n.length>1?'rows ':'row ')+n.join(', ');
+  const by=d=>d.who+', '+decWhen(d);
+  R.slots.forEach(s=>{const d=s.cur, X=d.ref, want=fx(X), verb=d.action==='accept'?'accepted':'uses';
+    if(!want)return;                                    // (c) says it
+    let now='';
+    if(!DEC_TEST[s.role]){
+      if(!endsOf(s.r,s.st).includes(s.role))now='this start\'s '+(s.role[0]==='f'?'finish':'start')+' does not use a '+DEC_ROLE[s.role]+'.';
+      else{const p=endPick(s.role,s.r,s.st);
+        if(!p.m)now='the course has no '+DEC_ROLE[s.role]+' for this start ('+(p.how==='none'?'set to none by the RO':'none found automatically')+').';
+        else if(refFor(p.m)!==X)now='the course uses '+decFixName(p.m)+' ('+how(p)+').';}}
+    else{const rows=S.courses[ckey(s.r,s.st)]||[], use=new Map();
+      rows.forEach((e,i)=>{const f=rowFix(e);if(!f)return;const k=refFor(f.m);if(k!==X&&!DEC_TEST[s.role](f.m.name))return;
+        if(!use.has(k))use.set(k,{m:f.m,rows:[]});use.get(k).rows.push(i+1);});
+      const list=()=>[...use.values()].map(u=>decFixName(u.m)+' in '+rowsTxt(u.rows)).join(' and ');
+      if(!rows.length)now='no course is built for Race '+s.r+' Start '+(s.st+1)+' yet.';
+      else if(!use.size)now='the course has no '+DEC_ROLE[s.role]+' row.';
+      else if(!use.has(X)||use.size>1)now='the course uses '+list()+'.';}
+    if(now)add(s.r,X,true,decSlot(s.r,s.st,s.role)+' differs from review: the review '+verb+' '+decFixName(want)+' ('+by(d)+'); '+now);
+    // information only
+    const t=startMoment(s.r,s.st), why=want.race<s.r?'carried from Race '+want.race:want.race>s.r?'from a later race, Race '+want.race:
+      (s.role==='cb'||s.role==='pin')&&t!==null&&fixMoment(want)!==null&&fixMoment(want)>t?'recorded after the '+S.startTimes[ckey(s.r,s.st)]+' start (a candidate)':'';
+    if(why)add(s.r,X,false,decSlot(s.r,s.st,s.role)+': the review '+verb+' '+decFixName(want)+', '+why+'.');
+    if(s.live.some(x=>x!==d&&x.ref!==X))add(s.r,X,false,'More than one review decision for '+decSlot(s.r,s.st,s.role)+'; the latest ('+by(d)+') applies: '+decFixName(want)+'.');
+    if(R.dnu.has(X)){const n=R.dnu.get(X);add(s.r,X,false,'Review decisions disagree: '+decFixName(want)+' is marked do not use ('+by(n)+') and '+
+      (d.action==='accept'?'accepted as ':'used for ')+decSlot(s.r,s.st,s.role)+' ('+by(d)+').');}
+  });
+  const lines=fxResolve(all,{races:days}).lines;
+  R.dnu.forEach((d,X)=>{const m=fx(X);if(!m)return;const byRace=new Map(), note=(r,t)=>{if(!byRace.has(r))byRace.set(r,[]);byRace.get(r).push(t);};
+    raceList.forEach(r=>startsOf(r).forEach(st=>{const sn='Race '+r+' Start '+(st+1), rows=[];
+      (S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=rowFix(e);if(!f||refFor(f.m)!==X)return;
+        if(f.laid)note(r,sn+' course row '+(i+1)+' (the '+f.laid+' laid mark, '+(f.mode==='pinned'?'pinned by the RO':'following its latest fix')+')');else rows.push(i+1);});
+      if(rows.length)note(r,sn+' course '+rowsTxt(rows));
+      endsOf(r,st).forEach(w=>{const p=endPick(w,r,st);if(p.m&&refFor(p.m)===X)note(r,sn+' '+DEC_ROLE[w]+' ('+how(p)+')');});}));
+    const head='Do not use (“'+(d.note||'')+'”, '+by(d)+'): '+decFixName(m)+' is still used by ';
+    byRace.forEach((u,r)=>add(r,X,true,head+u.join('; ')+'.'));
+    lines.forEach(l=>{if(l.a!==X&&l.b!==X)return;const st=l.starts.slice().sort((a,b)=>a-b);
+      add(l.race,X,false,'The box\'s default '+(l.kind==='wl'?'W–L leg':l.kind==='finish'?'recorded finish line':l.kind==='start'?'start line':'candidate start line')+
+        ' of Race '+l.race+(st.length?' ('+(st.length>1?'Starts ':'Start ')+st.map(x=>x+1).join(', ')+')':'')+' still joins '+decFixName(m)+
+        ', marked do not use (the box shows the page\'s defaults, which ignore review decisions).');});
+  });
+  R.recs.forEach(d=>{if(d.status==='live'&&!fx(d.ref))add(Number.isInteger(d.race)?d.race:null,d.ref,true,
+    'A review decision ('+decLine(d)+') names a fix that is no longer on the server (deleted).');});
+  return out;
+}
+// the review's own status line in the box: never alarming, and nothing at all before a day is loaded
+function decStatus(R){
+  if(!S.pulledDay)return '';
+  if(dec.day!==S.pulledDay||dec.status==='none')return 'Review decisions: not loaded yet.';
+  if(dec.status==='old')return 'This server does not keep review decisions yet.';
+  const why=dec.err==='net'?' (no signal)':dec.err==='key'?': the server refused the key':'';
+  if(dec.status==='err')return 'Review decisions could not be read'+why+'.';
+  const n=R.recs.filter(d=>d.status==='live').length, u=R.recs.filter(d=>d.status==='undone').length, s=R.recs.filter(d=>d.status==='superseded').length;
+  return 'Review decisions: '+(R.recs.length?n+' in force'+(u?', '+u+' undone':'')+(s?', '+s+' replaced by a later one':''):'none recorded for this day')+
+    (R.bad?' · '+R.bad+' record'+(R.bad===1?'':'s')+' not understood, ignored':'')+' · as of '+hhmm(dec.at)+(dec.err?'; could not refresh'+why:'')+'.';
+}
+function decItem(f){return '<p class="fxRev '+(f.counted?'fxRevFlag':'fxRevInfo')+'">'+(f.counted?'⚑ ':'Information: ')+esc(f.text)+'</p>';}
 function renderFix(){
   const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
   const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
@@ -1654,9 +1816,18 @@ function renderFix(){
   // the closed line counts fixes (a fix with several flags is one); a race-level note (no committee boat, a carried
   // line end off square) is not a fix of the race shown, so it is counted apart
   const nBad=flagged.filter(m=>fl.get(refFor(m)).some(f=>f.lvl==='bad')).length, n=flagged.length, nr=rflags.length;
+  // the review decisions, a separate layer: only for the day loaded, from a server that keeps them. Counted apart from
+  // the fixes to check and the candidates: the decisions in force, and the review flags decFlags counts. A use-as or
+  // accept belongs to its start's race, a do-not-use to its fix's race, a decision on a fix not on the server to the race
+  // it names (none: every view); like the rest of the closed line, the chips do not change these counts
+  const DEC=dec.status==='ok'&&dec.day===S.pulledDay?decResolve(dec.list):null, decf=DEC&&DEC.recs.length?decFlags(DEC,all,days):[];
+  const sidOf=new Map(all.filter(m=>m.sid).map(m=>['s:'+m.sid,m])), inRace=x=>fxAll||x===null||x===r;
+  const decRace=d=>d.action==='do-not-use'?(sidOf.has(d.ref)?sidOf.get(d.ref).race:Number.isInteger(d.race)?d.race:null):d.race;
+  const nDec=DEC?DEC.recs.filter(d=>d.status==='live'&&inRace(decRace(d))).length:0, nRf=decf.filter(f=>f.counted&&inRace(f.race)).length;
   $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+own.length+' fix'+(own.length===1?'':'es')+
     (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+' fix'+(n===1?'':'es')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
-    (nr?' · '+nr+' race note'+(nr===1?'':'s'):'')+(nc?' · '+nc+' candidate'+(nc===1?'':'s'):'');
+    (nr?' · '+nr+' race note'+(nr===1?'':'s'):'')+(nc?' · '+nc+' candidate'+(nc===1?'':'s'):'')+
+    (nDec?' · '+nDec+' review decision'+(nDec===1?'':'s'):'')+(nRf?' · '+nRf+' review flag'+(nRf===1?'':'s'):'');
   $('fixSum').className=nBad?'bad':'';
   if(!$('fixCheck').open)return;
   // All races: the chips switch races on and off for the sketch, the chart and the lists (the closed line above still
@@ -1684,9 +1855,27 @@ function renderFix(){
   $('fxKey').innerHTML=smp('wl','W–L leg')+smp('wlc','W–L leg carried from an earlier race')+smp('start','start line')+
     smp('finish','recorded finish line (committee boat to Finish Pin)')+smp('cand','candidate start line, not used by default')+
     '. The page\'s default finish is the start line. The lines are the page\'s automatic defaults, not the RO\'s choices. A dark outline: the fix a line joins where a mark has several.'+
-    (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'');
+    (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'')+
+    (DEC?' Review decisions (the scorer\'s, read from the server, shown here and never applied): ✓ accepted · → used for a start · ✗ do not use, the fix struck through in the list · ⚑ differs from the page.':'');
   const ln=res.flags.filter(f=>on(f.race));
   $('fxLineNotes').hidden=!ln.length; $('fxLineNotes').innerHTML=ln.map(f=>'<li>'+esc(f.text)+'</li>').join('');
+  // the review layer: its status line; then, for the races shown, what differs from the page (counted, first) and what
+  // is information only, and each decision in force on a fix that is not in the list below (another race's, say)
+  const decOn=x=>x===null||(on(x)&&inRace(x)), listed=new Set(seen.map(refFor));
+  const away=DEC?DEC.recs.filter(d=>d.status==='live'&&!listed.has(d.ref)&&sidOf.has(d.ref)&&decOn(decRace(d))):[];
+  const decNotes=decf.filter(f=>decOn(f.race)).sort((a,b)=>b.counted-a.counted).map(f=>'<li>'+decItem(f)+'</li>')
+    .concat(away.map(d=>'<li><p class="fxRev fxRevInfo">Review, on '+esc(decFixName(sidOf.get(d.ref)))+': '+esc(decLine(d))+'</p></li>'));
+  $('fxRevStatus').textContent=decStatus(DEC);
+  $('fxRevNotes').hidden=!decNotes.length;
+  $('fxRevNotes').innerHTML=decNotes.length?'<li class="cardnote">Review decisions against the page (nothing is changed; the RO or scorer decides):</li>'+decNotes.join(''):'';
+  // a fix's decisions in force, under it in the list; its whole review history, revoked and replaced ones too, in its detail
+  const decNow=k=>DEC&&DEC.byRef.has(k)?DEC.byRef.get(k).filter(d=>d.status==='live').map(d=>'<p class="fxRev">'+esc(decLine(d))+'</p>').join(''):'';
+  const decHist=k=>{const h=DEC&&DEC.byRef.get(k);if(!h)return '';
+    const st=d=>d.status==='undone'?' — undone by '+d.undoneBy.who+' at '+decWhen(d.undoneBy):d.status==='superseded'?' — replaced by a later decision ('+
+      d.by.who+', '+decWhen(d.by)+')':d.status==='live'?' — in force':'';
+    return '<p class="fxFlag"><b>Review history</b> (every record for this fix, in the order written)</p><ul class="fxHist">'+
+      h.map(d=>'<li'+(d.status==='live'?'':' class="fxOff"')+'>'+(d.status==='undone'?'<s>'+esc(decLine(d))+'</s>':esc(decLine(d)))+esc(st(d))+'</li>').join('')+'</ul>'+
+      decf.filter(f=>f.ref===k).map(decItem).join('');};
   if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):''),car,res),0);
   else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll,res,cset);
   const sm=seen.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm);
@@ -1695,10 +1884,10 @@ function renderFix(){
     '<br>Phone '+(sm.device?esc(ph[sm.device]):'none (unattributed)')+' · Recorder: '+esc(sm.recorder||'not given')+
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+
     '<br>'+(sm.pending?'Waiting to send from this phone':a?'Position '+fmtAge(Math.max(0,a.s))+' old when '+(a.by==='id'?'the phone saved it':'the server received it'):'Age of the position not known')+
-    (fl.get(fxSel)||[]).map(fxFlag).join('')+fxOtherUses(sm,fxAll?sm.race:r)+'</div>':'';
-  $('fxList').innerHTML=notes.map(f=>'<li>'+fxFlag({lvl:'check',txt:f.txt})+fxAsk(f.ask)+'</li>').concat(seen.map(m=>{const k=refFor(m), f=fl.get(k)||[];
+    (fl.get(fxSel)||[]).map(fxFlag).join('')+fxOtherUses(sm,fxAll?sm.race:r)+decHist(fxSel)+'</div>':'';
+  $('fxList').innerHTML=notes.map(f=>'<li>'+fxFlag({lvl:'check',txt:f.txt})+fxAsk(f.ask)+'</li>').concat(seen.map(m=>{const k=refFor(m), f=fl.get(k)||[], dn=DEC&&DEC.dnu.has(k);
     return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
-      FX_SHAPE[(m.race-1)%4]+'</span> '+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+'</button>'+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
+      FX_SHAPE[(m.race-1)%4]+'</span> '+(dn?'<span class="fxDnu">':'')+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+(dn?'</span>':'')+'</button>'+decNow(k)+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
     '<li class="empty">'+(shown.length?'Every race is switched off above.':'No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.')+'</li>';
 }
 // the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
@@ -1856,6 +2045,10 @@ async function pull(quiet){
     if(!stale())checkLineRefs();
     if(!stale()){pullOk=true; lastPullAt=Date.now();}
     commit();
+    // the review decisions are read once this load is done, and not awaited: nothing that waits for pull() (moving a
+    // fix, sending the committee boat) waits for them. A later load or Clear everything makes the read stale, and a
+    // stale read changes nothing; when it lands it only redraws the box
+    if(!stale())decLoad(day,stale).then(()=>{if(!stale())renderFix();},()=>{});
   }catch(e){
     if(stale())return;
     pullOk=false; if(quiet)return;
@@ -2201,6 +2394,7 @@ function clearPageState(){
   ['fxPlot','fxDet','fxList','fxChips','fxLineNotes','fxKey','plot'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
   $('fxChips').hidden=$('fxLineNotes').hidden=$('fxKey').hidden=$('fxMapWrap').hidden=true; $('fxPlot').hidden=false;
   if(FxLayer)FxLayer.clearLayers();
+  dec=decEmpty(); $('fxRevStatus').textContent=''; $('fxRevNotes').innerHTML=''; $('fxRevNotes').hidden=true;   // review decisions: server data, read again with Get latest marks
   chartOn=false; $('viewChart').setAttribute('aria-pressed','false'); $('viewSketch').setAttribute('aria-pressed','true');   // course plot
   $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
   cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;
@@ -2211,7 +2405,7 @@ function clearPageState(){
 // what this phone holds that the server does not have yet, which a clear would lose: fixes waiting to send (committee
 // boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
 // saveCourses would send them; '' when there is none. The series name, the Review name and the RO key are not counted:
-// a clear keeps them.
+// a clear keeps them. Review decisions are not counted either: they are server data, read again with Get latest marks.
 function unsentText(){const n=S.outbox.length, c=allKeys().filter(isDirty).length, count=(x,one,many)=>x+' '+(x===1?one:many);
   return [n&&count(n,'fix','fixes'),c&&count(c,'course edit','course edits')].filter(Boolean).join(' and ');}
 let armed=false;
