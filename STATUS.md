@@ -74,7 +74,7 @@ Every tracked item has a fixed reference: **L1 to L8** for the 4 October live-te
 
 | Ref | Item | State | Notes |
 |---|---|---|---|
-| A14 | Cage position | DECIDED | Workbook keeps eOceanic C1 (51 48.818 N 008 16.990 W). The Navionics reading is a cross-check only. Follow-up: the shared `course-cards` marks file and overlay may hold a different position, about 39 m away; confirm and align |
+| A14 | Cage position | DECIDED | Workbook keeps eOceanic C1 (51 48.818 N 008 16.990 W). The Navionics reading (51 48.826 N 008 16.970 W, about 27 m away, bearing about 057 T) is a cross-check only. Follow-up: the shared `course-cards` marks file and overlay may hold a different position, about 39 m away (the audit reports this from the `course-cards` RCYC README, `docs/audit/PHASE1_AUDIT.md`); confirm and align |
 | A15 | Distance method differs between page (rhumb), workbook (Vincenty) and course-cards library (great-circle) | OPEN | Recorded, no position taken |
 | A16 | Overlay omits Curlane; workbook pairs are directed, overlay pairs are merged | OPEN | |
 
@@ -146,3 +146,4 @@ First live check: the next race day. Nothing in this file is CONFIRMED LIVE yet.
 - 2026-10-07: A2 decided (no separate original course); A3 withdrawn; A4 restated as open; A27 added.
 - 2026-10-07: A4 recorded as INTENDED (Draft, Decisions, Accepted); new INTENDED marker added.
 - 2026-10-07: 4 October live-test problems renamed P1 to P8 -> L1 to L8 (to avoid clashing with the P-numbered page-edit phases); A1 and A27 notes added.
+- 2026-10-07: A14: the Navionics cross-check position added, to match ROADMAP.md; the 39 m figure now cites the audit.
