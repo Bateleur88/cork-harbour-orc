@@ -328,7 +328,17 @@ footer "© 2026 Pat Tanner ORC Ireland".
   another race or recorded after that start; two decisions for one start and role;
   do not use and use as on the same fix. The closed line adds "N review decisions"
   (in force, for the race shown or all races) and "N review flags", never adding
-  them to the fixes to check or the candidates.
+  them to the fixes to check or the candidates. On the sketch and the chart, a fix
+  marked do not use has its fill faded with a grey strike (on the chart a grey dashed
+  outline, or the warning colour when it is also likely wrong), and a fix accepted or
+  used for a start has a ✓ or → beside it, placed after the labels; in All races the
+  short labels add " ✗", " ✓" or " →R1S1", and the labels make room for it. A fix
+  that a decision in force takes from another race for a start of a race shown (the
+  Race 3 Leeward used for Race 1 Start 1, say) is plotted dashed like a carried fix
+  and labelled "used by review for…"; it can be tapped, but no line is drawn to it
+  and it is not counted. With All races it is added only when its own race is
+  switched off and the race that uses it is on. The key names these only while a
+  decision is in force.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands

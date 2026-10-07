@@ -142,6 +142,8 @@ details.sec[open]>summary h2::before{content:"▾ "}
 .fxHist{list-style:none;margin:4px 0 0;padding:0}
 .fxHist li{padding:2px 0}
 .fxHist li.fxOff{color:var(--muted)}
+.fxRvIcon{background:none;border:none}
+.fxRvG{display:block;font:700 13px/14px system-ui,sans-serif;text-align:center;text-shadow:0 0 2px var(--surface),0 0 2px var(--surface),0 0 3px var(--surface)}
 .fxAsk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
 .fxBtn{padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.85rem;text-decoration:none}
 pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 0}
@@ -372,7 +374,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.10';
+const PAGE_VERSION='2026-10-06.11';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1836,7 +1838,15 @@ function renderFix(){
   const on=x=>!fxAll||!fxHide.has(x), res=fxResolve(all,fxAll?{races:days.filter(on)}:scope), byRef=new Map(all.map(m=>[refFor(m),m]));
   const base=shown.filter(m=>on(m.race)), have=new Set(base.map(refFor)), usedBy=new Map();
   res.lines.forEach(l=>[l.a,l.b].forEach(k=>{const m=byRef.get(k);if(m&&m.race!==l.race){if(!usedBy.has(k))usedBy.set(k,[]);if(!usedBy.get(k).includes(l.race))usedBy.get(k).push(l.race);}}));
-  const seen=base.concat([...usedBy.keys()].filter(k=>!have.has(k)).map(k=>byRef.get(k))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
+  // the review layer on the plots, from the decisions in force: per fix, do not use, accepted and used for a start. A fix
+  // a decision in force takes from another race for a start of a race shown is borrowed: plotted as carried (dashed) and
+  // tappable, never joined by a line (the lines are fxResolve's) and never counted (the counts above come from shown)
+  const glyphs=new Map(), borrowed=new Map(), gOf=k=>{if(!glyphs.has(k))glyphs.set(k,{dnu:null,acc:[],use:[]});return glyphs.get(k);};
+  if(DEC){DEC.dnu.forEach((d,k)=>{gOf(k).dnu=d;});
+    DEC.slots.forEach(s=>{const d=s.cur, m=byRef.get(d.ref);gOf(d.ref)[d.action==='accept'?'acc':'use'].push(s);
+      if(m&&m.race!==s.r&&on(s.r)&&(fxAll||s.r===r)){if(!borrowed.has(d.ref))borrowed.set(d.ref,[]);borrowed.get(d.ref).push(decSlot(s.r,s.st,s.role));}});}
+  const lent=[...borrowed.keys()].filter(k=>!have.has(k)&&!usedBy.has(k)&&byRef.has(k)), lentSet=new Set(lent);
+  const seen=base.concat([...usedBy.keys()].filter(k=>!have.has(k)).map(k=>byRef.get(k)),lent.map(k=>byRef.get(k))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
   const notes=rflags.filter(f=>on(f.race)), cset=new Set(res.candidates.map(c=>c.ref));
   if(fxAll&&fxSel&&!seen.some(m=>refFor(m)===fxSel))fxSel='';
   $('fxChips').hidden=!fxAll;
@@ -1844,9 +1854,10 @@ function renderFix(){
     '" title="Race '+x+'"><span aria-hidden="true">'+FX_SHAPE[(x-1)%4]+'</span> R'+x+'</button>').join(''):'';
   // phones lettered A, B, C… in the order of their first fix of the day: the id itself is a long random string
   const ph={}; all.slice().sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0)).forEach(m=>{if(m.device&&!ph[m.device])ph[m.device]=String.fromCharCode(65+Object.keys(ph).length);});
-  const car=m=>fxAll?!on(m.race):m.race<r, into=m=>fxAll?(usedBy.get(refFor(m))||[]).join(', '):r;
+  const car=m=>lentSet.has(refFor(m))||(fxAll?!on(m.race):m.race<r), into=m=>fxAll?(usedBy.get(refFor(m))||[]).join(', '):r;
+  const lentTo=m=>'used by review for '+borrowed.get(refFor(m)).join(', ');
   const lab1=m=>[m.name,m.time,fxTyped(m)?'estimate (typed)':accOf(m)].filter(Boolean).join(' ');
-  const lab2=m=>[fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'carried from Race '+m.race:'',cset.has(refFor(m))?'candidate':'',
+  const lab2=m=>[lentSet.has(refFor(m))?'Race '+m.race+', '+lentTo(m):fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'carried from Race '+m.race:'',cset.has(refFor(m))?'candidate':'',
     m.recorder||(m.device?'Phone '+ph[m.device]:''),m.pending?'waiting to send':''].filter(Boolean).join(' · ');
   $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart; $('fxKey').hidden=!seen.length;
   // the key: a sample of each line, in both views; the short labels and rings only where the All races sketch uses them
@@ -1856,7 +1867,9 @@ function renderFix(){
     smp('finish','recorded finish line (committee boat to Finish Pin)')+smp('cand','candidate start line, not used by default')+
     '. The page\'s default finish is the start line. The lines are the page\'s automatic defaults, not the RO\'s choices. A dark outline: the fix a line joins where a mark has several.'+
     (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'')+
-    (DEC?' Review decisions (the scorer\'s, read from the server, shown here and never applied): ✓ accepted · → used for a start · ✗ do not use, the fix struck through in the list · ⚑ differs from the page.':'');
+    (DEC&&DEC.recs.some(d=>d.status==='live')?' Review decisions (the scorer\'s, read from the server, shown and never applied): ✓ accepted · → used for a start'+
+      (fxAll?' (→R1S1: Race 1 Start 1)':'')+' · a faded fix struck through: do not use'+(fxAll?' (✗ in the short labels)':'')+
+      ' · dashed: a fix a decision borrows from another race · ⚑ differs from the page.':'');
   const ln=res.flags.filter(f=>on(f.race));
   $('fxLineNotes').hidden=!ln.length; $('fxLineNotes').innerHTML=ln.map(f=>'<li>'+esc(f.text)+'</li>').join('');
   // the review layer: its status line; then, for the races shown, what differs from the page (counted, first) and what
@@ -1876,10 +1889,12 @@ function renderFix(){
     return '<p class="fxFlag"><b>Review history</b> (every record for this fix, in the order written)</p><ul class="fxHist">'+
       h.map(d=>'<li'+(d.status==='live'?'':' class="fxOff"')+'>'+(d.status==='undone'?'<s>'+esc(decLine(d))+'</s>':esc(decLine(d)))+esc(st(d))+'</li>').join('')+'</ul>'+
       decf.filter(f=>f.ref===k).map(decItem).join('');};
-  if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):''),car,res),0);
-  else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll,res,cset);
+  // the chart's tooltips are HTML: the review words are escaped
+  const revTip=m=>{const k=refFor(m);return DEC&&DEC.byRef.has(k)?DEC.byRef.get(k).filter(d=>d.status==='live').map(d=>' · '+esc(decLine(d))).join(''):'';};
+  if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):'')+revTip(m),car,res,glyphs),0);
+  else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll,res,cset,glyphs);
   const sm=seen.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm);
-  $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+(car(sm)?' (carried into Race '+into(sm)+')':'')+
+  $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+(lentSet.has(fxSel)?' ('+esc(lentTo(sm).replace('used','borrowed'))+')':car(sm)?' (carried into Race '+into(sm)+')':'')+
     '<br>Time '+esc(fxHms(sm)||'not known')+' · '+(fxTyped(sm)?'estimate, typed in':accOf(sm)||'accuracy not known')+
     '<br>Phone '+(sm.device?esc(ph[sm.device]):'none (unattributed)')+' · Recorder: '+esc(sm.recorder||'not given')+
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+
@@ -1893,8 +1908,12 @@ function renderFix(){
 // the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
 // dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong),
 // a dark outline for the fix a line joins where its mark has several fixes. The lines are fxResolve's, under the fixes.
-// All races (short): one short label per fix, "cand." for a candidate
-function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
+// All races (short): one short label per fix, "cand." for a candidate.
+// Review (rvg, from renderFix): a do-not-use fix has its fill faded and a grey strike; a fix accepted or used for a start
+// has a glyph (✓, →) placed after the labels; in All races the short label also carries " ✗", " ✓" or " →R1S1", and its
+// width counts when the label finds its place, so labels make room for it. Every element the review adds has class fxRv.
+function fxSketch(shown,fl,lab1,lab2,car,short,res,cset,rvg){
+  rvg=rvg||new Map();
   if(!shown.length)return '';
   const wide=MQ_WIDE.matches, W=wide?FX_W_WIDE:FX_W, H=wide?FX_H_WIDE:FX_H, P=34, lat0=shown.reduce((s,m)=>s+m.lat,0)/shown.length, k=Math.cos(rad(lat0));
   const xs=shown.map(m=>m.lon*k), ys=shown.map(m=>m.lat), x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
@@ -1910,36 +1929,61 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
   res.lines.forEach(l=>{const a=at.get(l.a), b=at.get(l.b);if(!a||!b)return;
     const d=FX_LINE[l.kind==='candidate'?'cand':l.kind==='wl'&&l.carried.length?'wlc':l.kind];
     t+='<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+fxCol(l.race)+'" stroke-width="'+d.w+'"'+(d.dash?' stroke-dasharray="'+d.dash+'"':'')+' opacity="'+(d.op||FX_OP)+'"/>';});
-  pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race), ol=res.outline.has(key)&&!car(m);
+  pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race), ol=res.outline.has(key)&&!car(m), dn=!!(rvg.get(key)||{}).dnu;
+    // do not use: the fill only is faded, so the outline (a joined fix's dark outline too) stays as it is
     const attr=car(m)?'fill="none" stroke="'+col+'" stroke-width="2" stroke-dasharray="3 2" opacity=".6"':
-      fxTyped(m)?'fill="var(--surface)" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':'fill="'+col+'" stroke="'+(ol?'var(--ink)" stroke-width="2"':'var(--surface)" stroke-width="1"');
+      fxTyped(m)?'fill="var(--surface)" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':'fill="'+col+'"'+(dn?' fill-opacity=".35"':'')+' stroke="'+(ol?'var(--ink)" stroke-width="2"':'var(--surface)" stroke-width="1"');
     h+='<circle data-k="'+esc(key)+'" cx="'+p.x+'" cy="'+p.y+'" r="16" fill="transparent" style="cursor:pointer"/>';
     g+='<g data-k="'+esc(key)+'" style="cursor:pointer">'+
       (key===fxSel?'<circle cx="'+p.x+'" cy="'+p.y+'" r="14" fill="none" stroke="var(--ink)" stroke-width="2"/>':'')+
       (f.length?'<circle cx="'+p.x+'" cy="'+p.y+'" r="10.5" fill="none" stroke="'+(f.some(x=>x.lvl==='bad')?'var(--warn)" stroke-width="2.5"':'var(--muted)" stroke-width="1.5"')+'/>':'')+
-      fxShape(m.race,p.x,p.y,6,attr)+'</g>';});
+      fxShape(m.race,p.x,p.y,6,attr)+
+      (dn?'<line class="fxRv" x1="'+(p.x-8).toFixed(1)+'" y1="'+(p.y+8).toFixed(1)+'" x2="'+(p.x+8).toFixed(1)+'" y2="'+(p.y-8).toFixed(1)+'" stroke="var(--muted)" stroke-width="1.5" pointer-events="none"/>':'')+'</g>';});
+  const hit=(a,b)=>a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1;
+  // what the review adds to a short label: " ✗" do not use, then " →R1S1" (+ when used for more than one start) or " ✓"
+  const sfx=key=>{const x=rvg.get(key);if(!x)return '';const u=x.use;return (x.dnu?' ✗':'')+(u.length?' →R'+u[0].r+'S'+(u[0].st+1)+(u.length>1?'+':''):x.acc.length?' ✓':'');};
+  // the labels' boxes, for the glyphs to keep off (in All races, box below holds them)
+  const lbx=[{x0:W-34,x1:W,y0:0,y1:22}];
   if(short){
     // one line each, beside the fix: right, then left, then moved a step at a time (down, up, further down…) until it
     // clears every label placed so far, every fix, and the edges; a moved label gets a leader line to its fix
-    const box=[{x0:W-34,x1:W,y0:0,y1:22}], hit=(a,b)=>a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1;
-    pts.forEach(p=>box.push({x0:p.x-11,x1:p.x+11,y0:p.y-11,y1:p.y+11}));   // a fix with its flag ring
-    pts.slice().sort((a,b)=>a.y-b.y||a.x-b.x).forEach(p=>{const s=fxShort(p.m)+(cset.has(refFor(p.m))?' cand.':''), w=s.length*FX_LAB_CHAR; let pick=null, first=null;
+    const box=lbx;
+    pts.forEach(p=>box.push({x0:p.x-11,x1:p.x+11,y0:p.y-11,y1:p.y+11,k:refFor(p.m)}));   // a fix with its flag ring
+    pts.slice().sort((a,b)=>a.y-b.y||a.x-b.x).forEach(p=>{const s=fxShort(p.m)+(cset.has(refFor(p.m))?' cand.':''), w=(s+sfx(refFor(p.m))).length*FX_LAB_CHAR; let pick=null, first=null;
       for(let i=0;i<=FX_LAB_TRIES&&!pick;i++){const dy=(i%2?1:-1)*Math.ceil(i/2)*FX_LAB_STEP, y=p.y+4+dy;
         for(const right of p.x<W*.55?[true,false]:[false,true]){const x=right?p.x+13:p.x-13, b={x0:right?x:x-w,x1:right?x+w:x,y0:y-10,y1:y+2};
           const c={x,y,right,b}; if(!first)first=c;
           if(b.x0>=2&&b.x1<=W-2&&b.y0>=2&&b.y1<=H-B&&!box.some(o=>hit(o,b))){pick=c;break;}}}
       const c=pick||first; box.push(c.b);
       if(Math.abs(c.y-p.y-4)>6)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+c.x+'" y2="'+(c.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
-      t+='<text x="'+c.x+'" y="'+c.y+'" font-size="11" fill="var(--ink)"'+halo+(c.right?'':' text-anchor="end"')+'>'+esc(s)+'</text>';});
+      // the review suffix is a tspan of its own, after the label on the right, before it on the left
+      const x2=sfx(refFor(p.m)), ts=x2?'<tspan class="fxRv">'+esc(c.right?x2:x2.trim()+' ')+'</tspan>':'';
+      t+='<text x="'+c.x+'" y="'+c.y+'" font-size="11" fill="var(--ink)"'+halo+(c.right?'':' text-anchor="end"')+'>'+(c.right?esc(s)+ts:ts+esc(s))+'</text>';});
   } else {
   // labels right of the point (left near the right edge), nudged down where two on the same side would overlap
   const labs=pts.map(p=>({p,right:p.x<W*.55,y:p.y+4})).sort((a,b)=>a.y-b.y);
   labs.forEach((a,i)=>{for(let j=0;j<i;j++){const b=labs[j];if(a.right===b.right&&Math.abs(a.p.x-b.p.x)<130&&a.y-b.y<25)a.y=b.y+25;}});
   labs.forEach(a=>{const p=a.p, x=a.right?p.x+11:p.x-11, an=a.right?'':' text-anchor="end"', l2=lab2(p.m);
+    const lw=Math.max(lab1(p.m).length,l2?l2.length:0)*FX_LAB_CHAR;lbx.push({x0:a.right?x:x-lw,x1:a.right?x+lw:x,y0:a.y-10,y1:a.y+(l2?14:2)});
     if(a.y-p.y>12)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+x+'" y2="'+(a.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
     t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+halo+an+'>'+esc(lab1(p.m))+'</text>'+
       (l2?'<text x="'+x+'" y="'+(a.y+12)+'" font-size="10" fill="var(--muted)"'+halo+an+'>'+esc(l2)+'</text>':'');});
   }
+  // the review glyphs, after the labels: a corner 16 out from the fix (clear of the 14 selection ring), tried up-left,
+  // up-right, down-left, down-right, then the same 26 out; the first off every label, fix (but its own, which the ring
+  // keeps it clear of), other glyph, the edges and the scale band; if none is free, the first inside the sketch that is
+  // off every other glyph; failing that, up-left. A glyph further out than 16 gets a leader line from the fix's ring, as
+  // a moved label does, so it is clear which fix it belongs to. They never take a tap
+  {const occ=lbx.concat(short?[]:pts.map(p=>({x0:p.x-11,x1:p.x+11,y0:p.y-11,y1:p.y+11,k:refFor(p.m)}))), gbx=[];
+   pts.forEach(p=>{const key=refFor(p.m), x=rvg.get(key);if(!x||!(x.use.length||x.acc.length))return;let pick=null, spare=null;
+     for(const [dx,dy] of [[-16,-16],[16,-16],[-16,16],[16,16],[-26,-26],[26,-26],[-26,26],[26,26]]){const b={x0:p.x+dx-6,x1:p.x+dx+6,y0:p.y+dy-7,y1:p.y+dy+7};
+       if(!(b.x0>=2&&b.x1<=W-2&&b.y0>=2&&b.y1<=H-B))continue;
+       if(!occ.some(o=>o.k!==key&&hit(o,b))){pick={dx,dy,b};break;}
+       if(!spare&&!gbx.some(o=>hit(o,b)))spare={dx,dy,b};}
+     pick=pick||spare||{dx:-16,dy:-16,b:{x0:p.x-22,x1:p.x-10,y0:p.y-23,y1:p.y-9}}; occ.push(pick.b); gbx.push(pick.b);
+     if(Math.abs(pick.dx)>16){const ux=Math.sign(pick.dx), uy=Math.sign(pick.dy);
+       t+='<line class="fxRv" x1="'+(p.x+ux*8).toFixed(1)+'" y1="'+(p.y+uy*8).toFixed(1)+'" x2="'+(p.x+pick.dx-ux*6).toFixed(1)+'" y2="'+(p.y+pick.dy-uy*6).toFixed(1)+'" stroke="var(--muted)" stroke-width=".8"/>';}
+     t+='<text class="fxRv" x="'+(p.x+pick.dx).toFixed(1)+'" y="'+(p.y+pick.dy+4).toFixed(1)+'" font-size="12" font-weight="700" text-anchor="middle" fill="var('+(x.use.length?'--ink':'--ok')+')"'+halo+'>'+(x.use.length?'→':'✓')+'</text>';});}
   const mpx=s/111320; let bar=20; [50,100,200,500,1000,2000].forEach(b=>{if(b*mpx<=W*.35)bar=b;});
   t+='<g stroke="var(--ink)" stroke-width="2"><line x1="14" y1="'+(H-14)+'" x2="'+(14+bar*mpx).toFixed(1)+'" y2="'+(H-14)+'"/></g>'+
     '<text x="14" y="'+(H-20)+'" font-size="11" fill="var(--muted)">'+(bar<1000?bar+' m':bar/1000+' km')+'</text>'+
@@ -1947,8 +1991,8 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset){
   return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Recorded fixes, north up; the list below has the same fixes"><g pointer-events="none">'+t+'</g>'+h+g+'</svg>';
 }
 // the chart: the same Leaflet as the course chart, a map of its own; fitted again only when the fixes shown change
-function fxDrawChart(shown,fl,lab,car,res){
-  if(!FxMap||!fxChart)return; FxMap.invalidateSize(); FxLayer.clearLayers();
+function fxDrawChart(shown,fl,lab,car,res,rvg){
+  if(!FxMap||!fxChart)return; FxMap.invalidateSize(); FxLayer.clearLayers(); rvg=rvg||new Map();
   const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(), key=shown.map(refFor).join(',');
   if(key!==fxFit&&shown.length){fxFit=key;FxMap.fitBounds(shown.map(m=>[m.lat,m.lon]),{padding:[30,30],maxZoom:17});}
   // the same lines as the sketch, added first so they lie under the fixes, and never taking a tap
@@ -1956,9 +2000,13 @@ function fxDrawChart(shown,fl,lab,car,res){
   res.lines.forEach(l=>{const a=at.get(l.a), b=at.get(l.b);if(!a||!b)return;
     const d=FX_LINE_CHART[l.kind==='candidate'?'cand':l.kind==='wl'&&l.carried.length?'wlc':l.kind];
     L.polyline([[a.lat,a.lon],[b.lat,b.lon]],{color:l.race<=3?cv('--r'+l.race):cv('--ink'),weight:d.w,dashArray:d.dash,opacity:d.op||FX_OP,interactive:false}).addTo(FxLayer);});
-  shown.forEach(m=>{const f=fl.get(refFor(m))||[], bad=f.some(x=>x.lvl==='bad'), col=m.race<=3?cv('--r'+m.race):cv('--ink'), c=car(m);
-    L.circleMarker([m.lat,m.lon],{radius:res.outline.has(refFor(m))&&!c?8:7,color:bad?cv('--warn'):col,weight:bad?4:f.length?3:2,fillColor:col,fillOpacity:c||fxTyped(m)?0:.9,dashArray:c?'3,3':null})
-      .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();}).addTo(FxLayer);});
+  shown.forEach(m=>{const f=fl.get(refFor(m))||[], bad=f.some(x=>x.lvl==='bad'), col=m.race<=3?cv('--r'+m.race):cv('--ink'), c=car(m), x=rvg.get(refFor(m)), dn=!!(x&&x.dnu);
+    L.circleMarker([m.lat,m.lon],{radius:res.outline.has(refFor(m))&&!c?8:7,color:bad?cv('--warn'):dn?cv('--muted'):col,weight:bad?4:f.length?3:2,fillColor:col,
+      fillOpacity:c||fxTyped(m)?0:dn?.35:.9,dashArray:c?'3,3':dn?'2,3':null})
+      .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();}).addTo(FxLayer);
+    // the review glyph, up-left of the fix, never taking a tap
+    if(x&&(x.use.length||x.acc.length))L.marker([m.lat,m.lon],{interactive:false,keyboard:false,icon:L.divIcon({className:'fxRvIcon',iconSize:[14,14],iconAnchor:[22,22],
+      html:'<span class="fxRvG" style="color:var('+(x.use.length?'--ink':'--ok')+')">'+(x.use.length?'→':'✓')+'</span>'})}).addTo(FxLayer);});
 }
 // the sketch stays up until Leaflet has loaded, so a refresh while it loads never leaves the box empty
 async function setFxView(chart){
