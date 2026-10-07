@@ -464,6 +464,44 @@ The next development roadmap should be derived from this history while
 respecting the independent maintenance and contribution processes of
 both upstream Sail Scoring repositories.
 
+## 18. Intended operational workflow (stated 7 October 2026)
+
+This section records the intended workflow as stated on 7 October 2026. It is not a statement of what the code currently does.
+
+1. **Laid Mark Record page.** The RIB records the physical laid marks on the day, ideally in the correct Race 1, 2, 3 sequence. Mark roles include Committee Boat, Windward, Leeward, Start Pin, Gybe and Finish Pin. Each fix is saved on the server in JSON format. Several marks with the same name can be saved; the timestamp is what distinguishes them, which allows for marks repositioned because of wind changes.
+
+2. **Course Plot page.** This is the Race Officer's tool page. It starts by assigning a Series Name to the course. Tapping Get Latest Marks reads the exact as-recorded marks from the saved JSON file. It never edits that source data.
+
+3. **Derived course.** The page builds an initial course plot from the mark names and recorded times, using the start time entered for each race and the classes starting. No separate original course is saved (decided 7 October 2026): the recorded marks are the original, and any course must be reproducible from them plus the rules and decisions.
+
+4. **Race Officer tools.** Entering wind direction, and optionally wind speed, provides the initial tools, such as line squareness and whether the windward mark is a true beat.
+
+5. **Check recorded marks.** Where automatic detection has produced an inaccurate as-sailed course plot, the Race Officer selects which of the recorded marks are used.
+
+6. **Saved course.** The revised course is saved to the server as a complete course in its own record, derived from the recorded marks plus the accept, use-as and not-to-be-used decisions. The intended way of storing it is described under "Intended saved-course workflow" below.
+
+7. **Handoff to Sail Scoring.** The saved course is what the Course Plot page hands to Sail Scoring as the As Sailed Course, for use in the scoring sequence.
+
+### Intended saved-course workflow (to be built and tested)
+
+This is the intended workflow, stated on 7 October 2026. It is not decided, and it becomes the workflow only after it has been built and has passed testing.
+
+1. **Draft.** The Race Officer sets up the course: Race N, Start N, start time, classes starting, and the intended course by card import or by tapping chips. This is working state that can be replaced; only a short undo window is needed.
+2. **Decisions.** This stage begins when the Race Officer starts "Check recorded marks". The Race Officer checks that the plotted course is what was created and is not distorted by a bad mark position or an unrecognised start line, and selects, for example, a moved weather mark for the second leg. Each edit records its own decision with its reason, such as "Weather Mark fix 2 used for 2nd beat due to wind shift". Decisions are append-only.
+3. **Accepted course.** When the course reflects the race as sailed, it becomes the accepted course, stored as a complete record that names the fixes and decisions it came from. It is not replaced.
+
+### Invariants
+
+- The recorded marks are never edited or overwritten; new information or a flag may be added.
+- A saved course is reproducible from the recorded marks plus decisions.
+- Decisions are append-only.
+- A saved course is always derived, never hand-edited.
+- What is handed to scoring is the saved course.
+
+### Terminology
+
+This project's names are updated course and As Sailed Course; "original recorded course" was retired on 7 October 2026. The earlier term "Race Day Course Record" in this history refers to the course the Course Plot builds from stored observations. "Course Record" with capitals refers to the versioned format proposed in Sail Scoring's `course-days.md`. Use one vocabulary before any export to that format.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
