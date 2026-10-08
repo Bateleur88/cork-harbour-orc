@@ -1,6 +1,6 @@
 # ROADMAP
 
-Status: PUBLIC DRAFT, 7 October 2026. Redacted from a private working draft: private correspondence is not summarised here. For discussion only; nothing here is agreed with anyone outside this project. The Phase 1 audit is complete (`docs/audit/PHASE1_AUDIT.md`). Nothing is a commitment until Decision 1 has been settled with the Sail Scoring maintainer.
+Status: PUBLIC DRAFT, 7 October 2026, revised 8 October 2026. Redacted from a private working draft: private correspondence is not summarised here. For discussion only; nothing here is agreed with anyone outside this project. The Phase 1 audit is complete (`docs/audit/PHASE1_AUDIT.md`). Nothing is a commitment until Decision 1 has been settled with the Sail Scoring maintainer.
 
 Sources for this revision, all read on 7 October 2026:
 
@@ -64,7 +64,7 @@ Commit references are from `PROJECT_HISTORY.md`; the others are README-only.
 - A dedicated "Copy legs for SailScoring" block (30 September, commit `98f9713`).
 - RIB page accepts only a fresh position: a position more than 5 s older than the tap is ignored; at 5 m accuracy or better it saves at once, otherwise the best fresh one is saved after 10 s; nothing is saved after 20 s. This responds to the 4 October finding that half the fixes were 24 s to 12.5 minutes old (5 October, commit `ce3e7e4`).
 - Race + start structure, with course history kept per race and start (first version of the day plus the last 5 replaced versions, size-capped).
-- Append-only decisions file (use as, do not use, accept, revoke), written only with a separate RO key, read with the race key. **Corrected by the audit:** verified on the server (test t15), but no page writes decisions yet; the RO page only reads and displays them.
+- Append-only decisions file (use as, do not use, accept, revoke), written only with a separate RO key, read with the race key. **Corrected by the audit:** verified on the server (test t15), but no page writes decisions yet; the RO page only reads and displays them. **Since 8 October 2026:** a page write path was built (PAGE_VERSION .13 to .19) and taken out again (.20); no page reads or writes decisions. The endpoint and RO key stay in `marks.php`, unused (tag `experiment/decisions-review`).
 - RO page "Check recorded marks" (5 October, commit `01329fc`): a read-only plot of every fix, with computed start lines, finish lines and the leg between the latest Windward and Leeward, candidates shown but never joined by default, and advisory flags that never block (stale position, pin close to a mark, line far from square, mark far from the same mark in another race, pin ordering, no committee boat).
 - Server-side tests: `tests/test_marks.py` (runs `marks.php` as real CGI requests, on PHP 8.4 and PHP 5.5) and `tests/test_build_test.py`. There are no browser-workflow tests.
 
@@ -90,6 +90,8 @@ Where the README and `PROJECT_HISTORY.md` say each problem is addressed. On 7 Oc
 | Race 3 clearly wrong; "All races" sketch unusable | All-races view with race chips and labelled fixes | In progress (RO / Scorer decisions process) |
 | Unknown who laid which mark; RIB drivers cannot recall | Recorder name and lettered phone on every fix; re-record request buttons | In progress (RO / Scorer decisions process) |
 
+Since 8 October 2026 the RO / Scorer decisions process is replaced by the as-sailed course repair; current state in `STATUS.md` L4 to L8.
+
 ### Phase 1 audit findings (7 October 2026, commit `f30882f`)
 - Server tests pass on PHP 8.4.26 and PHP 5.5.38; the workbook audit passes 16 of 16 with the SHA-256 the README gives. No JavaScript in either page is tested.
 - **Intended workflow versus built:** see the table in section 1b. In short, the course is not derived and stored as described (see the design decisions); the leg table comes from the page's live state, and legs are never stored.
@@ -98,12 +100,12 @@ Where the README and `PROJECT_HISTORY.md` say each problem is addressed. On 7 Oc
 - `varW()` (magnetic variation) uses an Irish-fitted formula and today's date, not the race date.
 
 ### In progress
-- RO page validation step per race (the RO / Scorer decisions process, which also covers the start line fix and 4 October problems 4 to 8 in the table above): accept marks, copy or move a mark to another race, or flag a mark "Not to be used". Decisions are recorded on top of the original fix, which is left as recorded, and stored on the server as the record of how the race was scored.
+- RO page as-sailed course repair per race (replacing the RO / Scorer decisions process, withdrawn 8 October 2026): any recorded fix of the day can be used for a course row (picked chips) or a line end, without changing the fix, and those choices are saved with the course (`STATUS.md` C8).
 - Tap-to-use applies to the selected start only, because starts within a race can have different layouts.
 - Work on the RIB and RO pages is done through Claude Code, using prompts written in chat.
 
 ### Relationship to this roadmap
-- The RO page work is the practical start of observations -> decisions -> course -> history, and continues independently of the roadmap phases.
+- The RO page work is the practical start of observations -> choices -> course -> history, and continues independently of the roadmap phases.
 - The Phase 1 audit makes no code changes and should run alongside it.
 - Proven offline behaviour and unproven course-building behaviour should be tracked separately when Cork is extracted as Venue 1.
 
@@ -118,7 +120,7 @@ This is the intended operational workflow. The Phase 1 audit has checked the cod
 3. **Derived course.** The page builds a first course plot from mark names and recorded times, using the start time and starting classes entered for each race. (Decided 7 October 2026: no separate original course is saved. The recorded marks are the original, and any course must be reproducible from them plus the rules and decisions.)
 4. **RO tools.** Entering wind direction, and optionally wind speed, gives initial tools such as line squareness and whether the windward mark is a true beat.
 5. **Check recorded marks.** Where automatic detection has produced an inaccurate "as sailed" plot, the RO selects which of the recorded marks are used.
-6. **Saved course.** The revised course is saved to the server as a complete course in its own record, derived from the recorded marks plus the RO's accept, use-as and not-to-be-used decisions. The intended storage workflow (Draft, Decisions, Accepted) is described below and is not yet decided (`STATUS.md` A4).
+6. **Saved course.** The revised course is saved to the server as a complete course in its own record, built from the recorded marks plus the RO's choices (course rows, picked chips, line ends; `STATUS.md` C8). The intended storage workflow (Draft, Decisions, Accepted) is described below and is not yet decided (`STATUS.md` A4).
 7. **Handoff.** The saved course is what the Course Plot hands to Sail Scoring as the **As Sailed Course** for the scoring sequence (today by the leg-table paste; see section 12).
 
 ### Data layers and invariants
@@ -126,10 +128,10 @@ This is the intended operational workflow. The Phase 1 audit has checked the cod
 | Layer | Written by | Changes after saving? |
 |---|---|---|
 | Observations (fixes) | RIB recorder | Never edited; new fixes are added |
-| Decisions (accept, use-as, not-to-be-used, revoke) | RO / Scorer | Append-only |
-| Saved course (working term: updated course) | Course Plot, from the recorded marks plus decisions | Intended: Draft, Decisions, Accepted (below; `STATUS.md` A4); must be reproducible (A27) |
+| Choices (course rows, picked chips, line ends, laid marks) | RO / Scorer | Saved with the course; laid-mark choice and automatic line ends not yet (`STATUS.md` A10) |
+| Saved course (working term: updated course) | Course Plot, from the recorded marks plus the choices saved with it | Intended: Draft, Decisions, Accepted (below; `STATUS.md` A4); must be reproducible (A27) |
 
-Invariants: the recorded marks (observations) are never edited or overwritten (guardrail 17); a saved course is always derived and reproducible from the recorded marks plus decisions, never hand-edited; and what is handed to scoring is the saved course.
+Invariants: the recorded marks (observations) are never edited or overwritten (guardrail 17); the as-sailed course is built from them, using any recorded fix of the day; every choice in a saved course is explicit and reproducible; and what is handed to scoring is the saved course.
 
 ### Intended saved-course workflow: Draft, Decisions, Accepted (intended, not decided)
 
@@ -149,7 +151,7 @@ Points to settle (none assumed): what starts stage 2 (pressing "Check recorded m
 | Step 2: Series Name first; Get Latest Marks never edits source data | Get Latest Marks is GET only (verified). The series is one name per `data/` folder, not per course, and nothing requires it before building. The RO page can also re-post a fix under a different race and add typed fixes |
 | Step 3: first course built from mark names, times and classes, saved as the original recorded course | Contradicted. The RO builds the course by taps or card import; every edit autosaves over the current `race|start` version. There is no designated original; history keeps the first autosave of the day once it is replaced |
 | Step 4: wind gives line squareness and true-beat check | Verified |
-| Step 5: Check recorded marks lets the RO choose marks | Read-only in the code. Selection happens in the line-end pickers, laid-mark picker and course-row taps; no decision is written |
+| Step 5: Check recorded marks lets the RO choose marks | Read-only in the code. Selection happens in the line-end pickers, laid-mark picker and course-row taps; no decision is written. **Since PAGE_VERSION 2026-10-06.20:** *Add to Race N chips* brings a tapped fix into the race's chip bank (saved with the race); the box changes no fix and writes no decision |
 | Step 6: saved course, derived from the recorded marks plus decisions | Not built. One record per `race|start`, replaced on each save; it references no decisions |
 | Step 7: saved course handed to Sail Scoring as the As Sailed Course | Not built. The leg table is computed from the page's live state |
 
@@ -157,7 +159,7 @@ Points to settle (none assumed): what starts stage 2 (pressing "Check recorded m
 |---|---|
 | Observations never edited or overwritten | Contradicted (delete and re-post paths exist) |
 | Original recorded course never overwritten | Superseded: no separate original course is kept (decided 7 October 2026). Replaced by the requirement that a saved course can be reproduced from the recorded marks plus decisions, which is not met today (`STATUS.md` A27) |
-| Decisions append-only | Verified at the API |
+| Decisions append-only | Verified at the API (the endpoint is unused by the pages since 8 October 2026) |
 | Saved course derived and reproducible, never hand-edited | Not established (no derived saved course exists; the course is built by hand by design) |
 | What is handed to scoring is the saved course | Contradicted |
 
@@ -166,14 +168,14 @@ Course-history cap: the first saved version is never dropped by the keep rule or
 ### Design decisions and open questions (Pat, 7 October 2026)
 
 Decided:
-- There is no separate original recorded course. Pat chose, on 7 October 2026, option 1 of three considered: the recorded marks are the original and are never overwritten (only additional information or a flag may be appended), and the course is always derived from them plus decisions. This only works if resolution is reproducible, which it is not today: automatic line ends and laid-mark choices re-resolve on each render, the laid-mark choice is kept on the phone only, and laid marks have no start-time limit.
+- There is no separate original recorded course. Pat chose, on 7 October 2026, option 1 of three considered: the recorded marks are the original and are never overwritten (only additional information or a flag may be appended), and the course is always derived from them plus decisions. This only works if resolution is reproducible, which it is not today: automatic line ends and laid-mark choices re-resolve on each render, the laid-mark choice is kept on the phone only, and laid marks have no start-time limit. (8 October 2026: read "plus decisions" as "plus the choices saved with the course"; `STATUS.md` C8.)
 - `varW()` should use the race date, not today's date. Not yet changed in the code.
 
 Open:
 - The saved-course workflow (Draft, Decisions, Accepted) is intended, not decided; it must be built and pass testing first (`STATUS.md` A4).
 - Is the missing start-time limit on automatic laid-mark choice intended? Mark's `course-days.md` describes the rule as the newest exact-name fix recorded before the start. To be investigated.
 - Should the laid-mark choice (`laidSel`) be saved with the course instead of kept on the phone? To be investigated.
-- Where are decisions written, and from what? The decisions write work is part of the in-progress RO / Scorer decisions process. Pat's view is that decisions should probably be saved on the server.
+- Answered 8 October 2026: the page writes no decisions; the write path was built and taken out (`STATUS.md` A1, withdrawn).
 
 ### Phase 1 checks against this workflow (answered by the audit above)
 - Does the code enforce each invariant, and can any path edit or delete an observation?
@@ -243,7 +245,7 @@ Not this project's decision alone. See section 5.
 14. Never rename `RW_Refinery_North` or `RW_West_of_Refinery` back, never conflate No.7/Corkbeg with Dosco/Corkbeg or EF1 with EF4, never restore the pre-v2.50 E4 coordinate, and never deduplicate repeated occurrences of a logical pair within a course.
 15. Do not upload `marks.php` or the RO page to the live paths within 12 hours of a race, and take the three dated backups first (README, "Live install: backup and rollback").
 16. The viewer stays dumb: it displays what the workbook says and never invents a route, substitutes a mark or infers an alias.
-17. Never edit or overwrite the recorded marks (source observations). A saved course must be reproducible from the recorded marks plus decisions; RO / Scorer changes are saved as decisions (section 1b). **Not yet enforced by the code** (audit, 7 October 2026): delete and re-post paths exist for fixes, and the current course is replaced on every save.
+17. Never edit or overwrite the recorded marks (source observations). The as-sailed course is built from them, using any recorded fix of the day, without changing any fix; every choice in a saved course is explicit and reproducible (section 1b; `STATUS.md` C8). **Not yet enforced by the code** (audit, 7 October 2026): delete and re-post paths exist for fixes, the current course is replaced on every save, and automatic line ends and the laid-mark choice are not saved with the course.
 
 ---
 
@@ -259,7 +261,7 @@ This map assumes Decision 1 option 1 or 3. If option 2 is chosen, the first two 
 - Course selection / construction
 - Start / finish geometry and wind information
 - Observation review and reconstruction of what was actually sailed
-- Race + start structure, the append-only RO decision layer, course history
+- Race + start structure, the as-sailed course repair (choices saved with the course), course history
 - Venue knowledge not carried by `course-cards`
 
 ### SHARED / COORDINATE (with Sail Scoring and course-cards)
@@ -305,7 +307,7 @@ this repo (operations) -> race positions / Course Record -> sailscoring (scoring
 - Python tooling, PHP/JSON server, two HTML pages, the audited master workbook (v3.19 as of this revision, 40 courses, 360 configurations, 3,759 physical legs, 186 directed chords) and a SHA-256-checked release process.
 
 ### Mandatory reading before any Claude Code work (verify that each exists and is current)
-1. `PROJECT_HISTORY.md` and `README.md` in this repository. `PROJECT_HISTORY.md` is current to 6 October; record the outcome of Decision 1 in it once settled.
+1. `PROJECT_HISTORY.md` and `README.md` in this repository. `PROJECT_HISTORY.md` is current to 8 October; record the outcome of Decision 1 in it once settled.
 2. `sailscoring/docs/design/course-days.md`
 3. `course-cards/docs/format.md` and the RCYC and DBSC data-set READMEs
 4. `sailscoring/docs/design/orc/orc-scoring.md` and `docs/goals.md` (not yet read by this roadmap's author)
@@ -421,7 +423,7 @@ Only after shadow testing: one race area, one operation, limited users, existing
 
 ## 9. Authentication
 
-Current state per the README: a **race key** (in `key.js`, loaded by both pages, so readable by anyone who loads a page) covers fix and course writes and reads; a separate **RO key** (read from `data/ro-key.php`, taken only from the `X-RO-Key` header) is required to write decisions. Mark's `course-days.md` says the shared race key is what step 6 replaces.
+Current state per the README: a **race key** (in `key.js`, loaded by both pages, so readable by anyone who loads a page) covers fix and course writes and reads; a separate **RO key** (read from `data/ro-key.php`, taken only from the `X-RO-Key` header) is required to write decisions, an endpoint no page uses since 8 October 2026; it is reserved for a possible lock on the as-sailed course (intended, not built). Mark's `course-days.md` says the shared race key is what step 6 replaces.
 
 Evaluate, without adopting blindly, Mark's proposal: per-day capability links tied to a RIB or user purpose, stored hashed, expiring and revocable, with fixes from a revoked link quarantined, and a narrow offline page with client-generated fix ids so retries are harmless. Review before any larger deployment. This is tied to Decision 1.
 
