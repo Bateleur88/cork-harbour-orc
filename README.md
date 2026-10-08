@@ -69,7 +69,8 @@ bathymetry only validates the resulting physical chords.
   and a club laid mark (Curlane, Dutchman, White Bay) takes
   its *position* from the day's RIB fix, because its stored coordinate is only a
   planning approximation. The mark is never substituted, only its position; only
-  a fix with exactly the mark's name is used automatically; the card's route to it
+  a fix whose name matches the mark's name, ignoring case, spaces and punctuation,
+  is used automatically; the card's route to it
   is kept, with the last segment measured to the fix and labelled not
   depth-checked; and every change of position is shown with its effect on the
   course, never applied silently.
@@ -173,33 +174,27 @@ put that day's `courses-history-YYYY-MM-DD.json` back from a dated backup of `da
 or remove it (the history then starts again from the next save). A course save may
 carry `by`, the name of whoever saved it (text, cut to 40 characters, dropped if not
 text); it is stored with that version and moves into the history with it. The RO
-page sends its Review name (below) as `by`; with no name set, and from older pages,
-there is none, and an older `marks.php` ignores it. Read with
+page no longer sends one (it did in the decisions experiment; see
+`docs/experimental/decisions-and-review/`); an older `marks.php` ignores it. Read with
 `GET ?type=coursehistory&date=` and the race key; comparing and restoring versions
 is for a later page.
 
-*Review decisions.* The scoring review (use as, do not use, accept, and revoke to
-undo) is kept in `/marks/data/decisions-YYYY-MM-DD.json`, append-only, keyed by the
-record id the page makes (a retry writes nothing), at most 2000 a day. Decisions are
-**written only with the RO key** and **read with the race key**
-(`GET ?type=decisions&date=`). `key.js` is public, so names and notes in decisions
-are effectively readable by anyone with the race key: no personal details in notes.
-Each record names a fix by its server id and never changes it; `marks.php` adds its
-own time and the series name. Course and series writes stay on the race key.
-A decision can only name a fix already on the server (`s:` and its server id), so a
-page must say "not on the server yet" for a fix still waiting in a phone's outbox.
-The `from` of a "use as" record is what the page says it replaced: the server checks
-its format only and does not verify it against the course. A name (`who`) or note
-containing `<` or `>` is refused with 400 "bad decision: who" or "bad decision:
-note", so a page must check both before sending.
+*Decisions endpoint (unused).* `marks.php` still accepts append-only review
+decisions (written only with the RO key, read with the race key through
+`?type=decisions`), but no page uses them since the review UI was taken out of the
+RO page in PAGE_VERSION 2026-10-06.20 (see `docs/experimental/decisions-and-review/`).
+Names and notes in decisions would be readable by anyone with the race key, which is
+public (`key.js`), so they must not contain personal details.
 
 *RO key.* `pages/marks/ro-key.example.php`, copied on the server to
 `/marks/data/ro-key.php` with `CHANGE_ME` replaced: 16 to 64 letters, digits, `-` or
 `_`. `marks.php` reads it as text, never runs it, and takes the RO key only from the
-`X-RO-Key` header, never from the URL. While it is missing, malformed or still
-`CHANGE_ME`, every decision write is refused ("RO key not set on the server"). The
-real file is never committed. Backups of `/marks/data/` contain it: keep them outside
-the repository and never share them.
+`X-RO-Key` header, never from the URL. At present it protects only the unused
+decisions endpoint above: while it is missing, malformed or still `CHANGE_ME`, every
+decision write is refused ("RO key not set on the server"), and nothing else needs
+it. It is reserved for a possible lock on the as-sailed course, which is intended,
+not built. The real file is never committed. Backups of `/marks/data/` contain it:
+keep them outside the repository and never share them.
 `tests/test_marks.py` checks all of this.
 
 **Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
@@ -212,39 +207,12 @@ footer "© 2026 Pat Tanner ORC Ireland".
   never taken from the RIBs' fixes or from a pasted WhatsApp backup. Unset, the
   field is empty with a red border and says so. An edit made without signal is
   kept on the phone and saved when there is signal.
-- *Review* (under the series name, closed on every load): "RO or Scorer name" and
-  "RO key", each typed once per device and kept on it outside the saved state, so
-  Clear everything keeps them, like the series name and race key. Each has Save and
-  Remove; a new value replaces the old one. The name follows the rules of
-  `marks.php` (1 to 40 characters, white space runs made one space, no `<` or `>`, no
-  control characters, and here no U+0080 to U+009F either) and goes as `by` with
-  every course save while it is valid; with no name the request is as before. The
-  RO key must be 16 to 64 letters, digits, `-` or `_`; its field is a password field,
-  emptied when Save is tapped whether or not the key was valid, and the key is never
-  shown again, never put in a URL, a message or any text the page builds. It is sent
-  only as the `X-RO-Key` header of a review decision write (see *Recording review
-  decisions* below), read from storage at that moment, and on no other request.
-  Both are stored in clear text in this device's browser storage, like the race key,
-  so anyone with the device can read them: if a device that holds the RO key is
-  lost, change the RO key on the server. A name sent as `by` is stored with that
-  course version and is readable through `?type=courses` and `?type=coursehistory`
-  with the race key, so it is effectively public to anyone with the race key.
-  A decision write does not go through `keyFetch`, which treats every 403 as a race
-  key that may have changed, re-reads `key.js` and sends again (that retry is left as
-  it is): the write reads the error first, and only "bad key", the race key, re-reads
-  `key.js` and sends once more. "RO key not set on the server…" shows "Not saved: the
-  RO key has not been set up on the server yet." and "bad RO key" shows "Not saved:
-  the server did not accept this phone's RO key. Enter it again in Setup → Review.",
-  each followed by "Nothing was changed."; after "bad RO key" the Review line reads
-  "key refused by the server" until the key is saved again or removed, or a write is
-  accepted (the key is kept, not deleted). Each shows beside the decision in the fix
-  detail and in Review. With no key saved, the decision actions say "Enter the RO key
-  in Setup → Review to record decisions."
 - *Import a harbour course* (section 2) is folded away, closed each time the page
   opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
   40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
   Whether it is open is not saved.
-- *Check recorded marks* (end of section 1, closed by default): a read-only plot of
+- *Check recorded marks* (end of section 1, closed by default): a plot, read-only
+  except *Add to Race N chips* (below), of
   every fix loaded for the race selected, or for all races, for the RO or scorer to
   spot one out of place. It is one element shown in both views (at the bottom of Race
   view). Its closed line counts fixes: "2 fixes to check" is two fixes with at least
@@ -258,13 +226,15 @@ footer "© 2026 Pat Tanner ORC Ireland".
   (R1, R2, R3…) switch races on and off in the sketch, chart and list; the closed
   line still counts every race, and the choice is not saved. A switched-off race's
   committee boat stays, dashed, while a race shown carries it forward, and a selected
-  fix of a switched-off race is deselected. Tapping a fix gives its
-  name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
-  recorder, position, and how old the position was when saved: the fix id starts
-  with the phone's clock, so id time minus the fix's time, falling back to when the
-  server received it. The detail, with the review decisions under it, sits directly
-  under the sketch or chart, above its key and notes; tapping a fix in the sketch or
-  the list scrolls it into view.
+  fix of a switched-off race is deselected. Tapping a fix in the sketch, the chart or
+  the list gives a short detail directly under the sketch or chart, scrolled into
+  view: name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
+  position, and *Add to Race N chips*. The recorder is named in the All fixes list.
+  How old a position was when saved (the fix id starts with the phone's clock, so id
+  time minus the fix's time, falling back to when the server received it) shows only
+  as a check (below), in that list. Under the detail are four folds, *Key*, *Line
+  notes (N)*, *Information (N)* and *All fixes (N)*: closed on every load, left as
+  they were by a redraw or the 30 s refresh, and hidden when empty.
   The checks, with their thresholds as named constants at the
   top of that code and tuned to one day's fixes (4 Oct 2026), are advice only and
   never block anything: a position 20 s to 5 min old (check) or over 5 min (likely
@@ -277,12 +247,17 @@ footer "© 2026 Pat Tanner ORC Ireland".
   race's first start; a race with no committee boat
   of its own. Each has a WhatsApp, Share or Copy button with a short message asking
   for the mark to be recorded again. Sketch by default; Chart needs signal.
-  **Lines (view only).** The sketch and the chart draw the same lines, in the race's
-  colour and under the fixes, from the page's *automatic* rules applied to the
-  recorded fixes: never from the RO's line-end choices or the finish setting, so they
-  can differ from the course sketch above, which follows the chips the RO tapped and
-  the line ends the RO chose. The box only shows what the recorded fixes would give
-  by default; the RO or scorer chooses. Per start (selected start; with *All races*,
+  **Recorded lines and the as-sailed course.** The sketch and the chart draw the
+  recorded lines, in the race's colour and under the fixes, from the page's
+  *automatic* rules applied to the recorded fixes, never from the RO's line-end
+  choices or the finish setting. Over them they draw the as-sailed course of the
+  selected race and start, from the same data as the course sketch above (the chips
+  the RO tapped and the line ends the RO chose): each leg solid, heavier than any
+  recorded line, with an arrowhead, and its start and finish lines at full strength.
+  A recorded line of that race and start that the as-sailed course does not use is
+  thin, finely dashed and faded. They differ by weight and dash, not by colour
+  alone. With *All races* the as-sailed course is drawn while its race is switched
+  on. The recorded lines, per start (selected start; with *All races*,
   every start of each race shown, identical lines drawn once): the start line joins
   the latest committee boat and the latest Start Pin recorded at or before that
   start's time (fix time ≤ start time, the start time to the minute); the recorded
@@ -302,140 +277,38 @@ footer "© 2026 Pat Tanner ORC Ireland".
   start (Start 1 with *All races*) is noted, as a fact. A pin can be a candidate for
   one start and not another, so in single-race mode the closed line's "fixes to
   check" count can change with the selected start.
-  Anything missing is listed in plain words under the plot, in both views; the
-  closed line counts candidates apart.
-  **Review decisions (reading them).** With every Get latest marks and 30 s refresh,
-  after the fixes and courses, the page reads the loaded day's review decisions
-  (`?type=decisions`, race key only) and shows them as a separate layer; reading
-  them never uses the RO key, and changes no line, line-end pick, course, leg or
-  output; it adds a warning with the legs where the selected start still uses a
-  fix marked do not use (below). They are held in memory for that day only
-  (nothing is stored on the phone) and Clear everything empties them; a past day
-  gets no 30 s refresh, so tap Get latest marks again there. A line under the plot
-  gives their state: how many are in force, undone and replaced, how many records
-  the day holds of the server's 2000, and "as of" the
-  last read; with no signal or a refused key the last read is kept and says it
-  could not refresh; an older `marks.php` gives "This server does not keep review
-  decisions yet". What is in force, in the order written: an undo (revoke)
-  cancels the record it names; for
-  each race, start and role (committee boat, Start Pin, finish committee boat,
-  Finish Pin, Windward, Leeward, Gybe) the latest use-as or accept not undone
-  applies and earlier ones are "replaced by a later decision" (undoing the latest
-  lets the one before apply again). A use-as for Windward, Leeward or Gybe course
-  rows is the exception: it replaces only the rows it lists, so it is kept per race,
-  start, role and the fix it replaced, and two use-as replacing different fixes in
-  one start (a deliberate second Leeward, say) both apply; one that replaces the fix
-  an earlier use-as put in replaces that earlier one. A fix is "do not use" for the
-  whole day while it has a do-not-use not undone. Records the page does not
-  understand are counted and
-  ignored. Under each fix in the list: "✓ accepted as Race 1 Start 1 Leeward",
-  "→ used for Race 1 Start 1 Leeward" or "✗ do not use: reason" (the fix's row struck
-  through), with who and when; the fix's detail gives its whole review history:
-  the records in force, with who and when, then a closed "Earlier records (N)" with
-  the undone and replaced records and the Undo records (it stays open or closed as
-  left, also when another fix is tapped). Under the plot, kept apart from the page's
-  own checks, the review flags (⚑), never corrected by the page: the start's course
-  rows or its line end in use (chosen, inherited or automatic) differ from the use-as
-  or accept that applies (for a use-as of rows, one of the rows it lists no longer
-  holds its fix); a do-not-use fix still used by a course row (directly or
-  as a laid mark) or by a start's line end in use; a decision naming a fix no longer
-  on the server. Information only, not counted: the box's default lines still
-  joining a do-not-use fix (the defaults ignore the review); a decision for a fix of
-  another race or recorded after that start; two decisions for one start and role;
-  do not use and use as on the same fix. The closed line adds "N review decisions"
-  (in force, for the race shown or all races) and "N review flags", never adding
-  them to the fixes to check or the candidates. On the sketch and the chart, a fix
-  marked do not use has its fill faded with a grey strike (on the chart a grey dashed
-  outline, or the warning colour when it is also likely wrong), and a fix accepted or
-  used for a start has a ✓ or → beside it, placed after the labels; in All races the
-  short labels add " ✗", " ✓" or " →R1S1", and the labels make room for it. A fix
-  that a decision in force takes from another race for a start of a race shown (the
-  Race 3 Leeward used for Race 1 Start 1, say) is plotted dashed like a carried fix
-  and labelled "used by review for…"; it can be tapped, but no line is drawn to it
-  and it is not counted. With All races it is added only when its own race is
-  switched off and the race that uses it is on. The key names these only while a
-  decision is in force.
-  **Recording review decisions.** Under a tapped fix's detail, for the race and
-  start selected in the pickers (also with *All races* ticked), every button and
-  preview naming its target: *Accept as Race 1 Start 1 Windward*, once for each role
-  in which that start uses the fix now (a line end its outputs use, chosen,
-  inherited or automatic, or a Windward, Leeward or Gybe course row; a laid mark has
-  no role in the review; not for a fix marked do not use, which is undone first);
-  *Do not use* the fix, for the whole day, with a reason (required); *Use as* (below);
-  *Undo* a decision in force, a do-not-use, one for the selected start, or a use-as
-  of the selected race (a decision replaced by a later one says to undo that one
-  first). A note is optional on Accept, Use as and Undo; names and notes are readable
-  by anyone with the race key, so no personal details. Only Use as and its Undo
-  change a course, and only its rows; none of these changes a line end, a recorded
-  fix or the box's lines. A do-not-use fix stays in automatic line-end picks
-  and in the course builder's offers. Where the selected start still uses it, in a
-  course row (directly or as a laid mark following it) or as a line end its outputs
-  use (committee boat, Start Pin, finish committee boat or Finish Pin; chosen,
-  inherited or automatic), a warning with the legs, "Legs need updating", names the
-  fix, who and when, the rows and line ends, and whether the race has another fix
-  of that mark type ("Race 1 has no other Leeward fix"), and says how to change
-  them: Use as for Windward, Leeward or Gybe rows (or the course chips); for now
-  the course chips for other marks, the laid mark's Position list, or the line-end
-  choices. The legs, total, sketch, SailScoring table and Send text keep their
-  numbers until then; the note above the SailScoring table (not copied) adds a line
-  naming the fix. The same shows as a review flag in Check recorded marks, for every
-  start. The warning goes when the decision is undone or the rows and line ends no
-  longer use the fix, and comes back from the server after a reload. While the day's
-  decisions cannot be read, a line with the legs says so ("a fix marked do not use is
-  not flagged here"), or "as of" the last read that could not be refreshed.
-  *Use as*: tap the fix to use instead (a Windward, Leeward or Gybe); it offers
-  *Use as Leeward in Race 1 Starts 1, 2, 3, in place of the R1 11:03 Leeward* for
-  each fix of the same mark type marked do not use that the selected race's course
-  rows use. It works on the selected race only: where such a fix is used by other
-  races' rows instead, the panel says so ("…is used by Race 1 Starts 1, 2, 3, not by
-  Race 2. Select Race 1 to replace it there."). It replaces ONLY the rows that
-  point at that fix, in every start of the race that uses it, each row keeping its
-  side, so a deliberate second Leeward is never overwritten. A deliberate limit of
-  this version: it is offered only in place
-  of a fix marked do not use; correcting a fix that is not is done with the course
-  chips, and Use as may be widened to that later. A laid mark following a fix, and
-  line ends, are not replaced here. The preview lists each start with its rows, its
-  legs and total before and after (worked out without changing anything), and
-  whether its warning clears. One review decision is recorded per start (their ids
-  share a prefix), sent one after another; a start's rows change only once its own
-  decision is saved, and the course is then saved as usual, with the name as "by".
-  Just before each send that start is checked again; one whose rows changed since
-  the preview is not sent and says so. The first failure stops the run: the starts
-  saved so far stay saved, and Retry sends the rest with the same records. Leaving
-  the page, the fix, the race or the day while a failed action waits for Retry drops
-  its unsent records, and a new action then uses new record ids (if an earlier
-  answer was lost, that start can end up with two use-as records, the later one
-  replacing the earlier). The
-  whole action is refused before anything is sent if the day's records plus its own
-  would pass the server's limit of 2000. A use-as records its rows by position in
-  the course at that time. Its *Undo* (each start, or all starts of one action
-  together) records a revoke and puts those rows back to the fix they held, sides
-  kept; it is refused for a start where one of those rows no longer holds the
-  replacement (change it with the course chips; the course history keeps the
-  earlier versions).
-  Before anything is sent the page
-  checks the Review name and RO key are saved, that the fix is on the server ("not
-  on the server yet" for one still waiting on a phone) and that the day's decisions
-  have been read; then it shows a preview (for Do not use, every start still using
-  the fix, where a flag will show; for Use as, as above) with Confirm and Cancel.
-  Confirm checks again, makes the record with its own id and sends it, with the race
-  key and the RO key.
-  There is no queue on the phone: a write that fails (no signal, a refused key, the
-  server refusing the record, the day's limit) changes nothing and says so, and
-  Retry sends the same record with the same id, so one whose answer was lost is not
-  written twice. After every write, failed or not, the day's decisions are read again
-  at once (a past day has no 30 s refresh). The preview, a record kept for Retry and
-  the messages are page state only: nothing is stored on the phone, a decision is
-  never counted as not sent, and Clear everything drops them.
+  Anything missing is listed in plain words in the Line notes and Information folds,
+  in both views; the closed line counts candidates apart.
+- *Picked chips*: *Add to Race N chips* under a tapped fix's detail brings any RIB
+  fix of the day on the server (any race; not typed, not a line end) into the chip
+  bank of the selected race as a chip of its own, under "Picked for Race N". It adds
+  and replaces nothing; a fix already a chip of that race says so. Tapping the chip
+  adds an ordinary row to the selected start. Its × removes the chip only, never the
+  fix, and is disabled while a row of any start of the race uses it. A race's picks
+  are saved with its start groups as `picked` (server references, `s:<id>`) in its
+  `_starts|N` record; a race without picks saves exactly as before, and `marks.php`
+  stores the field unchanged. A pick whose fix is no longer on the server is
+  dropped. A save of that record from an older page (the live .7) drops the picks;
+  the course history keeps the earlier version. Picked fixes have a dashed ring in
+  the sea colour in Check recorded marks.
+- *Line ends from any race*: the Committee boat, Start Pin and Finish Pin lists
+  offer every recorded fix of that type from every race of the day, earlier races
+  first, then by time, each with its race and time (`R2 13:09`), accuracy, recorder
+  and, for a committee boat or Start Pin, "after this start" where it applies. The
+  choice is saved in `lineSel` as before. *auto* keeps its own rule and never picks a
+  later race's fix. The fix itself is never changed.
+- *Course chart*: the Chart draws what the Sketch draws, from the same data: the
+  legs in order with arrowheads (a leg that follows a card passage goes through the
+  card's waypoints, where the sketch draws it straight), the start and finish lines
+  dashed under them, and the marks and line ends named as on the sketch, with labels
+  that stay on and find new places at each zoom.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
   in for it, and the page says so. A course built before the day's marks could be
   loaded, at the dock say, is kept when they load. A course row whose fix comes
   from another race, earlier or later, names it, e.g. "Leeward (R3 14:39)"; a second
-  fix of the same race reads "(fix 2)". Tapping a fix in *Check recorded marks* also
-  lists the starts of that race that use a different fix of the same mark
-  (information only).
+  fix of the same race reads "(fix 2)".
 - *Race view*: what is needed after the gun. A header with race and start pickers,
   the course and its total; an alert strip for anything that changes during a race
   (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh
@@ -451,8 +324,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
   Grassy Mid, so that water is effectively the validated water; the page warns
   when the line's midpoint is more than 500 m from the card's start point.
   The legs of any race and start are worked out by one function that only reads
-  the page's state (it changes no course, choice or output), so the review's
-  previews, when they come, will give the same figures as the legs table.
+  the page's state (it changes no course, choice or output), so anything else that
+  needs a start's legs gets the same figures as the legs table.
 - *Starts and finishes of a card course are deliberately not mirror images* — do
   not "fix" one into the other:
   - **Finish:** the card's Finish decides. Grassy Mid stands for the Grassy Walk
@@ -470,10 +343,12 @@ footer "© 2026 Pat Tanner ORC Ireland".
     at the last mark) is for hand-built courses only; for a card course it is
     replaced by a statement of the card's finish.
 - *Laid marks* (Curlane, Dutchman, White Bay, from the Marks sheet Type): the
-  latest RIB fix of the day with exactly the mark's name is used; with none, the
-  card position, flagged as a planning position until laid. A near miss such as
-  "Curlane Bank" is suggested, never applied (Curlane Bank is also a name of No.8
-  and No.10). The RO can pin any fix, or the card position. See the exception to
+  latest RIB fix of that race or an earlier one whose name matches the mark's,
+  ignoring case, spaces and punctuation, is used; with none, the card position,
+  flagged as a planning position until laid. A near miss such as "Curlane Bank" is
+  suggested, never applied (Curlane Bank is also a name of No.8 and No.10). The RO
+  can pin any fix, or the card position. That choice is kept on this phone only, not
+  saved with the course (`STATUS.md` A10). See the exception to
   the dumb-viewer rule above. Harp, Ringabella, Dosco and EF4 are permanently
   moored, not laid: they always use the workbook position, and only their published
   coordinates are in question. The Marks sheet Type says which is which.
@@ -482,8 +357,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
   courses saved there come back with Get latest marks. The series name and race key
-  last seen, and the Review name and RO key, are kept (none of them is counted as
-  not sent). If this phone holds fixes not yet sent or course edits not
+  last seen are kept (neither is counted as not sent); an unsent change to a race's
+  picked chips counts as a course edit. If this phone holds fixes not yet sent or course edits not
   yet saved, the first tap says so ("1 fix and 2 course edits not sent yet – tap
   again to clear anyway"). A change that adds page state outside the saved state `S`
   must reset it in `clearPageState()`, the one place the clear is kept in step with
@@ -494,8 +369,9 @@ always was. From 700 px it is one 760 px column with larger sketches. From 1100 
 (tablet landscape, PC) it is two columns, up to 1400 px in all, centred (the "Check
 recorded marks" sketch is drawn on a larger canvas there, up to 85% of the screen
 height, so its labels have more room), so the scorer
-can check the recorded marks and the legs together: in Setup, sections 1 to 3 on the
-left and section 4, "Check recorded marks", wind shift and send on the right; in Race
+can check the recorded marks and the legs together: in Setup, sections 1 to 3 and,
+under them, section 4 (Legs) on the left, and the Sketch/Chart, "Check recorded
+marks", wind shift and send on the right; in Race
 view, the legs table on the left and the sketch with "Check recorded marks" on the
 right, and wind, wind shift and send below. The columns depend on element order in
 the page, not on wrapper elements (see the comment above the media queries): moving
@@ -588,9 +464,11 @@ name (saved, read back and cleared; a wrong key, a bad name or a failed write le
 `series.json` unchanged), and 60 fixes, 10 courses and 30 reads arriving at once.
 It also checks the RO key (missing, malformed, wrong, right, header only), the course
 history (first plus last 5, the 5 MB cap, an identical save writing nothing, a failed
-history write refusing the save, saves arriving at once), the decisions (every field
-validated, a malformed record writing nothing, a retry writing nothing, the daily
-cap, revoke) and that every request the current RIB and RO pages send is accepted
+history write refusing the save, saves arriving at once), the decisions endpoint,
+unused by the pages (every field validated, a malformed record writing nothing, a
+retry writing nothing, the daily cap, revoke), a race's picked list (kept and read
+back, moved into the history, dropped by an older page's save, the 50 KB limit) and
+that every request the current RIB and RO pages send is accepted
 as before. The race key and RO key in its throwaway folders are made at run time.
 Run it, on PHP 8.4 and on PHP 5.5 like the live host, before uploading any change to
 `marks.php`.
@@ -609,7 +487,7 @@ script pages it must refuse (a storage key without `STORE`, a stray `/marks/` pa
 a missing or doubled key.js tag, no `STORE` line, no title) and checks each is
 refused and leaves an earlier build untouched. It also checks that the page's
 storage key names (what follows `STORE+`) are exactly the known list, `pv-`,
-`race-key`, `course-plot-v1`, `course-series`, `ro-name` and `ro-key`, so a key
+`race-key`, `course-plot-v1` and `course-series`, so a key
 added or dropped must update the test. Needs no PHP and no browser.
 
 ## Deploying the pages
@@ -619,7 +497,8 @@ added or dropped must update the test. Needs no PHP and no browser.
     pages/record/record.html     ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
     pages/marks/key.js           ->  /marks/key.js      (not in the repository)
-    data/ro-key.php                  ->  /marks/data/ro-key.php  (placed by hand, never in the repository)
+    data/ro-key.php                  ->  /marks/data/ro-key.php  (placed by hand, never in the repository;
+                                         optional: it protects only the unused decisions endpoint)
 
 `pages/course/index.html` is not in the repository: `rebuild_page.py` writes it on
 every run as a byte-identical copy of `course_v8.html`, which stays the source. Upload
@@ -679,7 +558,7 @@ Upload, in this order:
    download `marks-2026-10-04.json`, `courses-2026-10-04.json` and `series.json`
    and upload them to `/marks-test/data/`. Only a copy: nothing in `/marks/` changes.
    Check `https://tradboats.ie/marks-test/data/marks-2026-10-04.json` is refused (403).
-5. Once a `marks.php` with the RO key is installed there: place
+5. Optional (the RO key protects only the unused decisions endpoint): place
    `/marks-test/data/ro-key.php` by hand, exactly two lines, `<?php` and
    `return '...';`, with a TEST RO key of 16 to 64 letters, digits, `-` or `_`,
    **different from the live RO key**. Check
