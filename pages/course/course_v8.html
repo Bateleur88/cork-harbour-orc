@@ -142,6 +142,8 @@ details.sec[open]>summary h2::before{content:"▾ "}
 .fxHist{list-style:none;margin:4px 0 0;padding:0}
 .fxHist li{padding:2px 0}
 .fxHist li.fxOff{color:var(--muted)}
+.fxHistBox{margin:4px 0 0;padding:0 12px}
+.fxHistBox>summary{cursor:pointer;color:var(--muted);font-size:.9rem}
 .fxRvIcon{background:none;border:none}
 .fxRvG{display:block;font:700 13px/14px system-ui,sans-serif;text-align:center;text-shadow:0 0 2px var(--surface),0 0 2px var(--surface),0 0 3px var(--surface)}
 .fxAsk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
@@ -286,6 +288,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
       <!-- the tapped fix's detail and its review decisions, directly under the sketch or chart, so a tap shows them
            without scrolling past the key and the notes below -->
       <div id="fxDet"></div>
+      <details class="fxHistBox" id="fxHistBox" hidden><summary id="fxHistSum"></summary><ul class="fxHist" id="fxHistOld"></ul></details>
+      <div id="fxDetFlags"></div>
       <div id="fxDec"></div>
       <p class="cardnote" id="fxKey" hidden></p>
       <ul class="fxNotes" id="fxLineNotes" hidden></ul>
@@ -389,7 +393,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.18';
+const PAGE_VERSION='2026-10-06.19';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -2292,25 +2296,30 @@ function renderFix(){
   $('fxRevStatus').textContent=decStatus(DEC);
   $('fxRevNotes').hidden=!decNotes.length;
   $('fxRevNotes').innerHTML=decNotes.length?'<li class="cardnote">Review decisions against the page (nothing is changed; the RO or scorer decides):</li>'+decNotes.join(''):'';
-  // a fix's decisions in force, under it in the list; its whole review history, revoked and replaced ones too, in its detail
+  // a fix's decisions in force, under it in the list; its whole review history, revoked and replaced ones too, under its
+  // detail: the records in force in the detail, every other record (undone, replaced, the Undo records) in the fold
+  // #fxHistBox, each part in the order written, then the review flags for the fix (#fxDetFlags)
   const decNow=k=>DEC&&DEC.byRef.has(k)?DEC.byRef.get(k).filter(d=>d.status==='live').map(d=>'<p class="fxRev">'+esc(decLine(d))+'</p>').join(''):'';
   const decHist=k=>{const h=DEC&&DEC.byRef.get(k);if(!h)return '';
     const st=d=>d.status==='undone'?' — undone by '+d.undoneBy.who+' at '+decWhen(d.undoneBy):d.status==='superseded'?' — replaced by a later decision ('+
       d.by.who+', '+decWhen(d.by)+')':d.status==='live'?' — in force':'';
-    return '<p class="fxFlag"><b>Review history</b> (every record for this fix, in the order written)</p><ul class="fxHist">'+
-      h.map(d=>'<li'+(d.status==='live'?'':' class="fxOff"')+'>'+(d.status==='undone'?'<s>'+esc(decLine(d))+'</s>':esc(decLine(d)))+esc(st(d))+'</li>').join('')+'</ul>'+
-      decf.filter(f=>f.ref===k).map(decItem).join('');};
+    const li=d=>'<li'+(d.status==='live'?'':' class="fxOff"')+'>'+(d.status==='undone'?'<s>'+esc(decLine(d))+'</s>':esc(decLine(d)))+esc(st(d))+'</li>';
+    const now=h.filter(d=>d.status==='live'), old=h.filter(d=>d.status!=='live');
+    return {now:'<p class="fxFlag"><b>Review history</b>: '+(now.length?'in force</p><ul class="fxHist">'+now.map(li).join('')+'</ul>':'nothing in force</p>'),
+      old:old.map(li).join(''), n:old.length, flags:decf.filter(f=>f.ref===k).map(decItem).join('')};};
   // the chart's tooltips are HTML: the review words are escaped
   const revTip=m=>{const k=refFor(m);return DEC&&DEC.byRef.has(k)?DEC.byRef.get(k).filter(d=>d.status==='live').map(d=>' · '+esc(decLine(d))).join(''):'';};
   if(fxChart)setTimeout(()=>fxDrawChart(seen,fl,m=>lab1(m)+(lab2(m)?' · '+lab2(m):'')+revTip(m),car,res,glyphs),0);
   else $('fxPlot').innerHTML=fxSketch(seen,fl,lab1,lab2,car,fxAll,res,cset,glyphs);
-  const sm=seen.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm);
+  const sm=seen.find(m=>refFor(m)===fxSel), a=sm&&fixAge(sm), hist=sm?decHist(fxSel):'';
   $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+(lentSet.has(fxSel)?' ('+esc(lentTo(sm).replace('used','borrowed'))+')':car(sm)?' (carried into Race '+into(sm)+')':'')+
     '<br>Time '+esc(fxHms(sm)||'not known')+' · '+(fxTyped(sm)?'estimate, typed in':accOf(sm)||'accuracy not known')+
     '<br>Phone '+(sm.device?esc(ph[sm.device]):'none (unattributed)')+' · Recorder: '+esc(sm.recorder||'not given')+
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+
     '<br>'+(sm.pending?'Waiting to send from this phone':a?'Position '+fmtAge(Math.max(0,a.s))+' old when '+(a.by==='id'?'the phone saved it':'the server received it'):'Age of the position not known')+
-    (fl.get(fxSel)||[]).map(fxFlag).join('')+fxOtherUses(sm,fxAll?sm.race:r)+decHist(fxSel)+'</div>':'';
+    (fl.get(fxSel)||[]).map(fxFlag).join('')+fxOtherUses(sm,fxAll?sm.race:r)+(hist?hist.now:'')+'</div>':'';
+  $('fxHistBox').hidden=!(hist&&hist.n); $('fxHistSum').textContent=hist&&hist.n?'Earlier records ('+hist.n+'): undone, replaced and Undo records':'';
+  $('fxHistOld').innerHTML=hist?hist.old:''; $('fxDetFlags').innerHTML=hist?hist.flags:'';
   $('fxList').innerHTML=notes.map(f=>'<li>'+fxFlag({lvl:'check',txt:f.txt})+fxAsk(f.ask)+'</li>').concat(seen.map(m=>{const k=refFor(m), f=fl.get(k)||[], dn=DEC&&DEC.dnu.has(k);
     return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
       FX_SHAPE[(m.race-1)%4]+'</span> '+(dn?'<span class="fxDnu">':'')+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+(dn?'</span>':'')+'</button>'+decNow(k)+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
@@ -2415,7 +2424,7 @@ function fxDrawChart(shown,fl,lab,car,res,rvg){
   shown.forEach(m=>{const f=fl.get(refFor(m))||[], bad=f.some(x=>x.lvl==='bad'), col=m.race<=3?cv('--r'+m.race):cv('--ink'), c=car(m), x=rvg.get(refFor(m)), dn=!!(x&&x.dnu);
     L.circleMarker([m.lat,m.lon],{radius:res.outline.has(refFor(m))&&!c?8:7,color:bad?cv('--warn'):dn?cv('--muted'):col,weight:bad?4:f.length?3:2,fillColor:col,
       fillOpacity:c||fxTyped(m)?0:dn?.35:.9,dashArray:c?'3,3':dn?'2,3':null})
-      .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();}).addTo(FxLayer);
+      .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);renderFix();$('fxDet').scrollIntoView({block:'nearest'});}).addTo(FxLayer);
     // the review glyph, up-left of the fix, never taking a tap
     if(x&&(x.use.length||x.acc.length))L.marker([m.lat,m.lon],{interactive:false,keyboard:false,icon:L.divIcon({className:'fxRvIcon',iconSize:[14,14],iconAnchor:[22,22],
       html:'<span class="fxRvG" style="color:var('+(x.use.length?'--ink':'--ok')+')">'+(x.use.length?'→':'✓')+'</span>'})}).addTo(FxLayer);});
@@ -2854,7 +2863,8 @@ function clearPageState(){
   fxAll=false; $('fxAll').checked=false; fxHide.clear(); fxSel=''; fxChart=false; fxFit='';   // Check recorded marks
   $('fxSketchB').setAttribute('aria-pressed','true'); $('fxChartB').setAttribute('aria-pressed','false'); $('fxStatus').textContent='';
   $('fixCheck').open=false;
-  ['fxPlot','fxDet','fxDec','fxList','fxChips','fxLineNotes','fxKey','plot'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
+  ['fxPlot','fxDet','fxDec','fxList','fxChips','fxLineNotes','fxKey','plot','fxHistOld','fxDetFlags'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
+  $('fxHistBox').hidden=true; $('fxHistBox').open=false;
   $('fxChips').hidden=$('fxLineNotes').hidden=$('fxKey').hidden=$('fxMapWrap').hidden=true; $('fxPlot').hidden=false;
   if(FxLayer)FxLayer.clearLayers();
   dec=decEmpty(); $('fxRevStatus').textContent=''; $('fxRevNotes').innerHTML=''; $('fxRevNotes').hidden=true;   // review decisions: server data, read again with Get latest marks

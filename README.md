@@ -330,8 +330,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   understand are counted and
   ignored. Under each fix in the list: "✓ accepted as Race 1 Start 1 Leeward",
   "→ used for Race 1 Start 1 Leeward" or "✗ do not use: reason" (the fix's row struck
-  through), with who and when; the fix's detail gives its whole review history,
-  undone and replaced records included. Under the plot, kept apart from the page's
+  through), with who and when; the fix's detail gives its whole review history:
+  the records in force, with who and when, then a closed "Earlier records (N)" with
+  the undone and replaced records and the Undo records (it stays open or closed as
+  left, also when another fix is tapped). Under the plot, kept apart from the page's
   own checks, the review flags (⚑), never corrected by the page: the start's course
   rows or its line end in use (chosen, inherited or automatic) differ from the use-as
   or accept that applies (for a use-as of rows, one of the rows it lists no longer
