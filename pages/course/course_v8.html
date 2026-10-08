@@ -147,6 +147,17 @@ details.sec[open]>summary h2::before{content:"▾ "}
 .fxAsk{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
 .fxBtn{padding:6px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.85rem;text-decoration:none}
 pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 0}
+/* review decisions recorded from the fix detail: the actions, and the preview with Confirm and Cancel */
+.decBox{margin:8px 0 0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.decHead{margin:0 0 4px;font-weight:700;font-size:.92rem}
+.decBox .cardnote{margin:4px 0}
+.decBtns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.decBtns .fxBtn{text-align:left}
+.decBtns .fxBtn:disabled{border-color:var(--line);color:var(--muted);cursor:default}
+.decNote{display:block;font-size:.85rem;color:var(--muted);margin:6px 0 0}
+.decNote input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+.decNote input[readonly]{color:var(--muted)}
+.decUses{margin:4px 0;padding-left:20px;font-size:.88rem}
 .starts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .starts button{padding:8px 12px;border-radius:10px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700;font-size:.9rem}
 .starts button[aria-pressed="true"]{background:var(--sea);color:var(--paper)}
@@ -263,7 +274,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <button class="ghost" id="read">Read marks from a WhatsApp message</button>
     <button class="ghost" id="addManual">Add a mark by typing its position</button>
   </details>
-  <!-- read-only; one element for both views: in Race view it moves to slotFix, at the bottom -->
+  <!-- read-only, except the review decisions recorded under a fix's detail (fxDec); one element for both views: in Race
+       view it moves to slotFix, at the bottom -->
   <details class="fixchk" id="fixCheck">
     <summary id="fixSum">Check recorded marks</summary>
     <div class="plot">
@@ -277,8 +289,9 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
       <ul class="fxNotes" id="fxRevNotes" hidden></ul>
       <p class="status" id="fxStatus" role="status" aria-live="polite"></p>
       <div id="fxDet"></div>
+      <div id="fxDec"></div>
       <ul class="fxList" id="fxList"></ul>
-      <p class="cardnote">Tap a fix for its detail. Nothing here changes a course or a recorded fix. The checks are advice only, tuned to one day's fixes.</p>
+      <p class="cardnote">Tap a fix for its detail. Nothing here changes a course or a recorded fix. The checks are advice only, tuned to one day's fixes. Review decisions (accept, do not use, undo) are recorded under a fix's detail, with the name and RO key from Setup → Review.</p>
     </div>
   </details>
 
@@ -374,7 +387,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.11';
+const PAGE_VERSION='2026-10-06.13';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -426,7 +439,7 @@ let series=(()=>{try{const o=JSON.parse(localStorage.getItem(SERIES_KEY)||'{}');
 function saveSeries(){try{localStorage.setItem(SERIES_KEY,JSON.stringify(series));}catch(e){}}
 /* Review: the RO or scorer's name and the RO key, typed once on this phone and kept outside S, so Clear everything keeps
    them. The name goes as "by" with every course save while it is valid. The RO key is for the review decisions only, sent
-   by a later version as the X-RO-Key header of a decision write and nowhere else: it is never shown, logged, put in a URL
+   only as the X-RO-Key header of a decision write (decPost) and nowhere else: it is never shown, logged, put in a URL
    or in any text this page builds, and its field is emptied as soon as Save is tapped. */
 const RO_NAME_KEY=STORE+'ro-name', RO_KEY_KEY=STORE+'ro-key';
 const RO_KEY_RX=/^[A-Za-z0-9_-]{16,64}$/;   // as marks.php checks data/ro-key.php
@@ -444,6 +457,9 @@ function roNameProblem(v){
 function roName(){let v='';try{v=localStorage.getItem(RO_NAME_KEY)||'';}catch(e){}v=roNameClean(v);return roNameProblem(v)?'':v;}
 // whether a key of the right form is saved; the key itself is not returned
 function roKeySaved(){try{return RO_KEY_RX.test(localStorage.getItem(RO_KEY_KEY)||'');}catch(e){return false;}}
+// the server answered "bad RO key" to this device's last decision write; page state only, cleared when the key is saved or
+// removed, by a write the server accepts and by Clear everything (the key itself is kept)
+let roKeyRefused=false;
 
 
 /* ---------- geometry (rhumb line) ---------- */
@@ -1388,10 +1404,13 @@ function buildLegs(){
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
+  // review: a fix marked do not use that this start still uses is warned about, never left out (decLegWarn)
+  const rw=decLegWarn(), rn=decLegNote();
   setSS(ss,(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
-    (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
+    (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).'+
+    (rw.length?' ⚑ These legs still use '+rw.map(w=>w.name).join(' and ')+', marked do not use: see the warning above the legs.':''),total,pts.length-1);
   const an=analysis(cs,twdv), warn=farLine.concat(checks(ents,cs));
-  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
+  host.innerHTML='<div class="info">'+rw.map(w=>'<p class="note flag">'+esc(w.text)+'</p>').join('')+(rn?'<p class="cardnote">'+esc(rn)+'</p>':'')+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
@@ -1656,7 +1675,8 @@ function fxOtherUses(sm,r){
    The scorer's review (use as, do not use, accept, and revoke to undo) is read from marks.php (?type=decisions, with the
    race key) for the loaded day, and only SHOWN. Nothing here sends anything else, uses the RO key, writes S or browser
    storage, or changes a line, a line-end pick, a course, a leg or an output; fxResolve's lines stay the page's automatic
-   defaults. dec is server data held in memory for the loaded day only; Clear everything empties it. */
+   defaults. dec is server data held in memory for the loaded day only; Clear everything empties it. Recording decisions
+   is a separate section below (decPost), which changes none of these either. */
 const DEC_ROLE={cb:'committee boat',pin:'Start Pin',fcb:'finish committee boat',fpin:'Finish Pin',windward:'Windward',leeward:'Leeward',gybe:'Gybe'};
 const DEC_TEST={windward:n=>/windward/i.test(n),leeward:n=>/leeward/i.test(n),gybe:n=>/gybe/i.test(n)};
 function decEmpty(){return {day:'',list:null,at:0,status:'none',err:''};}   // status: none | ok | old (no decisions kept) | err
@@ -1734,21 +1754,33 @@ function decLine(d){return decSays(d)+' — '+d.who+', '+decWhen(d)+(d.note&&d.a
    Information only: the box's default lines still joining a do-not-use fix (the defaults ignore the review); a decision
    for a fix carried or borrowed from another race, or recorded after that start (a candidate); two decisions for one
    start and role; do not use and use as on the same fix. Reads the page's state; changes nothing (course() would). */
-function decFlags(R,all,days){
-  const out=[], bySid=new Map(all.filter(m=>m.sid).map(m=>['s:'+m.sid,m])), fx=ref=>bySid.get(ref)||null;
-  const add=(race,ref,counted,text)=>out.push({race,ref,counted,text});
+// decEndsOf, decRowFix, decHow, decRowsTxt and decUses are shared by decFlags and the review actions below; they read only.
+// The line ends a start's outputs use, as the line-end rows offer them: the start ends unless a card course uses the
+// card mark; the finish ends only for a committee boat and Finish Pin finish (or a card course's laid finish line)
+function decEndsOf(r,st){const k=ckey(r,st), c=(S.cardCfg||{})[k], md=e=>{if(!c)return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';};
+  return (md('s')==='card'?[]:['cb','pin']).concat((!c&&(S.finishes[k]||'start')==='finishpin')||md('f')==='laid'?['fcb','fpin']:[]);}
+// a course row's fix: the fix itself, or the RIB fix a laid mark follows; a card position is not a fix
+function decRowFix(e){const m=markById(typeof e==='string'?e:e.id);if(!m)return null;
+  if(m.laidSt)return m.laidSt.use?{m:m.laidSt.use,laid:m.card,mode:m.laidSt.mode}:null;return m.card?null:{m};}
+function decHow(p){return p.how==='chosen'?'chosen by the RO':p.how==='inherited'?'inherited from Start '+(p.from+1):'picked automatically';}
+function decRowsTxt(n){return (n.length>1?'rows ':'row ')+n.join(', ');}
+/* Where fix X (a ref) is used now, per race, in plain words: the course rows of every start (directly, or as a laid mark
+   following it) and the line ends each start's outputs use (chosen, inherited or automatic). Every start the page knows
+   of: those with classes, a course, a line choice or a start time. Map(race -> [text]). */
+function decUses(X){const byRace=new Map(), note=(r,t)=>{if(!byRace.has(r))byRace.set(r,[]);byRace.get(r).push(t);};
   const keys=[S.courses,S.lineSel,S.startTimes].flatMap(o=>Object.keys(o||{})).filter(k=>/^\d+\|\d+$/.test(k)).map(k=>k.split('|').map(Number));
   const raceList=[...new Set(races().concat(keys.map(k=>k[0])))].sort((a,b)=>a-b);
   const startsOf=r=>[...new Set(classesOf(r).map((_,i)=>i).concat(keys.filter(k=>k[0]===r).map(k=>k[1])))].sort((a,b)=>a-b);
-  // the line ends a start's outputs use, as the line-end rows offer them: the start ends unless a card course uses the
-  // card mark; the finish ends only for a committee boat and Finish Pin finish (or a card course's laid finish line)
-  const endsOf=(r,st)=>{const k=ckey(r,st), c=(S.cardCfg||{})[k], md=e=>{if(!c)return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';};
-    return (md('s')==='card'?[]:['cb','pin']).concat((!c&&(S.finishes[k]||'start')==='finishpin')||md('f')==='laid'?['fcb','fpin']:[]);};
-  // a course row's fix: the fix itself, or the RIB fix a laid mark follows; a card position is not a fix
-  const rowFix=e=>{const m=markById(typeof e==='string'?e:e.id);if(!m)return null;
-    if(m.laidSt)return m.laidSt.use?{m:m.laidSt.use,laid:m.card,mode:m.laidSt.mode}:null;return m.card?null:{m};};
-  const how=p=>p.how==='chosen'?'chosen by the RO':p.how==='inherited'?'inherited from Start '+(p.from+1):'picked automatically';
-  const rowsTxt=n=>(n.length>1?'rows ':'row ')+n.join(', ');
+  raceList.forEach(r=>startsOf(r).forEach(st=>{const sn='Race '+r+' Start '+(st+1), rows=[];
+    (S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=decRowFix(e);if(!f||refFor(f.m)!==X)return;
+      if(f.laid)note(r,sn+' course row '+(i+1)+' (the '+f.laid+' laid mark, '+(f.mode==='pinned'?'pinned by the RO':'following its latest fix')+')');else rows.push(i+1);});
+    if(rows.length)note(r,sn+' course '+decRowsTxt(rows));
+    decEndsOf(r,st).forEach(w=>{const p=endPick(w,r,st);if(p.m&&refFor(p.m)===X)note(r,sn+' '+DEC_ROLE[w]+' ('+decHow(p)+')');});}));
+  return byRace;}
+function decFlags(R,all,days){
+  const out=[], bySid=new Map(all.filter(m=>m.sid).map(m=>['s:'+m.sid,m])), fx=ref=>bySid.get(ref)||null;
+  const add=(race,ref,counted,text)=>out.push({race,ref,counted,text});
+  const endsOf=decEndsOf, rowFix=decRowFix, how=decHow, rowsTxt=decRowsTxt;
   const by=d=>d.who+', '+decWhen(d);
   R.slots.forEach(s=>{const d=s.cur, X=d.ref, want=fx(X), verb=d.action==='accept'?'accepted':'uses';
     if(!want)return;                                    // (c) says it
@@ -1775,14 +1807,9 @@ function decFlags(R,all,days){
       (d.action==='accept'?'accepted as ':'used for ')+decSlot(s.r,s.st,s.role)+' ('+by(d)+').');}
   });
   const lines=fxResolve(all,{races:days}).lines;
-  R.dnu.forEach((d,X)=>{const m=fx(X);if(!m)return;const byRace=new Map(), note=(r,t)=>{if(!byRace.has(r))byRace.set(r,[]);byRace.get(r).push(t);};
-    raceList.forEach(r=>startsOf(r).forEach(st=>{const sn='Race '+r+' Start '+(st+1), rows=[];
-      (S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=rowFix(e);if(!f||refFor(f.m)!==X)return;
-        if(f.laid)note(r,sn+' course row '+(i+1)+' (the '+f.laid+' laid mark, '+(f.mode==='pinned'?'pinned by the RO':'following its latest fix')+')');else rows.push(i+1);});
-      if(rows.length)note(r,sn+' course '+rowsTxt(rows));
-      endsOf(r,st).forEach(w=>{const p=endPick(w,r,st);if(p.m&&refFor(p.m)===X)note(r,sn+' '+DEC_ROLE[w]+' ('+how(p)+')');});}));
+  R.dnu.forEach((d,X)=>{const m=fx(X);if(!m)return;const byRace=decUses(X);
     const head='Do not use (“'+(d.note||'')+'”, '+by(d)+'): '+decFixName(m)+' is still used by ';
-    byRace.forEach((u,r)=>add(r,X,true,head+u.join('; ')+'.'));
+    byRace.forEach((u,r)=>add(r,X,true,head+u.join('; ')+'. '+decOtherFix(m,r,R)+' For now, change them with the course chips and the line-end choices.'));
     lines.forEach(l=>{if(l.a!==X&&l.b!==X)return;const st=l.starts.slice().sort((a,b)=>a-b);
       add(l.race,X,false,'The box\'s default '+(l.kind==='wl'?'W–L leg':l.kind==='finish'?'recorded finish line':l.kind==='start'?'start line':'candidate start line')+
         ' of Race '+l.race+(st.length?' ('+(st.length>1?'Starts ':'Start ')+st.map(x=>x+1).join(', ')+')':'')+' still joins '+decFixName(m)+
@@ -1792,6 +1819,51 @@ function decFlags(R,all,days){
     'A review decision ('+decLine(d)+') names a fix that is no longer on the server (deleted).');});
   return out;
 }
+/* "Legs need updating", the warning with the legs (buildLegs): for the SELECTED race and start, each fix with a do-not-use
+   in force that the start still uses, in its course rows (directly, or a laid mark following it) or as a line end its
+   outputs use (decEndsOf, endPick: chosen, inherited or automatic). Information only: nothing is left out or changed,
+   and the legs, total, sketch, SailScoring table and Send text keep using the fix. [] while the day's decisions are
+   not read (decLegNote says so). Returns [{ref, name, text}], plain text. */
+// a fix's mark type for "another fix of that type": Windward, Leeward, Gybe, committee boat, Start Pin, Finish Pin by the
+// name rules the page already uses; any other name (Offset, A to D) by the same name
+function decTypeOf(n){
+  const w=Object.keys(DEC_TEST).find(x=>DEC_TEST[x](n));
+  if(w)return {label:DEC_ROLE[w],test:DEC_TEST[w]};
+  if(isCB(n))return {label:'committee boat',test:isCB};
+  if(isStartPin(n))return {label:'Start Pin',test:isStartPin};
+  if(isFinishPin(n))return {label:'Finish Pin',test:isFinishPin};
+  return {label:n,test:x=>norm(x)===norm(n)};}
+// "Race 1 has no other Leeward fix." / "Race 1 has 2 other Leeward fixes (11:40, 12:05; the 12:05 one is also marked do not use)."
+function decOtherFix(m,r,R){const T=decTypeOf(m.name), tm=x=>x.time||'untimed';
+  const o=S.marks.filter(x=>!x.card&&!x.virtual&&!x.pending&&x.race===r&&x!==m&&T.test(x.name)).sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0));
+  if(!o.length)return 'Race '+r+' has no other '+T.label+' fix.';
+  const dn=o.filter(x=>R.dnu.has(refFor(x)));
+  return 'Race '+r+' has '+o.length+' other '+T.label+' fix'+(o.length>1?'es':'')+' ('+o.map(tm).join(', ')+
+    (dn.length?'; '+dn.map(x=>'the '+tm(x)+' one').join(' and ')+(dn.length>1?' are':' is')+' also marked do not use':'')+').';}
+function decLegWarn(){
+  const R=decNowRes(); if(!R||!R.dnu.size)return [];
+  const r=S.race, st=S.start, out=[];
+  R.dnu.forEach((d,X)=>{const m=S.marks.find(x=>x.sid&&'s:'+x.sid===X); if(!m)return;
+    const rows=[], laid=[], ends=[];
+    (S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=decRowFix(e);if(!f||refFor(f.m)!==X)return;if(f.laid)laid.push({i:i+1,name:f.laid});else rows.push(i+1);});
+    decEndsOf(r,st).forEach(w=>{const p=endPick(w,r,st);if(p.m&&refFor(p.m)===X)ends.push({w,p});});
+    if(!rows.length&&!laid.length&&!ends.length)return;
+    const used=(rows.length?['course '+decRowsTxt(rows)]:[]).concat(laid.map(l=>'course row '+l.i+' (the '+l.name+' laid mark, following this fix)'),
+      ends.map(x=>'as the '+DEC_ROLE[x.w]+' ('+decHow(x.p)+')'));
+    const fix=(rows.length?['change '+(rows.length>1?'these rows':'this row')+' with the course chips: tap the fix to use instead in the marks above, and remove the old '+
+        (rows.length>1?'rows':'row')+' with ✕']:[]).concat(laid.map(l=>'pick another position for the '+l.name+' laid mark in its Position list'),
+      ends.map(x=>'choose another '+DEC_ROLE[x.w]+' on the '+(x.w[0]==='f'?'Finish':'Start')+' line row'));
+    out.push({ref:X,name:decFixName(m),text:'⚑ Legs need updating: '+decFixName(m)+' is marked do not use (“'+(d.note||'')+'”, '+d.who+', '+decWhen(d)+
+      ') and is still used by Race '+r+' Start '+(st+1)+' '+used.join(' and ')+'. '+decOtherFix(m,r,R)+
+      ' The legs, total, sketch, SailScoring table and Send text still use it. For now, '+fix.join('; ')+'.'});});
+  return out;}
+// with the legs, when the day's decisions are not read, so a missing warning is not taken as "nothing marked do not use"
+function decLegNote(){
+  if(!S.pulledDay||dec.day!==S.pulledDay)return '';
+  if(dec.status==='err')return 'Review decisions for this day could not be read'+(dec.err==='net'?' (no signal)':dec.err==='key'?' (the server refused the key)':'')+
+    ': a fix marked do not use is not flagged here. Tap Get latest marks.';
+  if(dec.status==='ok'&&dec.err)return 'Review decisions as of '+hhmm(dec.at)+' (could not refresh).';
+  return '';}
 // the review's own status line in the box: never alarming, and nothing at all before a day is loaded
 function decStatus(R){
   if(!S.pulledDay)return '';
@@ -1804,6 +1876,167 @@ function decStatus(R){
     (R.bad?' · '+R.bad+' record'+(R.bad===1?'':'s')+' not understood, ignored':'')+' · as of '+hhmm(dec.at)+(dec.err?'; could not refresh'+why:'')+'.';
 }
 function decItem(f){return '<p class="fxRev '+(f.counted?'fxRevFlag':'fxRevInfo')+'">'+(f.counted?'⚑ ':'Information: ')+esc(f.text)+'</p>';}
+/* ---------- review decisions: recording them (Accept, Do not use, Undo) ----------
+   Under the fix detail, for the SELECTED race and start (S.race, S.start, also with All races); every button and preview
+   names its target. Accept: the fix is right for a role the selected start uses it for. Do not use: the fix for the whole
+   day, with a reason. Undo: a revoke of a decision in force (a do-not-use, or one for the selected start); a decision
+   replaced by a later one is not offered. None of them changes a course, a line end, a leg or an output: what the review
+   says against the page is shown by decFlags. Order: the name, the RO key, the fix on the server and the day's decisions
+   read; then a preview with Confirm and Cancel; Confirm checks again and sends the record (decPost); the day's decisions
+   are then read again at once (a past day has no 30 s refresh). There is no queue: a failed write changes nothing and
+   says so, and Retry sends the SAME record (same id: one that did reach the server is not doubled, it answers
+   "duplicate"). A use-as is undone where Use as is recorded, not here. decUi is page state only: nothing is stored,
+   and Clear everything resets it. */
+let decUi=decUiEmpty(), decGen=0, decPainted='';
+function decUiEmpty(){return {ref:'',spec:null,rec:null,note:'',busy:false,msg:'',cls:'',retry:false,again:false};}
+function decNowRes(){return dec.status==='ok'&&dec.day===S.pulledDay?decResolve(dec.list):null;}
+// a record id: 8 to 40 letters or digits, made here once per record, so Retry writes nothing twice
+function decId(){const a=new Uint8Array(12);try{crypto.getRandomValues(a);}catch(e){for(let i=0;i<a.length;i++)a[i]=Math.floor(Math.random()*256);}
+  return Date.now().toString(36)+Array.from(a,b=>(b%36).toString(36)).join('');}
+// what is wrong with a note (cleaned), in plain words; '' if it can be sent. As marks.php: at most 200 characters, no < or >,
+// no control characters; C1 controls (U+0080 to U+009F) are refused here too. The reason of a do-not-use is required.
+function decNoteProblem(n,required){
+  if(required&&!n)return 'Give the reason: it is required for do not use.';
+  if(/[<>]/.test(n))return 'The note cannot contain < or >.';
+  if(/[\u0000-\u001f\u007f-\u009f]/.test(n))return 'The note cannot contain control characters.';
+  if(Array.from(n).length>200)return 'Use at most 200 characters.';
+  return '';}
+// why no decision can be recorded for fix sm now, in plain words; '' when one can
+function decBlock(sm){
+  if(dec.day!==S.pulledDay||dec.status==='none')return 'Review decisions for this day have not been read yet: tap Get latest marks.';
+  if(dec.status==='old')return 'This server does not keep review decisions yet, so none can be recorded.';
+  if(dec.status!=='ok')return 'Review decisions for this day could not be read'+(dec.err==='net'?' (no signal)':'')+': tap Get latest marks before recording one.';
+  let raw='';try{raw=localStorage.getItem(RO_NAME_KEY)||'';}catch(e){}
+  const nm=roNameClean(raw), p=nm?roNameProblem(nm):'';
+  if(!nm)return 'Enter your name in Setup → Review to record decisions.';
+  if(p)return 'The name saved in Setup → Review cannot be used: '+p+' Save it again to record decisions.';
+  if(!roKeySaved())return 'Enter the RO key in Setup → Review to record decisions.';
+  if(!sm.sid||sm.pending)return 'This fix is not on the server yet, so no review decision can name it. Once it has been sent, tap Get latest marks.';
+  return '';}
+/* What can be recorded for fix sm now, for the selected race and start: ops [{key, op, label, title, effect, role|target,
+   uses}] and notes, in plain words, for what cannot. Confirm asks again, so a preview that no longer applies is refused. */
+function decOps(sm,DEC){
+  const k=refFor(sm), r=S.race, st=S.start, tgt='Race '+r+' Start '+(st+1), ops=[], notes=[], fname=decFixName(sm);
+  const by=d=>d.who+', '+decWhen(d), dn=DEC.dnu.get(k);
+  // Accept: once for each role in which the selected start uses this fix now, a line end its outputs use (chosen,
+  // inherited or automatic) or a Windward, Leeward or Gybe course row; a laid mark following it has no role in the review
+  const roles=decEndsOf(r,st).filter(w=>{const p=endPick(w,r,st);return p.m&&refFor(p.m)===k;});
+  (S.courses[ckey(r,st)]||[]).forEach(e=>{const f=decRowFix(e);if(!f||f.laid||refFor(f.m)!==k)return;
+    Object.keys(DEC_TEST).forEach(w=>{if(DEC_TEST[w](f.m.name)&&!roles.includes(w))roles.push(w);});});
+  if(!roles.length)notes.push(tgt+' does not use this fix as a line end or a Windward, Leeward or Gybe row, so it cannot be accepted for it.');
+  roles.forEach(w=>{const s=DEC.slots.get(r+'|'+st+'|'+w), slot=decSlot(r,st,w);
+    if(s&&s.cur.ref===k){notes.push('In force: '+decSays(s.cur)+' ('+by(s.cur)+').');return;}
+    ops.push({key:'accept|'+w,op:'accept',role:w,label:'Accept as '+slot,title:'Accept '+fname+' as '+slot,
+      effect:'Records that this fix is right for '+slot+(s?', in place of the decision in force for it ('+decSays(s.cur)+', '+by(s.cur)+')':'')+'.'+
+        (dn?' This fix is marked do not use: the two decisions show as disagreeing until one is undone.':'')+' No course, line end, leg or output changes.'});});
+  if(!dn)ops.push({key:'dnu',op:'dnu',label:'Do not use '+fname+' (whole day)',title:'Do not use '+fname+', for the whole day (decided in '+tgt+')',uses:true,
+    effect:'Marks this fix do not use for the whole day, with your reason. The course is not changed: the legs, total, SailScoring table and Send text keep using it, with a warning that the legs need updating, until the rows are changed with the course chips or this is undone.'});
+  (DEC.byRef.get(k)||[]).forEach(d=>{if(d.action==='revoke')return;
+    const mine=d.action==='do-not-use'||(d.race===r&&d.start===st);
+    if(d.status==='superseded'){if(mine)notes.push(decSays(d)+' ('+by(d)+') cannot be undone: it was replaced by a later decision ('+by(d.by)+'). Undo that one first.');return;}
+    if(d.status!=='live')return;
+    if(!mine){notes.push('To undo '+decSays(d)+' ('+by(d)+'), select Race '+d.race+' Start '+(d.start+1)+'.');return;}
+    if(d.action==='use-as'){notes.push(decSays(d)+' ('+by(d)+') is undone where Use as is recorded, not in this version of the page.');return;}
+    ops.push({key:'undo|'+d.id,op:'undo',target:d.id,label:'Undo: '+decSays(d)+' ('+by(d)+')',title:'Undo '+decSays(d)+' ('+by(d)+')',
+      effect:'Records an undo of that decision; it stays in the review history, struck through.'+
+        (d.action==='do-not-use'?' The fix is no longer marked do not use; the warning with the legs and its review flags go.':'')+' No course, line end, leg or output changes.'});});
+  return {ops,notes};}
+// the actions for fix sm, or its open preview; plain text is escaped here, once
+function decHtml(sm,DEC){
+  const k=refFor(sm), u=decUi, head='<p class="decHead">Review decision · Race '+S.race+' Start '+(S.start+1)+'</p>';
+  const msg=u.msg&&u.ref===k?'<p class="status'+(u.cls?' '+u.cls:'')+'">'+esc(u.msg)+'</p>':'';
+  const btn=(op,label,dis,extra)=>'<button type="button" class="fxBtn" data-fx="dec" data-op="'+op+'"'+(extra||'')+(dis?' disabled':'')+'>'+esc(label)+'</button>';
+  if(u.spec&&u.ref===k){const sp=u.spec, sent=!!u.rec, ul=sp.uses?[...decUses(k).values()].flat():null;
+    return '<div class="decBox" role="group" aria-label="Review decision preview">'+head+'<p class="decHead">'+esc(sp.title)+'?</p><p class="cardnote">'+esc(sp.effect)+'</p>'+
+      (!ul?'':ul.length?'<p class="cardnote">The warning shows with the legs, and a review flag in Check recorded marks, while it is still used by:</p><ul class="decUses">'+ul.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':
+        '<p class="cardnote">No start uses this fix now, so nothing will be flagged.</p>')+
+      '<label class="decNote">'+(sp.op==='dnu'?'Reason (required)':'Note (optional)')+', readable by anyone with the race key: no personal details'+
+        '<input id="decNote" maxlength="200" autocomplete="off"'+(sent||u.busy?' readonly':'')+'></label>'+
+      '<p class="cardnote">Recorded as '+esc(roName()||'(no name)')+' on the server, for '+esc(longDate(sp.day))+'. Nothing is ever deleted: an undo is a later record.</p>'+
+      '<div class="decBtns">'+(u.busy?btn('confirm','Sending…',true):(sent?'':btn('confirm','Confirm'))+(sent&&u.retry?btn('retry','Retry'):'')+(sent&&u.again?btn('again','Start again'):''))+
+        btn('cancel','Cancel',u.busy)+'</div>'+msg+'</div>';}
+  const why=decBlock(sm);
+  if(why)return '<div class="decBox">'+head+'<p class="cardnote">'+esc(why)+'</p>'+msg+'</div>';
+  const {ops,notes}=decOps(sm,DEC);
+  return '<div class="decBox">'+head+(ops.length?'<div class="decBtns">'+ops.map(o=>btn('open',o.label,false,' data-key="'+esc(o.key)+'"')).join('')+'</div>':'')+
+    notes.map(t=>'<p class="cardnote">'+esc(t)+'</p>').join('')+msg+'</div>';}
+// drawn by renderFix under the fix detail, and only redrawn when it changes, so a refresh never clears a note being typed
+// (the note is kept in decUi and put back). A preview not being sent closes when its fix, race, start or day is left.
+function decPaint(sm,DEC){
+  const u=decUi;
+  if(u.spec&&!u.busy&&(!sm||refFor(sm)!==u.ref||u.spec.race!==S.race||u.spec.start!==S.start||u.spec.day!==S.pulledDay))decUi=decUiEmpty();
+  const html=sm&&S.pulledDay?decHtml(sm,DEC):'';
+  if(html===decPainted)return;
+  const had=document.activeElement&&document.activeElement.id==='decNote';
+  $('fxDec').innerHTML=html; decPainted=html;
+  const n=$('decNote'); if(n){n.value=decUi.note; if(had)n.focus();}}
+function decClick(b){
+  const u=decUi, op=b.dataset.op, sm=S.marks.find(m=>!m.card&&!m.virtual&&refFor(m)===fxSel);
+  if(u.busy)return;
+  if(op==='cancel'){decUi=decUiEmpty();renderFix();return;}
+  if(op==='open'){const DEC=decNowRes(), o=sm&&DEC&&!decBlock(sm)?decOps(sm,DEC).ops.find(x=>x.key===b.dataset.key):null;
+    if(o)decUi=Object.assign(decUiEmpty(),{ref:fxSel,spec:Object.assign({},o,{race:S.race,start:S.start,day:S.pulledDay})});
+    renderFix(); const n=$('decNote'); if(o&&n)n.focus(); return;}
+  if(op==='again'){Object.assign(u,{rec:null,msg:'',cls:'',retry:false,again:false});renderFix();return;}
+  if(op==='confirm'||op==='retry')decSend(sm);}
+async function decSend(sm){
+  const u=decUi, sp=u.spec; if(!sp||u.busy)return;
+  if(!u.rec){   // the first Confirm: check everything again, then make the record once; Retry sends it unchanged
+    const DEC=decNowRes(), why=!sm||refFor(sm)!==u.ref?'the fix is no longer selected.':decBlock(sm);
+    if(why){u.msg='Not sent: '+why;u.cls='err';renderFix();return;}
+    if(!DEC||!decOps(sm,DEC).ops.some(o=>o.key===sp.key)){
+      decUi=Object.assign(decUiEmpty(),{ref:u.ref,msg:'Not sent: the review or the course has changed since this preview. Look again and choose.',cls:'err'});renderFix();return;}
+    const n=roNameClean(u.note), bad=decNoteProblem(n,sp.op==='dnu');
+    if(bad){u.msg=bad;u.cls='err';renderFix();return;}
+    const rec={id:decId(),ref:u.ref,action:sp.op==='dnu'?'do-not-use':sp.op==='undo'?'revoke':'accept'};
+    if(sp.op==='accept')Object.assign(rec,{race:sp.race,start:sp.start,role:sp.role});
+    if(sp.op==='dnu')Object.assign(rec,{race:sp.race,start:sp.start});
+    if(sp.op==='undo')rec.revokes=sp.target;
+    rec.who=roName(); rec.client_when=Date.now(); if(n)rec.note=n;
+    u.rec=rec; u.note=n;}
+  Object.assign(u,{busy:true,msg:'Sending…',cls:'',retry:false,again:false}); renderFix();
+  const gen=decGen, res=await decPost(sp.day,u.rec);
+  if(gen!==decGen||decUi!==u)return;   // Clear everything since: nothing here to report to
+  u.busy=false;
+  if(res.ok)decUi=Object.assign(decUiEmpty(),{ref:u.ref,msg:'Saved: '+sp.title+(res.dup?' (it had already reached the server)':'')+'.',cls:'ok'});
+  else Object.assign(u,{msg:res.msg,cls:'err',retry:!!res.retry,again:!!res.again});
+  renderFix();
+  // read the day's decisions again at once, after a failure too: a write whose answer was lost may have been saved
+  const seq=pullSeq, day=sp.day, stale=()=>seq!==pullSeq||gen!==decGen||S.pulledDay!==day;
+  decLoad(day,stale).then(()=>{if(stale())return;const v=decUi;
+    if(res.ok&&v.cls==='ok'&&v.ref===u.ref&&dec.err)v.msg+=' The review could not be read again'+(dec.err==='net'?' (no signal)':'')+': tap Get latest marks.';
+    buildLegs(); renderFix();},()=>{});}   // buildLegs: the warning with the legs follows the review
+/* One decision write, on its own send path rather than keyFetch: keyFetch takes any 403 as a race key that may have
+   changed, and here a 403 can be the RO key's. The error is read first, and only "bad key" (the race key, which marks.php
+   checks first) re-reads key.js and sends once more, as keyFetch does. The RO key is read from this device's storage
+   here, at the moment of sending, and goes ONLY in the X-RO-Key header of this request: it is never kept, shown, logged,
+   put in a URL, a message or any other text the page builds. Returns {ok, dup}, or {ok:false, msg, retry, again}. */
+async function decPost(day,rec){
+  let rk='';try{rk=localStorage.getItem(RO_KEY_KEY)||'';}catch(e){}
+  if(!RO_KEY_RX.test(rk))return {ok:false,retry:true,msg:'Not saved: no RO key is saved on this device. Nothing was changed. Enter the RO key in Setup → Review, then tap Retry.'};
+  if(!(await ensureKey()))return {ok:false,retry:true,msg:'Not saved: the race key has not loaded (no signal?). Nothing was changed. Tap Retry when there is signal.'};
+  const body=JSON.stringify({action:'decision',date:day,record:rec});
+  const send=async()=>{const ac=typeof AbortController==='function'?new AbortController():null, t=ac?setTimeout(()=>ac.abort(),15000):0;
+    try{const r=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','X-Race-Key':RACE_KEY,'X-RO-Key':rk},body,cache:'no-store',signal:ac?ac.signal:undefined});
+      let j=null;try{j=await r.json();}catch(e){}
+      return {status:r.status,ok:r.ok&&!!j&&j.ok===true,dup:!!(j&&j.duplicate),err:j&&typeof j.error==='string'?j.error:''};}
+    finally{clearTimeout(t);}};
+  let a;
+  try{a=await send();
+    if(a.status===403&&a.err==='bad key'){const old=RACE_KEY;RACE_KEY='';
+      if(await ensureKey()&&RACE_KEY!==old)a=await send(); else RACE_KEY=RACE_KEY||old;}}
+  catch(e){return {ok:false,retry:true,msg:'Not confirmed: no signal, or the server did not answer, so this page cannot tell whether it was saved. Nothing was changed here. Tap Retry when there is signal: a decision that did reach the server is not saved twice.'};}
+  const roMsg=m=>{rvStatus('roKeyStatus',m,'err');return m;}, plain=a.err.replace(/[^ -~]/g,'').slice(0,120);
+  if(a.ok){if(roKeyRefused||/^Not saved/.test($('roKeyStatus').textContent))rvStatus('roKeyStatus','');roKeyRefused=false;showReview();return {ok:true,dup:a.dup};}
+  if(a.status===403&&a.err==='bad RO key'){roKeyRefused=true;showReview();
+    return {ok:false,retry:true,msg:roMsg('Not saved: the server did not accept this phone\'s RO key. Enter it again in Setup → Review.')+' Nothing was changed. Then tap Retry.'};}
+  if(a.status===403&&a.err.indexOf('RO key not set on the server')===0)
+    return {ok:false,retry:true,msg:roMsg('Not saved: the RO key has not been set up on the server yet.')+' Nothing was changed. Tap Retry once it has been.'};
+  if(a.status===403)return {ok:false,retry:true,msg:'Not saved: the server refused the race key. Check key.js on the server matches the one the pages load. Nothing was changed.'};
+  if(a.status===409)return {ok:false,again:true,msg:'Not saved: the server already holds a different decision with this record\'s id. Nothing was changed. Tap Start again to make a new record.'};
+  if(a.status===429)return {ok:false,msg:'Not saved: the server\'s limit of review decisions for this day has been reached. Nothing was changed.'};
+  if(a.status===400)return {ok:false,msg:'Not saved: the server refused this decision ('+(plain||'bad request')+'). Nothing was changed.'};
+  return {ok:false,retry:true,msg:'Not saved: the server could not store it ('+(plain||'error '+a.status)+'). Nothing was changed. Tap Retry.'};}
 function renderFix(){
   const all=S.marks.filter(m=>!m.card&&!m.virtual), {fl,rf}=fxChecks(all), r=S.race;
   const own=fxAll?all:all.filter(m=>m.race===r), carried=fxAll?[]:bank().filter(m=>!m.card&&m.race<r);
@@ -1904,6 +2137,7 @@ function renderFix(){
     return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
       FX_SHAPE[(m.race-1)%4]+'</span> '+(dn?'<span class="fxDnu">':'')+esc(lab1(m)+(lab2(m)?' · '+lab2(m):''))+(dn?'</span>':'')+'</button>'+decNow(k)+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';})).join('')||
     '<li class="empty">'+(shown.length?'Every race is switched off above.':'No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.')+'</li>';
+  decPaint(sm,DEC);   // recording review decisions for the selected fix, under its detail
 }
 // the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
 // dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong),
@@ -2028,7 +2262,9 @@ $('fixCheck').addEventListener('click',async e=>{const b=e.target.closest('[data
   if(b&&b.dataset.fx==='copy'){try{await navigator.clipboard.writeText(b.dataset.t);b.textContent='Copied';setTimeout(()=>{b.textContent='Copy';},1500);}
     catch(_){$('fxDet').innerHTML='<pre class="fxTxt">'+esc(b.dataset.t)+'</pre>';const rg=document.createRange();rg.selectNodeContents($('fxDet').firstChild);
       const sl=getSelection();sl.removeAllRanges();sl.addRange(rg);}return;}
+  if(b&&b.dataset.fx==='dec'){decClick(b);return;}
   if(pt){fxSel=fxSel===pt.dataset.k?'':pt.dataset.k;renderFix();if(b&&fxSel)$('fxDet').scrollIntoView({block:'nearest'});}});
+$('fxDec').addEventListener('input',e=>{if(e.target.id==='decNote')decUi.note=e.target.value;});
 $('fxAll').onchange=e=>{fxAll=e.target.checked;fxFit='';renderFix();};
 $('fxSketchB').onclick=()=>setFxView(false);
 // crossing 700 or 1100 px (a tablet turned, a window resized, the zoom changed) changes the column widths: put the
@@ -2095,8 +2331,8 @@ async function pull(quiet){
     commit();
     // the review decisions are read once this load is done, and not awaited: nothing that waits for pull() (moving a
     // fix, sending the committee boat) waits for them. A later load or Clear everything makes the read stale, and a
-    // stale read changes nothing; when it lands it only redraws the box
-    if(!stale())decLoad(day,stale).then(()=>{if(!stale())renderFix();},()=>{});
+    // stale read changes nothing; when it lands it only redraws the legs (their review warning, no numbers) and the box
+    if(!stale())decLoad(day,stale).then(()=>{if(!stale()){buildLegs();renderFix();}},()=>{});
   }catch(e){
     if(stale())return;
     pullOk=false; if(quiet)return;
@@ -2295,23 +2531,23 @@ function rvStatus(id,msg,cls){$(id).textContent=msg;$(id).className='status'+(cl
 function showReview(){const n=roName(), k=roKeySaved();
   if(document.activeElement!==$('roName'))$('roName').value=n;
   $('roKey').placeholder=k?'●●●●●●●● saved – type a new key to change it':'Not set';
-  $('reviewState').textContent='· '+(n?'name set':'no name')+' · '+(k?'key saved':'no key');}
+  $('reviewState').textContent='· '+(n?'name set':'no name')+' · '+(k?(roKeyRefused?'key refused by the server':'key saved'):'no key');}
 $('roNameSave').onclick=()=>{const v=roNameClean($('roName').value), p=roNameProblem(v);
   if(p){rvStatus('roNameStatus',p,'err');return;}
   try{localStorage.setItem(RO_NAME_KEY,v);}catch(e){rvStatus('roNameStatus','Could not keep the name on this device.','err');return;}
-  $('roName').value=v; rvStatus('roNameStatus','Name saved on this device. It goes with each course saved from now on.','ok'); showReview();};
+  $('roName').value=v; rvStatus('roNameStatus','Name saved on this device. It goes with each course saved from now on.','ok'); showReview(); renderFix();};   // renderFix: the decision actions follow the name and key
 $('roNameDel').onclick=()=>{try{localStorage.removeItem(RO_NAME_KEY);}catch(e){}
-  $('roName').value=''; rvStatus('roNameStatus','Name removed from this device.','ok'); showReview();};
+  $('roName').value=''; rvStatus('roNameStatus','Name removed from this device.','ok'); showReview(); renderFix();};   // renderFix: the decision actions follow the name and key
 // the field is emptied whatever was typed, valid or not, before any message is shown
 $('roKeySave').onclick=()=>{const el=$('roKey'), ok=RO_KEY_RX.test(el.value.trim()); let kept=false;
   if(ok){try{localStorage.setItem(RO_KEY_KEY,el.value.trim());kept=true;}catch(e){}}
   el.value='';
   if(!ok)rvStatus('roKeyStatus','That is not an RO key: it is 16 to 64 letters, digits, - or _, with no spaces. Type it again.','err');
   else if(!kept)rvStatus('roKeyStatus','Could not keep the RO key on this device.','err');
-  else rvStatus('roKeyStatus','RO key saved on this device. It is not shown again.','ok');
-  showReview();};
+  else{roKeyRefused=false;rvStatus('roKeyStatus','RO key saved on this device. It is not shown again.','ok');}
+  showReview(); renderFix();};   // renderFix: the decision actions follow the name and key
 $('roKeyDel').onclick=()=>{try{localStorage.removeItem(RO_KEY_KEY);}catch(e){}
-  $('roKey').value=''; rvStatus('roKeyStatus','RO key removed from this device.','ok'); showReview();};
+  roKeyRefused=false; $('roKey').value=''; rvStatus('roKeyStatus','RO key removed from this device.','ok'); showReview(); renderFix();};   // renderFix: the decision actions follow the name and key
 $('roName').onkeydown=e=>{if(e.key==='Enter')$('roNameSave').click();};
 $('roKey').onkeydown=e=>{if(e.key==='Enter')$('roKeySave').click();};
 var cbWatch=null, cbStop=null;   // cbStop ends a committee boat fix in progress without saving it (Clear everything)
@@ -2439,10 +2675,11 @@ function clearPageState(){
   fxAll=false; $('fxAll').checked=false; fxHide.clear(); fxSel=''; fxChart=false; fxFit='';   // Check recorded marks
   $('fxSketchB').setAttribute('aria-pressed','true'); $('fxChartB').setAttribute('aria-pressed','false'); $('fxStatus').textContent='';
   $('fixCheck').open=false;
-  ['fxPlot','fxDet','fxList','fxChips','fxLineNotes','fxKey','plot'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
+  ['fxPlot','fxDet','fxDec','fxList','fxChips','fxLineNotes','fxKey','plot'].forEach(id=>{$(id).innerHTML='';});   // drawn only when shown
   $('fxChips').hidden=$('fxLineNotes').hidden=$('fxKey').hidden=$('fxMapWrap').hidden=true; $('fxPlot').hidden=false;
   if(FxLayer)FxLayer.clearLayers();
   dec=decEmpty(); $('fxRevStatus').textContent=''; $('fxRevNotes').innerHTML=''; $('fxRevNotes').hidden=true;   // review decisions: server data, read again with Get latest marks
+  decUi=decUiEmpty(); decGen++; decPainted=''; roKeyRefused=false;   // recording one: an open preview, a failed record kept for Retry and messages go; a write already sent finishes on the server but changes nothing here
   chartOn=false; $('viewChart').setAttribute('aria-pressed','false'); $('viewSketch').setAttribute('aria-pressed','true');   // course plot
   $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
   cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;

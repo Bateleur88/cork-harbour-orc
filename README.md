@@ -221,23 +221,25 @@ footer "© 2026 Pat Tanner ORC Ireland".
   every course save while it is valid; with no name the request is as before. The
   RO key must be 16 to 64 letters, digits, `-` or `_`; its field is a password field,
   emptied when Save is tapped whether or not the key was valid, and the key is never
-  shown again, never put in a URL, a message or any text the page builds. Nothing
-  sends it yet: it is for the review decisions still to come, which will send it only
-  as the `X-RO-Key` header of a decision write.
+  shown again, never put in a URL, a message or any text the page builds. It is sent
+  only as the `X-RO-Key` header of a review decision write (see *Recording review
+  decisions* below), read from storage at that moment, and on no other request.
   Both are stored in clear text in this device's browser storage, like the race key,
   so anyone with the device can read them: if a device that holds the RO key is
   lost, change the RO key on the server. A name sent as `by` is stored with that
   course version and is readable through `?type=courses` and `?type=coursehistory`
   with the race key, so it is effectively public to anyone with the race key.
-  *For the decision writes still to come:* `keyFetch` treats every 403 as a race key
-  that may have changed, re-reads `key.js` and sends again. That retry is left as it
-  is; a decision write must read the error first. "RO key not set on the server…"
-  shows "Not saved: the RO key has not been set up on the server yet. The decision is
-  kept on this phone."; "bad RO key" shows "Not saved: the server did not accept this
-  phone's RO key. Enter it again in Setup → Review." and the Review line reads "key
-  refused by the server" (the key is kept, not deleted). Each shows beside the
-  decision in the fix detail and in Review. With no key saved, the decision actions
-  say "Enter the RO key in Setup → Review to record decisions."
+  A decision write does not go through `keyFetch`, which treats every 403 as a race
+  key that may have changed, re-reads `key.js` and sends again (that retry is left as
+  it is): the write reads the error first, and only "bad key", the race key, re-reads
+  `key.js` and sends once more. "RO key not set on the server…" shows "Not saved: the
+  RO key has not been set up on the server yet." and "bad RO key" shows "Not saved:
+  the server did not accept this phone's RO key. Enter it again in Setup → Review.",
+  each followed by "Nothing was changed."; after "bad RO key" the Review line reads
+  "key refused by the server" until the key is saved again or removed, or a write is
+  accepted (the key is kept, not deleted). Each shows beside the decision in the fix
+  detail and in Review. With no key saved, the decision actions say "Enter the RO key
+  in Setup → Review to record decisions."
 - *Import a harbour course* (section 2) is folded away, closed each time the page
   opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
   40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
@@ -299,17 +301,19 @@ footer "© 2026 Pat Tanner ORC Ireland".
   check" count can change with the selected start.
   Anything missing is listed in plain words under the plot, in both views; the
   closed line counts candidates apart.
-  **Review decisions (read only).** With every Get latest marks and 30 s refresh,
+  **Review decisions (reading them).** With every Get latest marks and 30 s refresh,
   after the fixes and courses, the page reads the loaded day's review decisions
-  (`?type=decisions`, race key only) and shows them as a separate layer; it sends
-  nothing else, never uses the RO key, and changes no line, line-end pick, course,
-  leg or output. They are held in memory for that day only (nothing is stored on
-  the phone) and Clear everything empties them; a past day gets no 30 s refresh, so
-  tap Get latest marks again there. A line under the plot gives their state: how
-  many are in force, undone and replaced, and "as of" the last read; with no signal
-  or a refused key the last read is kept and says it could not refresh; an older
-  `marks.php` gives "This server does not keep review decisions yet". What is in
-  force, in the order written: an undo (revoke) cancels the record it names; for
+  (`?type=decisions`, race key only) and shows them as a separate layer; reading
+  them never uses the RO key, and changes no line, line-end pick, course, leg or
+  output; it adds a warning with the legs where the selected start still uses a
+  fix marked do not use (below). They are held in memory for that day only
+  (nothing is stored on the phone) and Clear everything empties them; a past day
+  gets no 30 s refresh, so tap Get latest marks again there. A line under the plot
+  gives their state: how many are in force, undone and replaced, and "as of" the
+  last read; with no signal or a refused key the last read is kept and says it
+  could not refresh; an older `marks.php` gives "This server does not keep review
+  decisions yet". What is in force, in the order written: an undo (revoke)
+  cancels the record it names; for
   each race, start and role (committee boat, Start Pin, finish committee boat,
   Finish Pin, Windward, Leeward, Gybe) the latest use-as or accept not undone
   applies and earlier ones are "replaced by a later decision" (undoing the latest
@@ -339,6 +343,44 @@ footer "© 2026 Pat Tanner ORC Ireland".
   and it is not counted. With All races it is added only when its own race is
   switched off and the race that uses it is on. The key names these only while a
   decision is in force.
+  **Recording review decisions.** Under a tapped fix's detail, for the race and
+  start selected in the pickers (also with *All races* ticked), every button and
+  preview naming its target: *Accept as Race 1 Start 1 Windward*, once for each role
+  in which that start uses the fix now (a line end its outputs use, chosen,
+  inherited or automatic, or a Windward, Leeward or Gybe course row; a laid mark has
+  no role in the review); *Do not use* the fix, for the whole day, with a reason
+  (required); *Undo* a decision in force, a do-not-use or one for the selected start
+  (a decision replaced by a later one says to undo that one first). A note is
+  optional on Accept and Undo; names and notes are readable by anyone with the race
+  key, so no personal details. None of these changes a course, a line end, a leg or
+  an output, or the box's lines. A do-not-use fix stays in automatic line-end picks
+  and in the course builder's offers. Where the selected start still uses it, in a
+  course row (directly or as a laid mark following it) or as a line end its outputs
+  use (committee boat, Start Pin, finish committee boat or Finish Pin; chosen,
+  inherited or automatic), a warning with the legs, "Legs need updating", names the
+  fix, who and when, the rows and line ends, and whether the race has another fix
+  of that mark type ("Race 1 has no other Leeward fix"), and says how to change
+  them for now: the course chips, the laid mark's Position list, or the line-end
+  choices. The legs, total, sketch, SailScoring table and Send text keep their
+  numbers; the note above the SailScoring table (not copied) adds a line naming the
+  fix. The same shows as a review flag in Check recorded marks, for every start. The
+  warning goes when the decision is undone or the rows and line ends no longer use
+  the fix, and comes back from the server after a reload. While the day's decisions
+  cannot be read, a line with the legs says so ("a fix marked do not use is not
+  flagged here"), or "as of" the last read that could not be refreshed.
+  Before anything is sent the page
+  checks the Review name and RO key are saved, that the fix is on the server ("not
+  on the server yet" for one still waiting on a phone) and that the day's decisions
+  have been read; then it shows a preview (for Do not use, every start still using
+  the fix, where a flag will show) with Confirm and Cancel. Confirm checks again,
+  makes the record with its own id and sends it, with the race key and the RO key.
+  There is no queue on the phone: a write that fails (no signal, a refused key, the
+  server refusing the record, the day's limit) changes nothing and says so, and
+  Retry sends the same record with the same id, so one whose answer was lost is not
+  written twice. After every write, failed or not, the day's decisions are read again
+  at once (a past day has no 30 s refresh). The preview, a record kept for Retry and
+  the messages are page state only: nothing is stored on the phone, a decision is
+  never counted as not sent, and Clear everything drops them.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
