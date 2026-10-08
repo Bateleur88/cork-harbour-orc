@@ -502,6 +502,18 @@ This is the intended workflow, stated on 7 October 2026. It is not decided, and 
 
 This project's names are updated course and As Sailed Course; "original recorded course" was retired on 7 October 2026. The earlier term "Race Day Course Record" in this history refers to the course the Course Plot builds from stored observations. "Course Record" with capitals refers to the versioned format proposed in Sail Scoring's `course-days.md`. Use one vocabulary before any export to that format.
 
+## 19. 7 and 8 October 2026: from a decisions layer to as-sailed course repair
+
+On 7 October 2026 a read-only Phase 1 audit (`docs/audit/PHASE1_AUDIT.md`, at commit `f30882f`) compared the code with the workflow in section 18. Among other things, it found that fixes can still be deleted or re-posted, that automatic line ends and the laid-mark choice are re-resolved on each render, and that no page wrote decisions. The same day Pat decided there is no separate original course: the recorded marks are the primary source data and are never overwritten.
+
+From 6 to 8 October a decisions write path was built on the RO page (PAGE_VERSION 2026-10-06.9 to .19): a Review name and RO key (`73e8633`), decisions shown in Check recorded marks (`56b7750`, `f30882f`), Accept, Do not use and Undo with a legs warning (`3579dee`), Use as for course rows (`26f0570`), and the fix detail and review history under the sketch (`0cd524b`, `4313903`). The server side came in `d6d24a8`. It was tested on the parallel test copy and in scratch only.
+
+On 8 October Pat took the review decisions out of the page as an unnecessary complication. In their place the page repairs the as-sailed course directly from the recorded fixes, which stay untouched. Any recorded fix of the day can become a chip of a race and a course row, and the picks are saved with the race. Line ends can be chosen from any race's fixes. The chart draws what the sketch draws. Check recorded marks shows the as-sailed course over the recorded lines (PAGE_VERSION .20 to .24, commit `dd86687`). The principle recorded with it: the page must work for any race day; any mark can be set from any recorded fix without changing the fix; a saved course should record every choice; the default view is small. `marks.php` keeps the decisions endpoint and the RO key, unused. The earlier commits stay in the history under the tag `experiment/decisions-review` (`docs/experimental/decisions-and-review/`).
+
+This section supersedes these points of section 18: step 6 ("derived from the recorded marks plus the accept, use-as and not-to-be-used decisions"), the Decisions stage of the intended saved-course workflow, and the invariants that a saved course is reproducible from the recorded marks plus decisions and is always derived, never hand-edited. Section 18 stays as the record of what was stated on 7 October.
+
+Not verified: none of this has been used in a live race. The laid-mark choice and automatic line ends are still not saved with the course.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
