@@ -262,7 +262,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
   recorder, position, and how old the position was when saved: the fix id starts
   with the phone's clock, so id time minus the fix's time, falling back to when the
-  server received it. The checks, with their thresholds as named constants at the
+  server received it. The detail, with the review decisions under it, sits directly
+  under the sketch or chart, above its key and notes; tapping a fix in the sketch or
+  the list scrolls it into view.
+  The checks, with their thresholds as named constants at the
   top of that code and tuned to one day's fixes (4 Oct 2026), are advice only and
   never block anything: a position 20 s to 5 min old (check) or over 5 min (likely
   wrong, the only one in the warning colour); a Start or Finish Pin within 60 m of a
