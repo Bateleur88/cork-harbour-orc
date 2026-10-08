@@ -33,9 +33,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, 'scripts', 'build_test.py')
 PAGE = os.path.join(ROOT, 'pages', 'course', 'course_v8.html')
 MARKS = os.path.join(ROOT, 'pages', 'marks', 'marks.php')
-# every browser storage key name the page writes after STORE ('pv-' is followed by a PAGE_VERSION). ro-name and ro-key
-# are the Review name and RO key, kept on the device outside S; the test copy must keep them under 'test-' like the rest
-STORE_NAMES = {'pv-', 'race-key', 'course-plot-v1', 'course-series', 'ro-name', 'ro-key'}
+# every browser storage key name the page writes after STORE ('pv-' is followed by a PAGE_VERSION). The Review name and
+# RO key (ro-name, ro-key) went with the review decisions in 2026-10-06.20; the page no longer reads or writes them
+STORE_NAMES = {'pv-', 'race-key', 'course-plot-v1', 'course-series'}
 failed = []
 
 

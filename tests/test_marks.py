@@ -54,6 +54,11 @@ still present and unchanged:
                 recorder; delete; a committee boat fix; a typed mark; a moved fix; a course save; a race's start
                 groups; the series; the three GETs, with the source file and line of each) is accepted and stored as
                 before, and creates no decisions file
+ 17  picked     a race's picked chips as "picked" in its _starts|race record: an old record (no picked), a new one,
+                one with picks and no groups, and one with a field no page knows yet are each stored whole and read
+                back; the replaced version goes into the history; an identical save writes nothing; an older page's
+                save without "picked" replaces the record (the picks version stays in the history); a record over
+                50000 bytes is refused 400 and writes nothing; the courses and fixes are untouched
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -676,6 +681,49 @@ def t16_old_pages():
            f'{not os.path.exists(decisions_file(d))}; {detail}')
 
 
+def t17_picked():
+    """A race's picked chips (RO page 2026-10-06.21) travel as "picked" inside the race's _starts|race record. marks.php
+    is unchanged: it stores a course record's data whole, so this checks that it keeps the field, and every other one."""
+    d = setup('t17')
+    post = lambda k, data: req(d, body=course(k, data))
+    get = lambda: req(d, 'GET', query=f'type=courses&date={DAY}')[1].get('courses', {})
+    old = {'classes': [['Class 1 Spinnaker'], ['Class 2 Spinnaker']]}                       # an older page's record
+    s_old, _ = post('_starts|1', old)
+    old_kept = load(course_file(d))['_starts|1']['data'] == old and get().get('_starts|1', {}).get('data') == old
+    new = {'classes': [['Class 1 Spinnaker'], ['Class 2 Spinnaker']], 'picked': ['s:fixr2n3', 's:fixr3n2']}
+    s_new, _ = post('_starts|1', new)
+    new_kept = load(course_file(d))['_starts|1']['data'] == new and get().get('_starts|1', {}).get('data') == new
+    hist_old = load(history_file(d)).get('_starts|1', [{}])[-1].get('data') == old             # the replaced version kept
+    picks_only = {'classes': [], 'picked': ['s:fixr1n2']}                                       # a race with picks, no groups
+    s_po, _ = post('_starts|2', picks_only)
+    po_kept = load(course_file(d))['_starts|2']['data'] == picks_only
+    unknown = {'classes': [], 'picked': ['s:fixr1n2'], 'later': {'x': [1, 2]}}                  # a field no page knows yet
+    s_unk, _ = post('_starts|2', unknown)
+    unk_kept = load(course_file(d))['_starts|2']['data'] == unknown
+    before = (sha(course_file(d)), sha(history_file(d)))
+    s_same, j_same = post('_starts|2', unknown)
+    same_ok = j_same.get('unchanged') is True and (sha(course_file(d)), sha(history_file(d))) == before
+    # an older page saving the same race's groups sends no "picked": the record is replaced without it, and the version
+    # with the picks is in the history (the page cannot stop this; the report says so)
+    s_older, _ = post('_starts|1', old)
+    dropped = 'picked' not in load(course_file(d))['_starts|1']['data']
+    in_hist = load(history_file(d))['_starts|1'][-1]['data'] == new
+    # the per-record size limit (50000 bytes of JSON) applies as to any course: refused 400, nothing written
+    before = (sha(course_file(d)), sha(history_file(d)))
+    big = {'classes': [], 'picked': ['s:' + 'a' * 40] * 1200}
+    s_big, _ = post('_starts|3', big)
+    big_refused = s_big == 400 and (sha(course_file(d)), sha(history_file(d))) == before
+    _, want = fixture()
+    courses_kept = all(load(course_file(d)).get(k) == v for k, v in want.items())
+    ok, detail = intact(d)
+    report('17 picked chips', ok and [s_old, s_new, s_po, s_unk, s_same, s_older] == [200] * 6 and old_kept and new_kept
+           and hist_old and po_kept and unk_kept and same_ok and dropped and in_hist and big_refused and courses_kept,
+           f'old record kept {old_kept}; with picked kept and read back {new_kept}; replaced version in history {hist_old}; '
+           f'picks without groups {po_kept}; unknown field kept {unk_kept}; identical save wrote nothing {same_ok}; '
+           f'older page save drops picked {dropped}, picks version in history {in_hist}; '
+           f'{len(json.dumps(big))} bytes refused {s_big}, files unchanged {big_refused}; courses kept {courses_kept}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
@@ -684,7 +732,7 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages):
+                  t16_old_pages, t17_picked):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)
