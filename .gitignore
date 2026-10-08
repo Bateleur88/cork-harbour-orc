@@ -25,3 +25,6 @@ pages/course/index.html
 
 # Built by scripts/build_test.py: the parallel TEST copy of the RO page and marks.php
 build/
+
+# Local test build for upload to /course-test/ and /marks-test/ (see MANIFEST.txt in it); never committed
+/test_build/
