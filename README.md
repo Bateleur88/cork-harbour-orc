@@ -309,7 +309,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
   fix marked do not use (below). They are held in memory for that day only
   (nothing is stored on the phone) and Clear everything empties them; a past day
   gets no 30 s refresh, so tap Get latest marks again there. A line under the plot
-  gives their state: how many are in force, undone and replaced, and "as of" the
+  gives their state: how many are in force, undone and replaced, how many records
+  the day holds of the server's 2000, and "as of" the
   last read; with no signal or a refused key the last read is kept and says it
   could not refresh; an older `marks.php` gives "This server does not keep review
   decisions yet". What is in force, in the order written: an undo (revoke)
@@ -317,15 +318,21 @@ footer "© 2026 Pat Tanner ORC Ireland".
   each race, start and role (committee boat, Start Pin, finish committee boat,
   Finish Pin, Windward, Leeward, Gybe) the latest use-as or accept not undone
   applies and earlier ones are "replaced by a later decision" (undoing the latest
-  lets the one before apply again); a fix is "do not use" for the whole day while it
-  has a do-not-use not undone. Records the page does not understand are counted and
+  lets the one before apply again). A use-as for Windward, Leeward or Gybe course
+  rows is the exception: it replaces only the rows it lists, so it is kept per race,
+  start, role and the fix it replaced, and two use-as replacing different fixes in
+  one start (a deliberate second Leeward, say) both apply; one that replaces the fix
+  an earlier use-as put in replaces that earlier one. A fix is "do not use" for the
+  whole day while it has a do-not-use not undone. Records the page does not
+  understand are counted and
   ignored. Under each fix in the list: "✓ accepted as Race 1 Start 1 Leeward",
   "→ used for Race 1 Start 1 Leeward" or "✗ do not use: reason" (the fix's row struck
   through), with who and when; the fix's detail gives its whole review history,
   undone and replaced records included. Under the plot, kept apart from the page's
   own checks, the review flags (⚑), never corrected by the page: the start's course
   rows or its line end in use (chosen, inherited or automatic) differ from the use-as
-  or accept that applies; a do-not-use fix still used by a course row (directly or
+  or accept that applies (for a use-as of rows, one of the rows it lists no longer
+  holds its fix); a do-not-use fix still used by a course row (directly or
   as a laid mark) or by a start's line end in use; a decision naming a fix no longer
   on the server. Information only, not counted: the box's default lines still
   joining a do-not-use fix (the defaults ignore the review); a decision for a fix of
@@ -348,32 +355,66 @@ footer "© 2026 Pat Tanner ORC Ireland".
   preview naming its target: *Accept as Race 1 Start 1 Windward*, once for each role
   in which that start uses the fix now (a line end its outputs use, chosen,
   inherited or automatic, or a Windward, Leeward or Gybe course row; a laid mark has
-  no role in the review); *Do not use* the fix, for the whole day, with a reason
-  (required); *Undo* a decision in force, a do-not-use or one for the selected start
-  (a decision replaced by a later one says to undo that one first). A note is
-  optional on Accept and Undo; names and notes are readable by anyone with the race
-  key, so no personal details. None of these changes a course, a line end, a leg or
-  an output, or the box's lines. A do-not-use fix stays in automatic line-end picks
+  no role in the review; not for a fix marked do not use, which is undone first);
+  *Do not use* the fix, for the whole day, with a reason (required); *Use as* (below);
+  *Undo* a decision in force, a do-not-use, one for the selected start, or a use-as
+  of the selected race (a decision replaced by a later one says to undo that one
+  first). A note is optional on Accept, Use as and Undo; names and notes are readable
+  by anyone with the race key, so no personal details. Only Use as and its Undo
+  change a course, and only its rows; none of these changes a line end, a recorded
+  fix or the box's lines. A do-not-use fix stays in automatic line-end picks
   and in the course builder's offers. Where the selected start still uses it, in a
   course row (directly or as a laid mark following it) or as a line end its outputs
   use (committee boat, Start Pin, finish committee boat or Finish Pin; chosen,
   inherited or automatic), a warning with the legs, "Legs need updating", names the
   fix, who and when, the rows and line ends, and whether the race has another fix
   of that mark type ("Race 1 has no other Leeward fix"), and says how to change
-  them for now: the course chips, the laid mark's Position list, or the line-end
+  them: Use as for Windward, Leeward or Gybe rows (or the course chips); for now
+  the course chips for other marks, the laid mark's Position list, or the line-end
   choices. The legs, total, sketch, SailScoring table and Send text keep their
-  numbers; the note above the SailScoring table (not copied) adds a line naming the
-  fix. The same shows as a review flag in Check recorded marks, for every start. The
-  warning goes when the decision is undone or the rows and line ends no longer use
-  the fix, and comes back from the server after a reload. While the day's decisions
-  cannot be read, a line with the legs says so ("a fix marked do not use is not
-  flagged here"), or "as of" the last read that could not be refreshed.
+  numbers until then; the note above the SailScoring table (not copied) adds a line
+  naming the fix. The same shows as a review flag in Check recorded marks, for every
+  start. The warning goes when the decision is undone or the rows and line ends no
+  longer use the fix, and comes back from the server after a reload. While the day's
+  decisions cannot be read, a line with the legs says so ("a fix marked do not use is
+  not flagged here"), or "as of" the last read that could not be refreshed.
+  *Use as*: tap the fix to use instead (a Windward, Leeward or Gybe); it offers
+  *Use as Leeward in Race 1 Starts 1, 2, 3, in place of the R1 11:03 Leeward* for
+  each fix of the same mark type marked do not use that the selected race's course
+  rows use. It works on the selected race only: where such a fix is used by other
+  races' rows instead, the panel says so ("…is used by Race 1 Starts 1, 2, 3, not by
+  Race 2. Select Race 1 to replace it there."). It replaces ONLY the rows that
+  point at that fix, in every start of the race that uses it, each row keeping its
+  side, so a deliberate second Leeward is never overwritten. A deliberate limit of
+  this version: it is offered only in place
+  of a fix marked do not use; correcting a fix that is not is done with the course
+  chips, and Use as may be widened to that later. A laid mark following a fix, and
+  line ends, are not replaced here. The preview lists each start with its rows, its
+  legs and total before and after (worked out without changing anything), and
+  whether its warning clears. One review decision is recorded per start (their ids
+  share a prefix), sent one after another; a start's rows change only once its own
+  decision is saved, and the course is then saved as usual, with the name as "by".
+  Just before each send that start is checked again; one whose rows changed since
+  the preview is not sent and says so. The first failure stops the run: the starts
+  saved so far stay saved, and Retry sends the rest with the same records. Leaving
+  the page, the fix, the race or the day while a failed action waits for Retry drops
+  its unsent records, and a new action then uses new record ids (if an earlier
+  answer was lost, that start can end up with two use-as records, the later one
+  replacing the earlier). The
+  whole action is refused before anything is sent if the day's records plus its own
+  would pass the server's limit of 2000. A use-as records its rows by position in
+  the course at that time. Its *Undo* (each start, or all starts of one action
+  together) records a revoke and puts those rows back to the fix they held, sides
+  kept; it is refused for a start where one of those rows no longer holds the
+  replacement (change it with the course chips; the course history keeps the
+  earlier versions).
   Before anything is sent the page
   checks the Review name and RO key are saved, that the fix is on the server ("not
   on the server yet" for one still waiting on a phone) and that the day's decisions
   have been read; then it shows a preview (for Do not use, every start still using
-  the fix, where a flag will show) with Confirm and Cancel. Confirm checks again,
-  makes the record with its own id and sends it, with the race key and the RO key.
+  the fix, where a flag will show; for Use as, as above) with Confirm and Cancel.
+  Confirm checks again, makes the record with its own id and sends it, with the race
+  key and the RO key.
   There is no queue on the phone: a write that fails (no signal, a refused key, the
   server refusing the record, the day's limit) changes nothing and says so, and
   Retry sends the same record with the same id, so one whose answer was lost is not

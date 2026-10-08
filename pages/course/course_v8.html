@@ -291,7 +291,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
       <div id="fxDet"></div>
       <div id="fxDec"></div>
       <ul class="fxList" id="fxList"></ul>
-      <p class="cardnote">Tap a fix for its detail. Nothing here changes a course or a recorded fix. The checks are advice only, tuned to one day's fixes. Review decisions (accept, do not use, undo) are recorded under a fix's detail, with the name and RO key from Setup → Review.</p>
+      <p class="cardnote">Tap a fix for its detail. Nothing here changes a course or a recorded fix. The checks are advice only, tuned to one day's fixes. Review decisions (accept, do not use, use as, undo) are recorded under a fix's detail, with the name and RO key from Setup → Review.</p>
     </div>
   </details>
 
@@ -387,7 +387,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.14';
+const PAGE_VERSION='2026-10-06.16';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1721,9 +1721,14 @@ async function decLoad(day,stale){
      already undone (the first such revoke counts); an undone record no longer applies;
    - per slot (race, start, role) the latest use-as or accept not undone applies ('live'), whatever fix it names; the
      earlier ones of the slot are 'superseded'. Undoing the one that applies lets the one before it apply again;
+   - except a use-as for Windward, Leeward or Gybe: it replaces only the course rows it lists (from), so its slot is
+     race, start, role AND the fix it replaced (from's refs). Two use-as replacing different fixes in one start both
+     apply; a use-as that replaces the fix an earlier one put in (a replacement of a replacement) joins that slot and
+     supersedes it. Accept, and use-as for a line end, keep one slot per race, start and role;
    - a fix is "do not use" for the whole day while it has a do-not-use not undone; the latest gives the reason shown.
    Returns {recs (each with i, status, and undoneBy, by or target), bad, byRef: Map(ref -> its records, revokes too),
-   slots: Map('race|start|role' -> {r, st, role, cur, live}), dnu: Map(ref -> record)}. Pure: reads nothing else. */
+   slots: Map('race|start|role' or 'race|start|role|from refs' -> {r, st, role, from (refs or null), cur, live}),
+   dnu: Map(ref -> record)}. Pure: reads nothing else. */
 const DEC_FIELDS=['id','ref','action','race','start','role','from','who','when','client_when','note','series','revokes'];
 function decResolve(list){
   const int=(v,lo,hi)=>Number.isInteger(v)&&v>=lo&&v<=hi, opt=(v,lo,hi)=>v===undefined||v===null||int(v,lo,hi);
@@ -1742,10 +1747,15 @@ function decResolve(list){
     const t=byId.get(d.revokes);
     if(t&&t!==d&&t.action!=='revoke'&&t.ref===d.ref&&t.status!=='undone'){t.status='undone';t.undoneBy=d;d.status='revoke';d.target=t;}
     else{d.status='bad';bad++;}});
+  // the fix (or fixes) a row use-as replaced, as one key; null for accept, a line-end use-as or a malformed from
+  const fromOf=d=>d.action==='use-as'&&DEC_TEST[d.role]&&Array.isArray(d.from)&&d.from.length&&
+    d.from.every(x=>x&&Number.isInteger(x.row)&&typeof x.ref==='string')?[...new Set(d.from.map(x=>x.ref))].sort().join(','):null;
   recs.forEach(d=>{if(d.status!=='live')return;
     if(d.action==='do-not-use'){dnu.set(d.ref,d);return;}
-    const k=d.race+'|'+d.start+'|'+d.role;
-    if(!slots.has(k))slots.set(k,{r:d.race,st:d.start,role:d.role,cur:null,live:[]});
+    const base=d.race+'|'+d.start+'|'+d.role, f=fromOf(d);let k=base;
+    if(f!==null){k=base+'|'+f;
+      if(!slots.has(k))for(const [kk,s] of slots)if(kk.indexOf(base+'|')===0&&s.cur.ref===f){k=kk;break;}}
+    if(!slots.has(k))slots.set(k,{r:d.race,st:d.start,role:d.role,from:f,cur:null,live:[]});
     const s=slots.get(k); s.live.push(d); s.cur=d;});
   slots.forEach(s=>s.live.forEach(d=>{if(d!==s.cur){d.status='superseded';d.by=s.cur;}}));
   return {recs,bad,byRef,slots,dnu};
@@ -1764,7 +1774,8 @@ function decLine(d){return decSays(d)+' — '+d.who+', '+decWhen(d)+(d.note&&d.a
 /* What the review says against what the page has, in plain words; nothing is corrected. Each {race (null: the whole
    day), ref, counted, text}. Counted (fixed by the RO or scorer changing the course, a line end, or the review):
    (a) the use-as or accept that applies to a start and role does not match what that start uses: its course rows for
-       Windward, Leeward or Gybe, or the line end the outputs use (endPick: chosen, inherited or automatic);
+       Windward, Leeward or Gybe (for a use-as of rows, only the rows it lists, each of which must still hold its fix),
+       or the line end the outputs use (endPick: chosen, inherited or automatic);
    (b) a do-not-use fix still used by an output: a course row (directly, or a laid mark following it) or the line end
        a start's outputs use;
    (c) a decision that applies names a fix not on the server (deleted).
@@ -1807,6 +1818,11 @@ function decFlags(R,all,days){
       else{const p=endPick(s.role,s.r,s.st);
         if(!p.m)now='the course has no '+DEC_ROLE[s.role]+' for this start ('+(p.how==='none'?'set to none by the RO':'none found automatically')+').';
         else if(refFor(p.m)!==X)now='the course uses '+decFixName(p.m)+' ('+how(p)+').';}}
+    else if(s.from!==null&&d.action==='use-as'){
+      // a row use-as is checked only against the rows it lists: each must still hold the fix it put in
+      const rows=S.courses[ckey(s.r,s.st)]||[], gone=d.from.filter(x=>{const e=rows[x.row], f=e&&rowFix(e);return !f||refFor(f.m)!==X;}).map(x=>x.row+1);
+      if(gone.length)now=(gone.length===d.from.length?'its '+rowsTxt(gone):(gone.length>1?'rows ':'row ')+gone.join(', ')+' of its '+rowsTxt(d.from.map(x=>x.row+1)))+
+        (gone.length>1?' no longer hold':' no longer holds')+' it.';}
     else{const rows=S.courses[ckey(s.r,s.st)]||[], use=new Map();
       rows.forEach((e,i)=>{const f=rowFix(e);if(!f)return;const k=refFor(f.m);if(k!==X&&!DEC_TEST[s.role](f.m.name))return;
         if(!use.has(k))use.set(k,{m:f.m,rows:[]});use.get(k).rows.push(i+1);});
@@ -1826,7 +1842,9 @@ function decFlags(R,all,days){
   const lines=fxResolve(all,{races:days}).lines;
   R.dnu.forEach((d,X)=>{const m=fx(X);if(!m)return;const byRace=decUses(X);
     const head='Do not use (“'+(d.note||'')+'”, '+by(d)+'): '+decFixName(m)+' is still used by ';
-    byRace.forEach((u,r)=>add(r,X,true,head+u.join('; ')+'. '+decOtherFix(m,r,R)+' For now, change them with the course chips and the line-end choices.'));
+    const useAs=Object.keys(DEC_TEST).some(w=>DEC_TEST[w](m.name));
+    byRace.forEach((u,r)=>add(r,X,true,head+u.join('; ')+'. '+decOtherFix(m,r,R)+(useAs?' Replace its course rows with Use as: select the race, then tap the fix to use instead; or change them with the course chips. For now, line ends with the line-end choices.':
+      ' For now, change them with the course chips and the line-end choices.')));
     lines.forEach(l=>{if(l.a!==X&&l.b!==X)return;const st=l.starts.slice().sort((a,b)=>a-b);
       add(l.race,X,false,'The box\'s default '+(l.kind==='wl'?'W–L leg':l.kind==='finish'?'recorded finish line':l.kind==='start'?'start line':'candidate start line')+
         ' of Race '+l.race+(st.length?' ('+(st.length>1?'Starts ':'Start ')+st.map(x=>x+1).join(', ')+')':'')+' still joins '+decFixName(m)+
@@ -1857,22 +1875,29 @@ function decOtherFix(m,r,R){const T=decTypeOf(m.name), tm=x=>x.time||'untimed';
   const dn=o.filter(x=>R.dnu.has(refFor(x)));
   return 'Race '+r+' has '+o.length+' other '+T.label+' fix'+(o.length>1?'es':'')+' ('+o.map(tm).join(', ')+
     (dn.length?'; '+dn.map(x=>'the '+tm(x)+' one').join(' and ')+(dn.length>1?' are':' is')+' also marked do not use':'')+').';}
-function decLegWarn(){
+// r, st: the selected start unless given; rows: that start's course rows unless given (the Use as preview passes the rows
+// a replacement would give, to say whether the warning would clear)
+function decLegWarn(r,st,rows0){
   const R=decNowRes(); if(!R||!R.dnu.size)return [];
-  const r=S.race, st=S.start, out=[];
+  r=r??S.race; st=st??S.start; const out=[], courseRows=rows0||S.courses[ckey(r,st)]||[];
   R.dnu.forEach((d,X)=>{const m=S.marks.find(x=>x.sid&&'s:'+x.sid===X); if(!m)return;
     const rows=[], laid=[], ends=[];
-    (S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=decRowFix(e);if(!f||refFor(f.m)!==X)return;if(f.laid)laid.push({i:i+1,name:f.laid});else rows.push(i+1);});
+    courseRows.forEach((e,i)=>{const f=decRowFix(e);if(!f||refFor(f.m)!==X)return;if(f.laid)laid.push({i:i+1,name:f.laid});else rows.push(i+1);});
     decEndsOf(r,st).forEach(w=>{const p=endPick(w,r,st);if(p.m&&refFor(p.m)===X)ends.push({w,p});});
     if(!rows.length&&!laid.length&&!ends.length)return;
     const used=(rows.length?['course '+decRowsTxt(rows)]:[]).concat(laid.map(l=>'course row '+l.i+' (the '+l.name+' laid mark, following this fix)'),
       ends.map(x=>'as the '+DEC_ROLE[x.w]+' ('+decHow(x.p)+')'));
-    const fix=(rows.length?['change '+(rows.length>1?'these rows':'this row')+' with the course chips: tap the fix to use instead in the marks above, and remove the old '+
-        (rows.length>1?'rows':'row')+' with ✕']:[]).concat(laid.map(l=>'pick another position for the '+l.name+' laid mark in its Position list'),
-      ends.map(x=>'choose another '+DEC_ROLE[x.w]+' on the '+(x.w[0]==='f'?'Finish':'Start')+' line row'));
+    // course rows of a Windward, Leeward or Gybe: Use as replaces them; any other mark (Offset, A to D) has no review role
+    const role=Object.keys(DEC_TEST).find(w=>DEC_TEST[w](m.name)), n=rows.length;
+    const fix=(n?[role?'to replace '+(n>1?'these rows':'this row')+', tap the fix to use instead in Check recorded marks and choose Use as, or change '+
+          (n>1?'them':'it')+' with the course chips':
+        'for now, change '+(n>1?'these rows':'this row')+' with the course chips: tap the fix to use instead in the marks above, and remove the old '+
+          (n>1?'rows':'row')+' with ✕']:[]).concat(laid.map(l=>'for now, pick another position for the '+l.name+' laid mark in its Position list'),
+      ends.map(x=>'for now, choose another '+DEC_ROLE[x.w]+' on the '+(x.w[0]==='f'?'Finish':'Start')+' line row'));
+    const how=fix.join('; ');
     out.push({ref:X,name:decFixName(m),text:'⚑ Legs need updating: '+decFixName(m)+' is marked do not use (“'+(d.note||'')+'”, '+d.who+', '+decWhen(d)+
       ') and is still used by Race '+r+' Start '+(st+1)+' '+used.join(' and ')+'. '+decOtherFix(m,r,R)+
-      ' The legs, total, sketch, SailScoring table and Send text still use it. For now, '+fix.join('; ')+'.'});});
+      ' The legs, total, sketch, SailScoring table and Send text still use it. '+how[0].toUpperCase()+how.slice(1)+'.'});});
   return out;}
 // with the legs, when the day's decisions are not read, so a missing warning is not taken as "nothing marked do not use"
 function decLegNote(){
@@ -1890,22 +1915,25 @@ function decStatus(R){
   if(dec.status==='err')return 'Review decisions could not be read'+why+'.';
   const n=R.recs.filter(d=>d.status==='live').length, u=R.recs.filter(d=>d.status==='undone').length, s=R.recs.filter(d=>d.status==='superseded').length;
   return 'Review decisions: '+(R.recs.length?n+' in force'+(u?', '+u+' undone':'')+(s?', '+s+' replaced by a later one':''):'none recorded for this day')+
-    (R.bad?' · '+R.bad+' record'+(R.bad===1?'':'s')+' not understood, ignored':'')+' · as of '+hhmm(dec.at)+(dec.err?'; could not refresh'+why:'')+'.';
+    (R.bad?' · '+R.bad+' record'+(R.bad===1?'':'s')+' not understood, ignored':'')+' · '+(dec.list||[]).length+' record'+((dec.list||[]).length===1?'':'s')+
+    ' of the server\'s 2000 a day · as of '+hhmm(dec.at)+(dec.err?'; could not refresh'+why:'')+'.';
 }
 function decItem(f){return '<p class="fxRev '+(f.counted?'fxRevFlag':'fxRevInfo')+'">'+(f.counted?'⚑ ':'Information: ')+esc(f.text)+'</p>';}
-/* ---------- review decisions: recording them (Accept, Do not use, Undo) ----------
+/* ---------- review decisions: recording them (Accept, Do not use, Use as, Undo) ----------
    Under the fix detail, for the SELECTED race and start (S.race, S.start, also with All races); every button and preview
-   names its target. Accept: the fix is right for a role the selected start uses it for. Do not use: the fix for the whole
-   day, with a reason. Undo: a revoke of a decision in force (a do-not-use, or one for the selected start); a decision
-   replaced by a later one is not offered. None of them changes a course, a line end, a leg or an output: what the review
-   says against the page is shown by decFlags. Order: the name, the RO key, the fix on the server and the day's decisions
+   names its target. Accept: the fix is right for a role the selected start uses it for (not a fix marked do not use).
+   Do not use: the fix for the whole day, with a reason. Use as (below decOps' helpers): the fix in place of a fix marked
+   do not use, in the course rows of every start of the selected race that use it. Undo: a revoke of a decision in force
+   (a do-not-use, one for the selected start, or a use-as of the selected race, which also puts its rows back); a decision
+   replaced by a later one is not offered. Only Use as and its Undo change a course (rows only); none changes a line end
+   or a recorded fix. What the review says against the page is shown by decFlags. Order: the name, the RO key, the fix on the server and the day's decisions
    read; then a preview with Confirm and Cancel; Confirm checks again and sends the record (decPost); the day's decisions
    are then read again at once (a past day has no 30 s refresh). There is no queue: a failed write changes nothing and
    says so, and Retry sends the SAME record (same id: one that did reach the server is not doubled, it answers
-   "duplicate"). A use-as is undone where Use as is recorded, not here. decUi is page state only: nothing is stored,
+   "duplicate"). Use as and its Undo send one record per start (decSendMany). decUi is page state only: nothing is stored,
    and Clear everything resets it. */
 let decUi=decUiEmpty(), decGen=0, decPainted='';
-function decUiEmpty(){return {ref:'',spec:null,rec:null,note:'',busy:false,msg:'',cls:'',retry:false,again:false};}
+function decUiEmpty(){return {ref:'',spec:null,rec:null,recs:null,note:'',busy:false,msg:'',cls:'',retry:false,again:false};}
 function decNowRes(){return dec.status==='ok'&&dec.day===S.pulledDay?decResolve(dec.list):null;}
 // a record id: 8 to 40 letters or digits, made here once per record, so Retry writes nothing twice
 function decId(){const a=new Uint8Array(12);try{crypto.getRandomValues(a);}catch(e){for(let i=0;i<a.length;i++)a[i]=Math.floor(Math.random()*256);}
@@ -1930,41 +1958,111 @@ function decBlock(sm){
   if(!roKeySaved())return 'Enter the RO key in Setup → Review to record decisions.';
   if(!sm.sid||sm.pending)return 'This fix is not on the server yet, so no review decision can name it. Once it has been sent, tap Get latest marks.';
   return '';}
-/* What can be recorded for fix sm now, for the selected race and start: ops [{key, op, label, title, effect, role|target,
-   uses}] and notes, in plain words, for what cannot. Confirm asks again, so a preview that no longer applies is refused. */
+/* ---------- Use as, for course rows ----------
+   A fix X of a Windward, Leeward or Gybe replaces, in every start of the selected race that uses it, ONLY the course rows
+   that point at a fix F of the same mark type that is marked do not use; each row keeps its side. Corrections of fixes
+   not marked do not use stay with the course chips (a deliberate limit of this version). One use-as record per start,
+   ids sharing a prefix, sent one after another; a start's rows change only once its own record is accepted. A laid mark
+   following a fix, and line ends, are not replaced here. The recorded fixes are never changed. */
+// the starts of race r the page knows of: those with classes, a course, a line choice or a start time (as decUses)
+function decStartsOf(r){const keys=[S.courses,S.lineSel,S.startTimes].flatMap(o=>Object.keys(o||{})).filter(k=>/^\d+\|\d+$/.test(k)).map(k=>k.split('|').map(Number));
+  return [...new Set(classesOf(r).map((_,i)=>i).concat(keys.filter(k=>k[0]===r).map(k=>k[1])))].sort((a,b)=>a-b);}
+// 0-based positions of start (r, st)'s course rows that point at fix ref F directly (not a laid mark following it)
+function decRowsOf(r,st,F){const out=[];(S.courses[ckey(r,st)]||[]).forEach((e,i)=>{const f=decRowFix(e);if(f&&!f.laid&&refFor(f.m)===F)out.push(i);});return out;}
+// that start's rows with the given positions pointing at local fix id `to` (sides kept): a copy, S is not changed
+function decRowsWith(r,st,pos,to){return (S.courses[ckey(r,st)]||[]).map((e,i)=>{const o=typeof e==='string'?{id:e,side:''}:e;return pos.includes(i)?{id:to,side:o.side||''}:{id:o.id,side:o.side||''};});}
+const decFix=ref=>S.marks.find(m=>m.sid&&'s:'+m.sid===ref)||null;
+// why an undo of use-as record d cannot put its rows back now, in plain words; '' when it can
+function decUndoCheck(d){const rows=S.courses[ckey(d.race,d.start)]||[], X=decFix(d.ref), F=decFix(d.from[0].ref);
+  if(!F)return decFixName(null)+' (the fix it replaced)';
+  const gone=d.from.filter(x=>{const e=rows[x.row], f=e&&decRowFix(e);return !f||f.laid||refFor(f.m)!==d.ref;}).map(x=>x.row+1);
+  return gone.length?(gone.length>1?'rows ':'row ')+gone.join(', ')+(gone.length>1?' no longer hold ':' no longer holds ')+decFixName(X)+'; change '+(gone.length>1?'them':'it')+' with the course chips':'';}
+/* What can be recorded for fix sm now, for the selected race and start: ops [{key, op, label, title, effect, role|target|
+   items, uses}] and notes, in plain words, for what cannot. Confirm asks again, so a preview that no longer applies is
+   refused. A multi-record op (useas, undouse) has items [{st, rows} or {st, id}], one record each. */
 function decOps(sm,DEC){
   const k=refFor(sm), r=S.race, st=S.start, tgt='Race '+r+' Start '+(st+1), ops=[], notes=[], fname=decFixName(sm);
-  const by=d=>d.who+', '+decWhen(d), dn=DEC.dnu.get(k);
+  const by=d=>d.who+', '+decWhen(d), dn=DEC.dnu.get(k), startsTxt=a=>(a.length>1?'Starts ':'Start ')+a.map(x=>x+1).join(', ');
   // Accept: once for each role in which the selected start uses this fix now, a line end its outputs use (chosen,
-  // inherited or automatic) or a Windward, Leeward or Gybe course row; a laid mark following it has no role in the review
+  // inherited or automatic) or a Windward, Leeward or Gybe course row; a laid mark following it has no role in the review.
+  // Not for a fix marked do not use: that is undone first
   const roles=decEndsOf(r,st).filter(w=>{const p=endPick(w,r,st);return p.m&&refFor(p.m)===k;});
   (S.courses[ckey(r,st)]||[]).forEach(e=>{const f=decRowFix(e);if(!f||f.laid||refFor(f.m)!==k)return;
     Object.keys(DEC_TEST).forEach(w=>{if(DEC_TEST[w](f.m.name)&&!roles.includes(w))roles.push(w);});});
-  if(!roles.length)notes.push(tgt+' does not use this fix as a line end or a Windward, Leeward or Gybe row, so it cannot be accepted for it.');
-  roles.forEach(w=>{const s=DEC.slots.get(r+'|'+st+'|'+w), slot=decSlot(r,st,w);
+  if(dn)notes.push('This fix is marked do not use: undo that first to accept it.');
+  else if(!roles.length)notes.push(tgt+' does not use this fix as a line end or a Windward, Leeward or Gybe row, so it cannot be accepted for it.');
+  if(!dn)roles.forEach(w=>{const s=DEC.slots.get(r+'|'+st+'|'+w), slot=decSlot(r,st,w);
     if(s&&s.cur.ref===k){notes.push('In force: '+decSays(s.cur)+' ('+by(s.cur)+').');return;}
     ops.push({key:'accept|'+w,op:'accept',role:w,label:'Accept as '+slot,title:'Accept '+fname+' as '+slot,
-      effect:'Records that this fix is right for '+slot+(s?', in place of the decision in force for it ('+decSays(s.cur)+', '+by(s.cur)+')':'')+'.'+
-        (dn?' This fix is marked do not use: the two decisions show as disagreeing until one is undone.':'')+' No course, line end, leg or output changes.'});});
+      effect:'Records that this fix is right for '+slot+(s?', in place of the decision in force for it ('+decSays(s.cur)+', '+by(s.cur)+')':'')+'. No course, line end, leg or output changes.'});});
   if(!dn)ops.push({key:'dnu',op:'dnu',label:'Do not use '+fname+' (whole day)',title:'Do not use '+fname+', for the whole day (decided in '+tgt+')',uses:true,
-    effect:'Marks this fix do not use for the whole day, with your reason. The course is not changed: the legs, total, SailScoring table and Send text keep using it, with a warning that the legs need updating, until the rows are changed with the course chips or this is undone.'});
+    effect:'Marks this fix do not use for the whole day, with your reason. The course is not changed: the legs, total, SailScoring table and Send text keep using it, with a warning that the legs need updating, until its rows are replaced with Use as (select each race that uses it, then tap the fix to use instead) or the course chips, or this is undone.'});
+  // Use as: this fix in place of a fix of the same type marked do not use, in every start of race r whose rows use it
+  const role=Object.keys(DEC_TEST).find(w=>DEC_TEST[w](sm.name));
+  if(role&&dn)notes.push('This fix is marked do not use, so it cannot replace another.');
+  else if(role)DEC.dnu.forEach((d,F)=>{const fm=decFix(F);if(!fm||F===k||!DEC_TEST[role](fm.name))return;
+    const items=decStartsOf(r).map(s=>({st:s,rows:decRowsOf(r,s,F)})).filter(i=>i.rows.length);
+    if(!items.length){
+      // Use as works on the selected race: a flagged fix of this type that only other races' course rows use is named
+      // with where it is used, so the missing button is explained (nothing is said when no course row uses it at all)
+      const raceList=[...new Set(races().concat(Object.keys(S.courses).filter(x=>/^\d+\|\d+$/.test(x)).map(x=>+x.split('|')[0])))].filter(x=>x!==r).sort((a,b)=>a-b);
+      const where=raceList.map(x=>({x,sts:decStartsOf(x).filter(s=>decRowsOf(x,s,F).length)})).filter(u=>u.sts.length).map(u=>'Race '+u.x+' '+startsTxt(u.sts));
+      if(where.length)notes.push('Use as: '+decFixName(fm)+' (marked do not use) is used by '+(where.length>1?where.slice(0,-1).join(', ')+' and '+where[where.length-1]:where[0])+
+        ', not by Race '+r+'. '+(where.length>1?'Select one of those races to replace it there; each race is replaced on its own.':'Select '+where[0].replace(/ Starts? .*$/,'')+' to replace it there.'));
+      return;}
+    const where='Race '+r+' '+startsTxt(items.map(i=>i.st));
+    ops.push({key:'useas|'+F,op:'useas',role,from:F,x:k,xRace:sm.race,items,label:'Use as '+DEC_ROLE[role]+' in '+where+', in place of '+decFixName(fm),
+      title:'Use '+fname+' as '+DEC_ROLE[role]+' in '+where+', in place of '+decFixName(fm)+' (marked do not use)',
+      effect:'Replaces only the course rows that use '+decFixName(fm)+', in each start listed; each row keeps its side, and no other row or start '+
+        'changes. One review decision is recorded per start, and a start\'s rows change only once its decision is saved. The recorded fixes are never changed.'});});
+  // Undo: a do-not-use (whole day) or an accept for the selected start, as before; a use-as for any start of race r,
+  // each start on its own or all starts of one action (records sharing an id prefix) together
+  const groups=new Map();
   (DEC.byRef.get(k)||[]).forEach(d=>{if(d.action==='revoke')return;
+    if(d.action==='use-as'&&Array.isArray(d.from)){
+      if(d.race!==r){if(d.status==='live')notes.push('To undo '+decSays(d)+' ('+by(d)+'), select Race '+d.race+'.');return;}
+      if(d.status==='superseded'){notes.push(decSays(d)+' ('+by(d)+') cannot be undone: it was replaced by a later decision ('+by(d.by)+'). Undo that one first.');return;}
+      if(d.status!=='live')return;
+      const why=decUndoCheck(d);
+      if(why){notes.push(decSays(d)+' ('+by(d)+') cannot be undone: '+why+'.');return;}
+      ops.push({key:'undouse|'+d.id,op:'undouse',items:[{st:d.start,id:d.id}],label:'Undo: '+decSays(d)+' ('+by(d)+')',title:'Undo '+decSays(d)+' ('+by(d)+')',
+        effect:'Records an undo of that decision and puts the rows it replaced back to the fix they held, sides kept; it stays in the review history, struck through.'});
+      const g=d.id.replace(/s\d$/,'');if(!groups.has(g))groups.set(g,[]);groups.get(g).push(d);return;}
     const mine=d.action==='do-not-use'||(d.race===r&&d.start===st);
     if(d.status==='superseded'){if(mine)notes.push(decSays(d)+' ('+by(d)+') cannot be undone: it was replaced by a later decision ('+by(d.by)+'). Undo that one first.');return;}
     if(d.status!=='live')return;
     if(!mine){notes.push('To undo '+decSays(d)+' ('+by(d)+'), select Race '+d.race+' Start '+(d.start+1)+'.');return;}
-    if(d.action==='use-as'){notes.push(decSays(d)+' ('+by(d)+') is undone where Use as is recorded, not in this version of the page.');return;}
     ops.push({key:'undo|'+d.id,op:'undo',target:d.id,label:'Undo: '+decSays(d)+' ('+by(d)+')',title:'Undo '+decSays(d)+' ('+by(d)+')',
       effect:'Records an undo of that decision; it stays in the review history, struck through.'+
         (d.action==='do-not-use'?' The fix is no longer marked do not use; the warning with the legs and its review flags go.':'')+' No course, line end, leg or output changes.'});});
+  groups.forEach((list,g)=>{if(list.length<2)return;const sts=list.map(d=>d.start).sort((a,b)=>a-b);
+    ops.unshift({key:'undouse|all|'+g,op:'undouse',items:list.map(d=>({st:d.start,id:d.id})).sort((a,b)=>a.st-b.st),
+      label:'Undo for all: Race '+r+' '+startsTxt(sts)+' ('+fname+')',title:'Undo the use of '+fname+' in Race '+r+' '+startsTxt(sts),
+      effect:'Records one undo per start and puts each start\'s replaced rows back to the fix they held, sides kept.'});});
   return {ops,notes};}
+// the legs of one start as a short line: "3.96 nm (0.66 · 0.64 · …)"
+function decLegsTxt(L){return L.legs.length?L.total.toFixed(2)+' nm ('+L.legs.map(g=>g.r.nm.toFixed(2)).join(' · ')+')':'no legs';}
+// the preview of a multi-record op, per start: rows, legs before and after (legPts, nothing changed), the warning after,
+// and once sent, what happened to each start
+function decItemsHtml(sp,recs){const r=sp.race;
+  return '<ul class="decUses">'+sp.items.map((it,j)=>{const done=recs&&recs[j], k=ckey(r,it.st);let t='Start '+(it.st+1)+': ';
+    if(sp.op==='useas'){const X=decFix(sp.x), rows=decRowsWith(r,it.st,it.rows,X?X.id:''), a=legPts(r,it.st), b=legPts(r,it.st,{rows});
+      const still=decLegWarn(r,it.st,rows).some(w=>w.ref===sp.from);
+      t+=decRowsTxt(it.rows.map(x=>x+1))+'. Legs '+decLegsTxt(a)+' → '+decLegsTxt(b)+'. The warning about '+decFixName(decFix(sp.from))+
+        (still?' still shows for this start (it is also used there as a line end or a laid mark).':' clears for this start.');}
+    else{const d=(decNowRes()||{recs:[]}).recs.find(x=>x.id===it.id), F=d&&decFix(d.from[0].ref), why=d?decUndoCheck(d):'';
+      if(d&&!why){const rows=decRowsWith(r,it.st,d.from.map(x=>x.row),F.id);t+=decRowsTxt(d.from.map(x=>x.row+1))+' back to '+decFixName(F)+'. Legs '+decLegsTxt(legPts(r,it.st))+' → '+decLegsTxt(legPts(r,it.st,{rows}))+'.';}
+      else t+='cannot be undone'+(why?': '+why:'')+'.';}
+    if(done)t+=done.state==='saved'?' — saved.':done.state==='skipped'?' — not sent: '+done.msg:done.state==='failed'?' — not saved.':'';
+    return '<li>'+esc(t)+'</li>';}).join('')+'</ul>';}
 // the actions for fix sm, or its open preview; plain text is escaped here, once
 function decHtml(sm,DEC){
   const k=refFor(sm), u=decUi, head='<p class="decHead">Review decision · Race '+S.race+' Start '+(S.start+1)+'</p>';
   const msg=u.msg&&u.ref===k?'<p class="status'+(u.cls?' '+u.cls:'')+'">'+esc(u.msg)+'</p>':'';
   const btn=(op,label,dis,extra)=>'<button type="button" class="fxBtn" data-fx="dec" data-op="'+op+'"'+(extra||'')+(dis?' disabled':'')+'>'+esc(label)+'</button>';
-  if(u.spec&&u.ref===k){const sp=u.spec, sent=!!u.rec, ul=sp.uses?[...decUses(k).values()].flat():null;
+  if(u.spec&&u.ref===k){const sp=u.spec, sent=!!(u.rec||u.recs), ul=sp.uses?[...decUses(k).values()].flat():null;
     return '<div class="decBox" role="group" aria-label="Review decision preview">'+head+'<p class="decHead">'+esc(sp.title)+'?</p><p class="cardnote">'+esc(sp.effect)+'</p>'+
+      (sp.items?decItemsHtml(sp,u.recs):'')+
       (!ul?'':ul.length?'<p class="cardnote">The warning shows with the legs, and a review flag in Check recorded marks, while it is still used by:</p><ul class="decUses">'+ul.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':
         '<p class="cardnote">No start uses this fix now, so nothing will be flagged.</p>')+
       '<label class="decNote">'+(sp.op==='dnu'?'Reason (required)':'Note (optional)')+', readable by anyone with the race key: no personal details'+
@@ -1978,10 +2076,11 @@ function decHtml(sm,DEC){
   return '<div class="decBox">'+head+(ops.length?'<div class="decBtns">'+ops.map(o=>btn('open',o.label,false,' data-key="'+esc(o.key)+'"')).join('')+'</div>':'')+
     notes.map(t=>'<p class="cardnote">'+esc(t)+'</p>').join('')+msg+'</div>';}
 // drawn by renderFix under the fix detail, and only redrawn when it changes, so a refresh never clears a note being typed
-// (the note is kept in decUi and put back). A preview not being sent closes when its fix, race, start or day is left.
+// (the note is kept in decUi and put back). A preview not being sent closes when its fix, race, start or day is left; one
+// for a whole race (Use as and its Undo) stays open while another start of that race is selected, so its Retry is kept.
 function decPaint(sm,DEC){
   const u=decUi;
-  if(u.spec&&!u.busy&&(!sm||refFor(sm)!==u.ref||u.spec.race!==S.race||u.spec.start!==S.start||u.spec.day!==S.pulledDay))decUi=decUiEmpty();
+  if(u.spec&&!u.busy&&(!sm||refFor(sm)!==u.ref||u.spec.race!==S.race||(!u.spec.items&&u.spec.start!==S.start)||u.spec.day!==S.pulledDay))decUi=decUiEmpty();
   const html=sm&&S.pulledDay?decHtml(sm,DEC):'';
   if(html===decPainted)return;
   const had=document.activeElement&&document.activeElement.id==='decNote';
@@ -1994,8 +2093,11 @@ function decClick(b){
   if(op==='open'){const DEC=decNowRes(), o=sm&&DEC&&!decBlock(sm)?decOps(sm,DEC).ops.find(x=>x.key===b.dataset.key):null;
     if(o)decUi=Object.assign(decUiEmpty(),{ref:fxSel,spec:Object.assign({},o,{race:S.race,start:S.start,day:S.pulledDay})});
     renderFix(); const n=$('decNote'); if(o&&n)n.focus(); return;}
-  if(op==='again'){Object.assign(u,{rec:null,msg:'',cls:'',retry:false,again:false});renderFix();return;}
-  if(op==='confirm'||op==='retry')decSend(sm);}
+  if(op==='again'){   // after a 409: a new record id for what is not saved yet; a start already saved stays as it is
+    if(u.recs){const base=decId();u.recs.forEach(x=>{if(x.state!=='saved')x.rec.id=base+(u.spec.op==='useas'?'s'+x.it.st:'u'+x.it.st);});}
+    else u.rec=null;
+    Object.assign(u,{msg:'',cls:'',retry:false,again:false});if(u.recs){decSendMany(sm);return;}renderFix();return;}
+  if(op==='confirm'||op==='retry')(u.spec&&u.spec.items?decSendMany:decSend)(sm);}
 async function decSend(sm){
   const u=decUi, sp=u.spec; if(!sp||u.busy)return;
   if(!u.rec){   // the first Confirm: check everything again, then make the record once; Retry sends it unchanged
@@ -2023,6 +2125,63 @@ async function decSend(sm){
   decLoad(day,stale).then(()=>{if(stale())return;const v=decUi;
     if(res.ok&&v.cls==='ok'&&v.ref===u.ref&&dec.err)v.msg+=' The review could not be read again'+(dec.err==='net'?' (no signal)':'')+': tap Get latest marks.';
     buildLegs(); renderFix();},()=>{});}   // buildLegs: the warning with the legs follows the review
+/* A multi-record action (Use as for rows, or undoing one): one record per start, sent one after another. The whole action
+   is refused before anything is sent if the day's records plus these would pass the server's 2000. Just before each
+   send, that start is checked again (its rows as in the preview, both fixes still there); a start that changed is not
+   sent and says so. A start's rows change only once its own record is accepted (then it has unsent course edits, so a
+   load cannot overwrite them before the autosave sends them). The first failure stops the run: the starts saved so far
+   stay, and Retry sends the rest with the SAME records (same ids, so one that did reach the server is not doubled); after
+   a 409, Start again gives the rest new ids. */
+async function decSendMany(sm){
+  const u=decUi, sp=u.spec; if(!sp||u.busy)return;
+  const r=sp.race, X=decFix(sp.x);
+  if(!u.recs){   // the first Confirm: check everything again, then make the records once
+    const DEC=decNowRes(), why=!sm||refFor(sm)!==u.ref?'the fix is no longer selected.':decBlock(sm);
+    if(why){u.msg='Not sent: '+why;u.cls='err';renderFix();return;}
+    const o=DEC&&decOps(sm,DEC).ops.find(x=>x.key===sp.key);
+    if(!o||JSON.stringify(o.items)!==JSON.stringify(sp.items)){
+      decUi=Object.assign(decUiEmpty(),{ref:u.ref,msg:'Not sent: the review or the course has changed since this preview. Look again and choose.',cls:'err'});renderFix();return;}
+    if(sp.op==='useas'&&(!X||X.race!==sp.xRace)){
+      decUi=Object.assign(decUiEmpty(),{ref:u.ref,msg:'Not sent: '+decFixName(X)+' was moved or deleted since the preview. Look again.',cls:'err'});renderFix();return;}
+    const have=(dec.list||[]).length;
+    if(have+sp.items.length>2000){u.msg='Not sent: the day\'s review decisions are near the server\'s limit ('+have+' of 2000; this needs '+sp.items.length+').';u.cls='err';renderFix();return;}
+    const n=roNameClean(u.note), bad=decNoteProblem(n,false);
+    if(bad){u.msg=bad;u.cls='err';renderFix();return;}
+    const base=decId(), who=roName(), when=Date.now(), DECn=decNowRes();
+    u.recs=sp.items.map(it=>{let rec;
+      if(sp.op==='useas')rec={id:base+'s'+it.st,ref:sp.x,action:'use-as',race:r,start:it.st,role:sp.role,from:it.rows.map(i=>({row:i,ref:sp.from}))};
+      else{const d=DECn.recs.find(x=>x.id===it.id);rec={id:base+'u'+it.st,ref:d.ref,action:'revoke',revokes:d.id};}
+      rec.who=who;rec.client_when=when;if(n)rec.note=n;return {it,rec,state:'todo',msg:''};});
+    u.note=n;}
+  Object.assign(u,{busy:true,msg:'Sending…',cls:'',retry:false,again:false}); renderFix();
+  const gen=decGen;let fail=null;
+  for(const x of u.recs){if(x.state==='saved'||x.state==='skipped')continue;
+    // that start, just before sending: unchanged since the preview, and both fixes still there
+    let why='';
+    if(sp.op==='useas'){const F=decFix(sp.from), Xn=decFix(sp.x);
+      if(!F||!Xn||Xn.race!==sp.xRace)why='a fix was moved or deleted since the preview';
+      else if(JSON.stringify(decRowsOf(r,x.it.st,sp.from))!==JSON.stringify(x.it.rows))why='its course changed since the preview';}
+    else{const d=(decNowRes()||{recs:[]}).recs.find(y=>y.id===x.rec.revokes);why=!d?'the decision is no longer there':decUndoCheck(d);}
+    if(why){x.state='skipped';x.msg=why+'.';continue;}
+    const res=await decPost(sp.day,x.rec);
+    if(gen!==decGen||decUi!==u)return;   // Clear everything since: nothing here to report to
+    if(!res.ok){x.state='failed';x.msg=res.msg;fail=res;break;}
+    // saved on the server: now change that start's rows (sides kept)
+    const k=ckey(r,x.it.st), rows=course(r,x.it.st);
+    if(sp.op==='useas'){const Xn=decFix(sp.x);x.it.rows.forEach(i=>{rows[i].id=Xn.id;});}
+    else{const d=decNowRes().recs.find(y=>y.id===x.rec.revokes), F=decFix(d.from[0].ref);d.from.forEach(f=>{rows[f.row].id=F.id;});}
+    stamp(k); x.state='saved';}
+  u.busy=false; commit();   // the changed starts are saved by the autosave, with "by"
+  const saved=u.recs.filter(x=>x.state==='saved').map(x=>x.it.st), skipped=u.recs.filter(x=>x.state==='skipped'), left=u.recs.filter(x=>x.state==='todo'||x.state==='failed');
+  const sts=a=>(a.length>1?'Starts ':'Start ')+a.map(s=>s+1).join(', ');
+  const parts=[saved.length?'Saved: Race '+r+' '+sts(saved)+' updated.':'Nothing saved.']
+    .concat(skipped.map(x=>'Start '+(x.it.st+1)+' not sent: '+x.msg))
+    .concat(fail?['Not saved: Race '+r+' '+sts(left.map(x=>x.it.st))+'. '+fail.msg]:[]);
+  if(!fail&&!skipped.length&&saved.length===u.recs.length)decUi=Object.assign(decUiEmpty(),{ref:u.ref,msg:parts.join(' '),cls:'ok'});
+  else Object.assign(u,{msg:parts.join(' '),cls:fail||skipped.length?'err':'ok',retry:!!(fail&&fail.retry),again:!!(fail&&fail.again)});
+  renderFix();
+  const seq=pullSeq, day=sp.day, stale=()=>seq!==pullSeq||gen!==decGen||S.pulledDay!==day;
+  decLoad(day,stale).then(()=>{if(stale())return;buildLegs();renderFix();},()=>{});}
 /* One decision write, on its own send path rather than keyFetch: keyFetch takes any 403 as a race key that may have
    changed, and here a 403 can be the RO key's. The error is read first, and only "bad key" (the race key, which marks.php
    checks first) re-reads key.js and sends once more, as keyFetch does. The RO key is read from this device's storage
