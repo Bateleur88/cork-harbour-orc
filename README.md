@@ -404,6 +404,9 @@ footer "© 2026 Pat Tanner ORC Ireland".
   A committee boat for a Grassy Walk start sits within a few hundred metres of
   Grassy Mid, so that water is effectively the validated water; the page warns
   when the line's midpoint is more than 500 m from the card's start point.
+  The legs of any race and start are worked out by one function that only reads
+  the page's state (it changes no course, choice or output), so the review's
+  previews, when they come, will give the same figures as the legs table.
 - *Starts and finishes of a card course are deliberately not mirror images* — do
   not "fix" one into the other:
   - **Finish:** the card's Finish decides. Grassy Mid stands for the Grassy Walk
