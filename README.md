@@ -167,9 +167,10 @@ file is capped at 5 MB, the oldest versions other than a first of the day going 
 A save identical to the current version writes nothing. If the history cannot be
 written (a damaged history file, a failed write) the course save is refused too, so
 no course is ever replaced without its earlier version being kept; the page keeps
-the edit and sends it again. A damaged history file shows as course saves refused with
-"courses-history-YYYY-MM-DD.json is damaged, not overwritten" (the RO page keeps the
-edits unsent, and Clear everything warns about them); to unblock that day's saves,
+the edit and tries again every 15 s. A damaged history file shows on the RO page as
+"Course changes not saved: … Server: courses-history-YYYY-MM-DD.json is damaged, not
+overwritten. Trying again every 15 s." (the edits stay on the device, and Clear
+everything warns about them); to unblock that day's saves,
 put that day's `courses-history-YYYY-MM-DD.json` back from a dated backup of `data/`,
 or remove it (the history then starts again from the next save). A course save may
 carry `by`, the name of whoever saved it (text, cut to 40 characters, dropped if not
@@ -302,6 +303,50 @@ footer "© 2026 Pat Tanner ORC Ireland".
   card's waypoints, where the sketch draws it straight), the start and finish lines
   dashed under them, and the marks and line ends named as on the sketch, with labels
   that stay on and find new places at each zoom.
+- *Saving courses*: course changes are saved to the server automatically, about a
+  second after each change and every 15 seconds while any is unsent, but only once
+  this device has loaded that day (Get latest marks). The result shows under Get
+  latest marks in Setup and as an alert at the top of Race view.
+  - **Success:** "All course changes saved · hh:mm" shows after a save once nothing
+    is left unsent.
+  - **Run stops:** with no signal, the race key not loaded, a refused race key
+    (403), no reply within 20 s (each course save request is abandoned then) or a
+    server error (500), the line reads "Course changes not saved: N course edits
+    are waiting on this device." with the reason and "Trying again every 15 s.":
+    that run stops and is tried again.
+  - **One record refused:** a record the server refuses (400) or a full day (429,
+    the limit of 200 courses) reads "Race R Start S not saved: …". The other
+    records are still sent, and the refused one is tried again only after it is
+    changed or after a reload. The server's own error text is shown, escaped and
+    cut to 120 characters.
+  - **After a load:** when loading a day leads to a save, the line says "Saving N
+    course changes held on this device:" and why: a course built before this day
+    was loaded, a line end whose fix is gone was cleared, a fix reference updated
+    to the server's copy, or edits made while the day was not loaded.
+
+  *Changing day* (loading a different day):
+  - A save already running is waited for, at most 25 s, and stops after its
+    current record.
+  - Then the old day's unsent changes are sent, every record tried even after a
+    server error, and the line says "Sent N course changes held on this device for
+    ‹day› before loading ‹day›."
+  - If anything was not sent, the change of day stops: the old day stays loaded,
+    the day box goes back to it, nothing is deleted, and the line says why ("Still
+    on ‹day›: …").
+  - Records made on this device for a third day (edited while the day box showed a
+    day that was not loaded) stop a change of day too, also when no day was loaded
+    before. Load that day first to send them there.
+  - "Change day anyway" appears only when every record holding the change up was
+    refused (400 or 429), failed with a server error (500) or was made for a third
+    day. It names each one and says they will be lost from this device and were not
+    saved on the server.
+  - With no signal, a refused race key, no race key or no reply there is no such
+    button: try again when that is resolved.
+
+  Known limits (`STATUS.md` A34, A35, A36): a kept record holding only a start time
+  is sent on loading its day without the "Saving" line; a "Still on" message is not
+  updated when a later save sends the records it names, and clears at the next
+  change-of-day attempt.
 - *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
   course or tap marks in rounding order, record the committee boat and pin, set
   the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
@@ -362,7 +407,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
   yet saved, the first tap says so ("1 fix and 2 course edits not sent yet – tap
   again to clear anyway"). A change that adds page state outside the saved state `S`
   must reset it in `clearPageState()`, the one place the clear is kept in step with
-  a fresh load.
+  a fresh load. It also empties the course save line, and any stopped change of day
+  ("Still on …" and its "Change day anyway" button).
 
 **Wide screens.** Under 700 CSS px (phones) the page is one 560 px column, as it
 always was. From 700 px it is one 760 px column with larger sketches. From 1100 px

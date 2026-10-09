@@ -522,6 +522,8 @@ Not verified: no race has used the new page. No course has been saved on the liv
 
 Later on 9 October 2026 Pat redid the Race 1 repair of 4 October on the live page, on the PC with PAGE_VERSION 2026-10-06.24, as on the test copy: the R3 14:39 Leeward in all three starts, the Start Pin from Race 2 and the Finish Pin from Race 2. It was the first known live course save since the upload, and the course history write succeeded: the FileZilla listing of `/marks/data/` showed `courses-2026-10-04.json` (3,306 bytes) and a new `courses-history-2026-10-04.json` (2,934 bytes), both modified 09/10/2026 09:23:57 (FileZilla listing time), and a second device that loaded 4 October showed the repair. The previous paragraph's statements that no course had been saved on live, that the history file had not been written and that the 4 October records were the .7 page's describe the state before this repair.
 
+Correction (9 October 2026): the live Race 1 repair uses the Start Pin R1 12:32, a Race 1 fix chosen by Pat, and the finish set to Start line, the same as the test copy. The paragraph above wrongly says the Start Pin and Finish Pin were taken from Race 2.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
