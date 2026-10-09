@@ -249,6 +249,10 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <button class="act" id="pull">Get latest marks</button>
   <p class="hint" style="color:var(--muted);font-size:.85rem;margin:6px 0 0">After the first tap it refreshes by itself every 30 seconds.</p>
   <p class="status" id="readStatus" role="status" aria-live="polite"></p>
+  <!-- what happened to this device's course saves (saveLines): refused saves, why a load or a change of day sends, and
+       "Change day anyway" when a change of day stopped on changes the server refused or failed -->
+  <p class="status" id="saveStatus" role="status" aria-live="polite"></p>
+  <button class="ghost" id="dayAnyway" type="button" hidden></button>
   <button class="ghost" id="recCB">Record committee boat here</button>
   <p class="status" id="cbStatus" role="status" aria-live="polite"></p>
   <details class="backup">
@@ -257,8 +261,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <button class="ghost" id="read">Read marks from a WhatsApp message</button>
     <button class="ghost" id="addManual">Add a mark by typing its position</button>
   </details>
-  <!-- read-only, except "Add to Race N chips" under a fix's detail, which only adds a chip to this page's chip bank (page
-       state, not saved); one element for both views: in Race view it moves to slotFix, at the bottom -->
+  <!-- read-only, except "Add to Race N chips" under a fix's detail, which adds a chip to the race's chip bank (S.picked,
+       saved with the race's start groups); one element for both views: in Race view it moves to slotFix, at the bottom -->
   <details class="fixchk" id="fixCheck">
     <summary id="fixSum">Check recorded marks</summary>
     <div class="plot">
@@ -372,7 +376,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.24';
+const PAGE_VERSION='2026-10-06.25';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1143,6 +1147,8 @@ function renderRaceAlerts(){
     if(e.warn)a.push('<p class="note flag">⚠ '+esc(lab)+': '+esc(e.warn)+'.</p>');
     if(e.m&&accWarn(e.m))a.push('<p class="note flag">⚠ '+esc(lab)+' in use: '+esc(fixText(e.m,w))+'.</p>');
     if(fl)a.push('<p class="note flag">⚠ '+esc(fl)+'</p>');});
+  // the course save lines of #saveStatus, except "All course changes saved"; changing day is done in Setup, so no button here
+  saveLines().filter(x=>x[0]!=='ok').forEach(x=>a.push('<p class="note flag">'+esc(x[1])+'</p>'));
   $('raceAlertList').innerHTML=a.join('');
 }
 
@@ -1960,9 +1966,11 @@ let pullOk=false, pullSeq=0, dayGen=0;   // dayGen counts changes of loaded day;
 async function pull(quiet){
   // loads can overlap (the button, the 30 s refresh, moving a fix): only the latest one started may change anything,
   // so a load that is no longer the latest stops at its next wait, before it touches the phone's state
-  const seq=++pullSeq, stale=()=>seq!==pullSeq;
+  const seq=++pullSeq, stale=()=>seq!==pullSeq, wasOk=pullOk, ln={};   // ln: why this load leads to a save, per record
   const day=$('day').value||todayISO(), st=$('readStatus');
   if(!quiet){st.textContent='Fetching…'; st.className='status';}
+  // a new load replaces the last change of day's note, and a load the user starts replaces a stopped change of day
+  if(saveState.dayNote||(!quiet&&saveState.dayBlock)){saveState.dayNote=null;if(!quiet)saveState.dayBlock=null;showSave();}
   try{
     const r=await keyFetch(ENDPOINT+'?date='+encodeURIComponent(day),{});
     const j=await r.json();
@@ -1973,8 +1981,38 @@ async function pull(quiet){
       /* A different day is being loaded. Clear only what belongs to another day: a course built for this day before it
          could be loaded (imported at the dock, before signal) is kept, on a new phone or one last used on another day.
          Unsent edits to the old day's courses are saved to the old day first; this day's are not, they go to this day. */
-      const cd=S.courseDay||{}, mine=k=>cd[k]===day;
-      await saveCourses(true,k=>!mine(k));
+      const cd=S.courseDay||{}, mine=k=>cd[k]===day, oldDay=S.pulledDay;
+      let res={sent:0,results:{},err:null}, left=[];
+      if(oldDay){
+        /* A35: the old day's unsent changes must all be sent before anything is deleted below. A save already running
+           is asked to stop after its current record and waited for, at most DAY_WAIT_MS; then every record is tried
+           (dayMode: also after a server error). If any is left unsent the change of day stops here: the old day stays
+           loaded, the day box goes back and nothing is deleted (blockDay). "Change day anyway" (dayDrop) lets the
+           change go ahead only for records the server refused (400, 429) or failed (500), named in its message. */
+        if(savingC){saveStop=true;
+          saveState.waiting='Waiting for a course save already in progress on this device before loading '+longDate(day)+'…';showSave();
+          const done=await Promise.race([savingP.then(()=>true),new Promise(r=>setTimeout(()=>r(false),DAY_WAIT_MS))]);
+          saveState.waiting='';showSave();
+          if(stale())return;
+          if(!done){blockDay(oldDay,day,'busy',[],[],quiet);return;}}
+        res=await saveCourses(true,k=>!mine(k),true);
+        if(stale())return;
+        left=allKeys().filter(isDirty).filter(k=>(!cd[k]||cd[k]===oldDay)&&!mine(k));
+      }else await saveCourses(true,k=>!mine(k));   // no day loaded before: nothing to send, as before
+      // records made on this device for a third day (neither the old day nor this one) are not sent from here and would be
+      // deleted below: they stop the change of day too, also when no day was loaded before (load that day first, or
+      // "Change day anyway")
+      const other=otherDayKeys(cd,oldDay,day), all=left.concat(other);
+      if(all.length&&!(dayDrop&&dayDrop.from===oldDay&&dayDrop.to===day&&all.every(k=>dayDrop.keys.includes(k)))){
+        blockDay(oldDay,day,res,left,other,quiet);return;}
+      if(oldDay||all.length){const n=left.length, N=all.length;
+        saveState.dayNote=other.length?'Loaded '+longDate(day)+'. '+nOf(N,'course change','course changes')+(N===1?' was':' were')+
+            ' dropped from this device and '+(N===1?'is':'are')+' not on the server: '+all.map(k=>saveLabel(k)+' ('+longDate(cd[k]||oldDay)+')').join(', ')+'.':
+          n?'Loaded '+longDate(day)+'. '+nOf(n,'course change','course changes')+' for '+longDate(oldDay)+
+            (n===1?' was':' were')+' dropped from this device and '+(n===1?'is':'are')+' not on the server: '+left.map(saveLabel).join(', ')+'.':
+          res.sent?'Sent '+nOf(res.sent,'course change','course changes')+' held on this device for '+longDate(oldDay)+' before loading '+longDate(day)+'.':null;
+        all.forEach(k=>{delete saveState.refused[k];});
+        dayDrop=null; saveState.dayBlock=null; showSave();}
       if(stale())return;
       ['courses','startTimes','finishes','lineSel','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
@@ -1988,6 +2026,7 @@ async function pull(quiet){
       // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
       S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';}); dayGen++; S.lineFlags={};
       new Set(Object.keys(S.raceClasses).concat(Object.keys(S.picked))).forEach(r=>{S.synced['_starts|'+r]='';});
+      Object.keys(S.synced).forEach(k=>{ln[k]=LOAD_WHY[0];});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
       ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
       if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;
@@ -2006,8 +2045,14 @@ async function pull(quiet){
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
-    if(!stale())checkLineRefs();
+    if(!stale())checkLineRefs(ln);
     if(!stale()){pullOk=true; lastPullAt=Date.now();}
+    // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
+    // then was edited while the day was not loaded
+    if(!stale()){if(!wasOk)allKeys().filter(isDirty).forEach(k=>{if(!ln[k])ln[k]=LOAD_WHY[3];});
+      const ks=Object.keys(ln).filter(sendable);
+      if(ks.length){saveState.loadNote='Saving '+nOf(ks.length,'course change','course changes')+' held on this device: '+
+        LOAD_WHY.filter(r=>ks.some(k=>ln[k]===r)).join('; ');showSave();}}
     commit();
   }catch(e){
     if(stale())return;
@@ -2058,14 +2103,15 @@ async function moveFix(sid,newRace){
   }catch(e){st.textContent='Could not move that fix. Check signal and try again.'; st.className='status err';}
 }
 
-function checkLineRefs(){
+// ln (from pull): why a record it stamps will be saved, for the "Saving N course changes" line
+function checkLineRefs(ln){
   Object.keys(S.lineSel||{}).forEach(k=>{if(!/^\d+\|\d+$/.test(k))return;const ls=S.lineSel[k],[r,st]=k.split('|').map(Number);
     Object.keys(ls).forEach(w=>{const v=ls[w];if(!END_TEST[w]||typeof v!=='string'||!/^[sl]:/.test(v))return;
       const m=refFix(v,w);
       if(!m){delete ls[w];S.lineFlags[k]=S.lineFlags[k]||{};
         S.lineFlags[k][w]='The '+END_LABEL[w]+' fix chosen for Race '+r+' Start '+(st+1)+' is no longer among the day\'s fixes '+
-          '(deleted or renamed): choice cleared, auto is used until you choose again';stamp(k);}
-      else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k);}});});
+          '(deleted or renamed): choice cleared, auto is used until you choose again';stamp(k);if(ln&&!ln[k])ln[k]=LOAD_WHY[1];}
+      else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k);if(ln&&!ln[k])ln[k]=LOAD_WHY[2];}});});
 }
 /* Line choices were held as phone-side fix ids before 2026-10-01.8; they become references once. The saved record
    already sent references, so nothing changes on the server and nothing looks unsent. */
@@ -2092,27 +2138,128 @@ function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.le
 // the day-wide _starts is never sent: only each race's own groups are
 function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{})).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
-let savingC=false, saveTimer=null;
+let savingC=false, saveTimer=null, savingP=null, saveStop=false, dayDrop=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
-async function saveCourses(force,only){
+/* ---------- what happened to course saves (A33, A34, A35) ----------
+   Page state only, never stored, reset by clearPageState; shown in #saveStatus (Setup) and the Race view alerts.
+   err: the failure that stopped the last run {kind,status,text,at}. refused: records the server refused (400) or the day
+   is full (429), {js,kind,text}: not sent again while the record is unchanged; after a reload they are tried once more.
+   okAt: when a run last left nothing unsent. loadNote: why a load leads to a save (pull). waiting, dayBlock, dayNote: the
+   change of day (pull, blockDay). Kinds: nosignal, key (no race key), noreply (SAVE_TIMEOUT_MS), auth (403), refused
+   (400), full (429), server (500 and any other reply). */
+const SAVE_TIMEOUT_MS=20000, DAY_WAIT_MS=25000;
+const LOAD_WHY=['a course built before this day was loaded','a line end whose fix is gone was cleared',
+  "a fix reference updated to the server's copy",'edits made while the day was not loaded'];
+let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};
+function nOf(n,one,many){return n+' '+(n===1?one:many);}
+function saveLabel(k){const p=k.split('|');return k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
+function saveKind(e){if(e&&e.message==='no race key')return 'key';if(e&&e.name==='AbortError')return 'noreply';
+  if(e&&typeof e.status==='number')return e.status===400?'refused':e.status===429?'full':e.status===403?'auth':'server';
+  return 'nosignal';}
+function refusedSame(k){const r=saveState.refused[k];return !!r&&r.js===JSON.stringify(recordFor(k));}
+// records made on this device for a day that is neither the loaded day (old) nor the day being loaded (day), not empty:
+// nothing sends them from here, and a change of day would delete them (pull)
+function otherDayKeys(cd,old,day){return allKeys().filter(k=>cd[k]&&cd[k]!==old&&cd[k]!==day&&!isEmptyRec(k,recordFor(k)));}
+// what saveCourses would send now
+function sendable(k){const cd=S.courseDay||{};return isDirty(k)&&(!cd[k]||cd[k]===S.pulledDay)&&!refusedSame(k);}
+// the lines of #saveStatus and the Race view alerts, as [class, text]
+function saveLines(){const L=[], st=saveState, n=allKeys().filter(isDirty).length;
+  if(st.waiting)L.push(['',st.waiting]);
+  if(st.dayBlock)L.push(['err',st.dayBlock.msg]);
+  if(st.dayNote)L.push(['',st.dayNote]);
+  if(st.loadNote)L.push(['',st.loadNote]);
+  if(st.err)L.push(['err','Course changes not saved: '+nOf(n,'course edit is','course edits are')+' waiting on this device. '+
+    ({nosignal:'No signal.',key:'Race key not loaded yet.',noreply:'No reply from the server within 20 s.'}[st.err.kind]||
+     'Server: '+(st.err.text||'error '+st.err.status)+'.')+' Trying again every 15 s.']);
+  Object.keys(st.refused).forEach(k=>{const r=st.refused[k];L.push(['err',saveLabel(k)+' not saved: '+(r.kind==='full'?
+    'this day already has 200 courses on the server. It stays on this device; ask whoever manages the server.':
+    (r.text||'refused by the server')+'. It stays on this device and is not sent again until it is changed.')]);});
+  if(!st.err&&!st.dayBlock&&!st.waiting&&st.okAt&&!n)L.push(['ok','All course changes saved · '+hhmm(st.okAt)]);
+  return L;}
+function showSave(){const L=saveLines(), el=$('saveStatus'), db=saveState.dayBlock, b=$('dayAnyway');
+  el.innerHTML=L.map(x=>esc(x[1])).join('<br>');
+  el.className='status'+(L.some(x=>x[0]==='err')?' err':L.length&&L.every(x=>x[0]==='ok')?' ok':'');
+  b.hidden=!(db&&db.drop); if(db&&db.drop)b.textContent='Change day anyway and lose '+(db.keys.length===1?'this change':'these '+db.keys.length+' changes');
+  renderRaceAlerts();}
+/* a change of day that stopped (pull): the old day stays loaded and the day box goes back to it (with no day loaded before,
+   it stays as set). left: the old day's records not sent; other: records made for third days (otherDayKeys). The button
+   is offered when the old day's records all ended in 400, 429 or 500 (or there are none); third-day records can always
+   be dropped, as they cannot be sent from here */
+function blockDay(from,to,res,left,other,quiet){
+  const R=res&&res.results||{}, cd=S.courseDay||{}, n=left.length, m=other.length, N=n+m, F=from?longDate(from):'', T=longDate(to);
+  const held=nOf(n,'course change','course changes')+' held on this device for '+F;
+  const lost=' If you change day anyway, '+(N===1?'this change will be lost from this device. It was':'these '+N+' changes will be lost from this device. They were')+
+    ' not saved on the server.';
+  const days=[...new Set(other.map(k=>cd[k]))].sort(), list=days.map(d=>longDate(d)+': '+other.filter(k=>cd[k]===d).map(saveLabel).join(', ')).join('; ');
+  const otherTxt=nOf(m,'course change','course changes')+' on this device '+(m===1?'was':'were')+' made for other days and '+(m===1?'has':'have')+
+    ' not been sent ('+list+')', send=m===1?'to send it, load that day first':'to send them, load each of those days first';
+  let msg, drop=false;
+  if(res==='busy')msg='Still on '+F+': a course save on this device did not finish within 25 s. '+T+' was not loaded. Tap Get latest marks again in a moment.';
+  else{let head='', close='';drop=true;
+    if(n){const kinds=left.map(k=>R[k]?R[k].kind:''), hard=res.err?res.err.kind:kinds.find(x=>!['refused','full','server'].includes(x));
+      if(hard!==undefined){drop=false;
+        head=held+' could not be sent ('+({nosignal:'no signal',key:'race key not loaded yet',
+          noreply:'no reply from the server within 20 s',auth:'the server refused the race key'}[hard]||'not tried')+'). '+T+' was not loaded.';
+        close=' '+(hard==='nosignal'?'Try again when there is signal.':'Try again when that is resolved.');}
+      else{const txt=k=>R[k].kind==='full'?'this day already has 200 courses on the server':R[k].text||'error '+(R[k].status||'');
+        const has5=kinds.includes('server'), has4=kinds.some(x=>x!=='server');
+        head=held+(has5&&has4?' could not be saved ('+left.map(k=>saveLabel(k)+': '+(R[k].kind==='server'?'server error: ':'refused: ')+txt(k)).join('; ')+').':
+          has5?' could not be saved; the server reported an error ('+left.map(k=>saveLabel(k)+': '+txt(k)).join('; ')+').':
+          ' '+(n===1?'was':'were')+' refused by the server ('+left.map(k=>saveLabel(k)+': '+txt(k)).join('; ')+').')+' '+T+' was not loaded.';}}
+    msg=n&&m?'Still on '+F+': '+head+' Also, '+otherTxt+'; '+send+'.':
+      n?'Still on '+F+': '+head:
+      (from?'Still on '+F+': '+otherTxt+'. '+T+' was not loaded.':T+' was not loaded: '+otherTxt+'.')+' '+send[0].toUpperCase()+send.slice(1)+'.';
+    msg+=drop?lost:close;}
+  saveState.dayBlock={from,to,keys:left.concat(other),drop,msg}; dayDrop=null; if(from)$('day').value=from;
+  if(!quiet){$('readStatus').textContent=T+' not loaded (see below).';$('readStatus').className='status err';}
+  showSave();}
+// after a normal run: its stopping failure, or none; "All course changes saved" only when nothing is left unsent
+function saveDone(res){const st=saveState; st.loadNote=null;
+  st.err=res.err?Object.assign({at:Date.now()},res.err):null;
+  if(!res.err&&!allKeys().filter(isDirty).length)st.okAt=Date.now();
+  showSave();}
+/* Sends this day's unsent records. A normal run (the 15 s timer, an edit) stops at no signal, no race key, no reply, 403
+   or a server error (500), to be tried again; a record refused (400) or a full day (429) is marked refused and the run
+   goes on. dayMode (the change of day, pull) also goes on after a server error, so every record has its own result.
+   Returns {sent, results: key -> {kind,status,text} for each record not sent, err: the failure that stopped it}. */
+async function saveCourses(force,only,dayMode){
+  const res={sent:0,results:{},err:null};
   // only save after this session has loaded the day's marks from the server (or when forced on a day change)
-  if(savingC||!S.pulledDay||(!pullOk&&!force))return;
+  if(savingC||!S.pulledDay||(!pullOk&&!force))return res;
   // a course is only ever sent to the file of the day it was built for; one built for another day waits for that day
-  const day=S.pulledDay, cd=S.courseDay||{};
-  const ks=allKeys().filter(isDirty).filter(k=>!cd[k]||cd[k]===day).filter(only||(()=>true)); if(!ks.length)return; savingC=true;
+  const day=S.pulledDay, cd=S.courseDay||{}, st=saveState;
+  const all=allKeys().filter(isDirty).filter(k=>!cd[k]||cd[k]===day).filter(only||(()=>true));
+  // a refused record is sent again once it has been changed
+  all.forEach(k=>{if(st.refused[k]&&!refusedSame(k))delete st.refused[k];});
+  all.filter(k=>st.refused[k]).forEach(k=>{res.results[k]={kind:st.refused[k].kind,status:0,text:st.refused[k].text};});
+  const ks=all.filter(k=>!st.refused[k]);
+  // nothing to send: the 15 s timer reports only when it clears an earlier failure or load note, so "All course changes
+  // saved" follows a real save or recovery, never an idle tick
+  if(!ks.length){if(!dayMode&&(st.err||st.loadNote))saveDone(res);return res;}
+  savingC=true; let fin; savingP=new Promise(r=>{fin=r;});
   // each record is taken now, before any send: a load of another day may clear these courses while they are being sent,
   // and what was built for this day must still reach this day's file, never an emptied copy
   const recs=ks.map(k=>[k,recordFor(k)]);
   // a send that finishes after the loaded day has changed, even back to this same day, must not mark anything as saved:
   // the day's S.synced has been rebuilt since, and the same key (1|0) can exist on both days
   const gen=dayGen;
-  try{
-    for(const [k,rec] of recs){const js=JSON.stringify(rec);
+  for(const [k,rec] of recs){
+    if(saveStop&&!dayMode)break;   // a change of day is waiting (pull): stop after the record being sent
+    const js=JSON.stringify(rec);
+    try{
       // no "by": the Review name is no longer kept on this page, and marks.php takes a save without one as before
-      await postFix({action:'course',date:day,key:k,data:rec});
-      if(gen===dayGen&&S.pulledDay===day){S.synced[k]=js; save();}}
-  }catch(e){}
-  savingC=false;
+      await postFix({action:'course',date:day,key:k,data:rec},SAVE_TIMEOUT_MS);
+      res.sent++; delete st.refused[k];
+      if(gen===dayGen&&S.pulledDay===day){S.synced[k]=js; save();}
+    }catch(e){const f={kind:saveKind(e),status:e&&typeof e.status==='number'?e.status:0,text:e&&e.text||''};
+      res.results[k]=f;
+      if(f.kind==='refused'||f.kind==='full'){st.refused[k]={js,kind:f.kind,text:f.text};continue;}
+      if(dayMode&&f.kind==='server')continue;
+      res.err=f; break;}
+  }
+  savingC=false; saveStop=false; fin();
+  if(!dayMode)saveDone(res);
+  return res;
 }
 function applyServerCourses(obj){
   Object.keys(obj||{}).forEach(k=>{
@@ -2160,9 +2307,17 @@ if(S.recShape!==2){Object.keys(S.synced||{}).forEach(k=>{const v=S.synced[k];
 /* ---------- committee boat fix from this phone ---------- */
 if(!Array.isArray(S.outbox))S.outbox=[];
 function cbLabel(){return 'Record committee boat here – Race '+S.race;}
-async function postFix(body){
-  const r=await keyFetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok)throw new Error('server '+r.status);
+/* A refused reply throws 'server <status>' as before (syncSeries tests for 'server 400'), with e.status and e.text, the
+   server's own error text cut to 120 characters (shown escaped). ms: abandon the request after ms milliseconds, an
+   AbortError ("no reply"); only course saves pass it, the outbox and the series name do not. */
+async function postFix(body,ms){
+  const ac=ms&&typeof AbortController==='function'?new AbortController():null, tm=ac?setTimeout(()=>ac.abort(),ms):0;
+  try{
+    const r=await keyFetch(ENDPOINT,Object.assign({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},
+      ac?{signal:ac.signal}:{}));
+    if(!r.ok){let t='';try{const j=await r.json();if(j&&typeof j.error==='string')t=j.error.slice(0,120);}catch(_){}
+      const e=new Error('server '+r.status);e.status=r.status;e.text=t;throw e;}
+  }finally{if(tm)clearTimeout(tm);}
 }
 let sending=false;
 async function sendOutbox(){
@@ -2233,6 +2388,9 @@ $('recCB').onclick=()=>{
   const tm=setTimeout(done,12000);
 };
 setInterval(()=>{sendOutbox();saveCourses();},15000);
+// "Change day anyway": the change of day that stopped goes ahead, dropping only the records named in its message
+$('dayAnyway').onclick=()=>{const db=saveState.dayBlock;if(!db||!db.drop)return;
+  dayDrop={from:db.from,to:db.to,keys:db.keys.slice()};$('day').value=db.to;pull(false);};
 window.addEventListener('online',sendOutbox);
 
 /* ---------- events ---------- */
@@ -2348,7 +2506,9 @@ function clearPageState(){
   $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
   cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;
   $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
-  ['readStatus','cbStatus','seriesStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
+  saveStop=false; dayDrop=null; saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};   // course saves
+  $('dayAnyway').hidden=true;
+  ['readStatus','cbStatus','seriesStatus','saveStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
 }
 // what this phone holds that the server does not have yet, which a clear would lose: fixes waiting to send (committee
 // boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
