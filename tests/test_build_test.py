@@ -20,6 +20,14 @@ altered in ways it must refuse and checks that it writes nothing:
                 ((a+b)/2;localStorage.setItem('x',1) and var h=x/y;sessionStorage.getItem('z')) does not hide the call
   3  allowed    the same words in comments only, a regex literal holding a quote and "//" before a prefixed call,
                 and the two division lines with STORE+ keys, still build
+  4  saves      static guards for the course save status in the live page (2026-10-06.25; STATUS A33, A34, A35, A29):
+                #saveStatus and #dayAnyway once each; saveCourses has no empty catch, passes the 20 s limit and has its
+                day-change mode; postFix reads the server's error, sets .status, keeps "server <status>" and can abandon
+                a request; pull waits for a running save (DAY_WAIT_MS) and checks the day-change save's result before
+                deleting the old day's courses, and records made for third days stop it too; Clear everything
+                resets the save state and names saveStatus and
+                dayAnyway; "Race key not loaded yet" has its save message; the comment above Check recorded marks says
+                picked chips are saved. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -96,6 +104,48 @@ def t1_live_page():
            f'unexpected {sorted(names - STORE_NAMES)}, missing {sorted(STORE_NAMES - names)}')
 
 
+def fn_body(src, head):
+    """The source of the function that starts with head, up to the next top-level function ('' if not found)."""
+    i = src.find(head)
+    if i < 0:
+        return ''
+    j = re.search(r'\n(?:async )?function |\n\$\(', src[i + len(head):])
+    return src[i:i + len(head) + (j.start() if j else len(src))]
+
+
+def t4_save_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    report('4 saves: id="saveStatus" exactly once', page.count('id="saveStatus"') == 1)
+    report('4 saves: id="dayAnyway" exactly once', page.count('id="dayAnyway"') == 1)
+    sc = fn_body(code, 'async function saveCourses(')
+    report('4 saves: saveCourses found', bool(sc))
+    report('4 saves: saveCourses has no empty catch', not re.search(r'catch\s*\(\s*\w*\s*\)\s*\{\s*\}', sc))
+    report('4 saves: saveCourses passes the 20 s limit', 'SAVE_TIMEOUT_MS' in sc and 'SAVE_TIMEOUT_MS=20000' in code)
+    report('4 saves: saveCourses has its day-change mode', 'dayMode' in sc)
+    pf = fn_body(code, 'async function postFix(')
+    report('4 saves: postFix reads the server error and sets .status',
+           bool(pf) and '.error' in pf and 'e.status=' in pf and 'e.text=' in pf)
+    report("4 saves: postFix still throws 'server '+status", "new Error('server '+r.status)" in pf)
+    report('4 saves: postFix can abandon a request', 'AbortController' in pf and '.abort()' in pf)
+    pl = fn_body(code, 'async function pull(')
+    a = pl.find('saveCourses(true,k=>!mine(k),true)')
+    o = pl.find('otherDayKeys(', a + 1)
+    b, c = pl.find('blockDay(', o + 1), pl.find("['courses','startTimes'")
+    report('4 saves: pull checks the day-change save before deleting the old day', -1 < a < b < c, f'{a} {b} {c}')
+    report('4 saves: pull checks records made for third days before deleting', -1 < a < o < b < c, f'{a} {o} {b} {c}')
+    report('4 saves: blockDay takes the third-day records', 'function blockDay(from,to,res,left,other,quiet)' in code)
+    report('4 saves: pull waits for a running save', 'savingP' in pl and 'DAY_WAIT_MS' in pl and 'DAY_WAIT_MS=25000' in code)
+    cp = fn_body(code, 'function clearPageState(')
+    report('4 saves: Clear everything resets the save state',
+           all(x in cp for x in ('saveState=', 'saveStop=false', 'dayDrop=null', "'saveStatus'", "'dayAnyway'")))
+    report('4 saves: "Race key not loaded yet" has its save message', 'Race key not loaded yet.' in fn_body(code, 'function saveLines('))
+    report('4 saves: the comment above Check recorded marks says picked chips are saved',
+           "saved with the race's start groups); one element for both views" in page and 'chip bank (page' not in page)
+
+
 def t2_refusals(tmp):
     live = read(PAGE)
     out = os.path.join(tmp, 'out2')
@@ -165,6 +215,7 @@ def main():
         t1_live_page()
         t2_refusals(tmp)
         t3_allowed(tmp)
+        t4_save_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
