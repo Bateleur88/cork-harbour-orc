@@ -600,8 +600,11 @@ the 4a66559 version (10,487 bytes,
 renamed to `index.html`, replaced .7 (2aec398; 257,628 bytes,
 `157ce311615d4243fe09e5196250cf418bef74c7282c339a04ed7f997c388a10`). Both went up
 with FileZilla in Binary mode and were re-downloaded and hashed; the live page loaded
-the 4 October day, and was opened and working on a PC and a tablet (Pat). No course
-has been saved on live since, and no race has used it. The old files are kept outside
+the 4 October day, and was opened and working on a PC and a tablet (Pat). The first
+known live course save since the upload was the Race 1 repair of 4 October, made
+later on 9 October 2026 on the PC with this page; it wrote the course history file
+(`courses-history-2026-10-04.json`), so the live `data/` accepts the history write.
+No race has used it. The old files are kept outside
 the repository in `release_2026-10-09`: `marks.php.live-2026-10-09`,
 `index.html.live-2026-10-09` and `marks-data-2026-10-09`, with the upload copies
 `marks.php` and `index.html`. To roll back, upload `marks.php.live-2026-10-09` as
