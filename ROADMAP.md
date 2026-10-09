@@ -501,7 +501,7 @@ A migration path, not a cliff edge.
 
 ## 15. Open questions
 
-The Phase 1 audit lists 19 questions (its section 11). Pat's answers to the design-critical ones are in section 1b. The rest, including the live host's PHP version and server, header pass-through, the orc-ireland.org plan, which code ran on 27 September, and whether the RIB page is limited to Races 1 to 3 by design, are unanswered.
+The Phase 1 audit lists 19 questions (its section 11). Pat's answers to the design-critical ones are in section 1b. The rest, including the live host's PHP version and server, header pass-through, the orc-ireland.org plan, which code ran on 27 September, and whether the RIB page is limited to Races 1 to 3 by design, are unanswered. (9 October 2026: the live host's PHP version, 5.5.38, the server software, Apache, and the `data/` deny-all were checked; `STATUS.md` A26.)
 
 - Decision 1: who owns fix capture and the day record, given `course-days.md` steps 3 to 6?
 - Does the Course Record's definition live in `course-cards`, and what is Mark's timetable?

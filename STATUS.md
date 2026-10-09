@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 8 October 2026. Baseline: Phase 1 audit of commit `f30882f` (`docs/audit/PHASE1_AUDIT.md`, which stays unchanged as the dated snapshot).
+Last updated: 9 October 2026. Baseline: Phase 1 audit of commit `f30882f` (`docs/audit/PHASE1_AUDIT.md`, which stays unchanged as the dated snapshot).
 
 This file tracks progress against the audit findings and the 4 October live-test problems. The audit is the baseline; this file is where progress is recorded.
 
@@ -96,7 +96,7 @@ Every tracked item has a fixed reference: **L1 to L8** for the 4 October live-te
 | A23 | Server tests (`test_marks.py`, `test_build_test.py`) | BUILT AND TESTED | All passed on PHP 8.4.26 and PHP 5.5.38 on 7 October 2026 |
 | A24 | JavaScript in either page | NOT STARTED | No tests exist (geometry, fix resolution, moved mark, line ends, laid marks, leg table, RIB queue, service worker) |
 | A25 | Race key also accepted as a URL parameter (`?key=`) | OPEN | No decision recorded |
-| A26 | Live host: PHP version, server software, header pass-through, `data/` deny-all check | OPEN | Not yet checked |
+| A26 | Live host: PHP version, server software, header pass-through, `data/` deny-all check | OPEN | Checked by Pat on 9 October 2026: PHP 5.5.38 (`X-Powered-By` on a read request); the server software, Apache (the `Server` header of a `marks.php` response); and a request for a non-existent file under `/marks/data/` is refused with 403. Not checked: header pass-through for `X-RO-Key`. The .24 page sends the race key only as the `X-Race-Key` header (`course_v8.html:403`), and its reads succeeded on 9 October. The course history file (`courses-history-YYYY-MM-DD.json`) has not yet been written on the live server: no course has been saved there since the upload. The first live save will show whether `data/` allows it; if the history cannot be written, the save is refused and nothing changes |
 | A28 | `build_test.py` records "source commit" from the repo HEAD even when `--page` points outside the repo | OPEN | Found 7 October 2026 building the .12 test copy from a page outside the repo: BUILD.txt said "source commit a10394d" with no note that the page was not the committed one (its uncommitted-changes check looks only at the repo's `pages/`). Script unchanged; the test build's MANIFEST.txt records the real source |
 
 ### 2.6 As-sailed course repair (built after the audit)
@@ -105,10 +105,10 @@ Built after the Phase 1 audit, in place of the withdrawn decisions work (A1, C7)
 
 | Ref | Item | State | Notes |
 |---|---|---|---|
-| A29 | Picked chips: any recorded fix of the day brought into a race's chip bank and saved with the race | BUILT AND TESTED | Page side in PAGE_VERSION 2026-10-06.20; saved with the race (`picked` in the `_starts|N` record) in .21; committed in `dd86687`. Tested on the shadow copy (`/course-test/`); not confirmed live. `marks.php` stores the field unchanged (`test_marks.py` 17). A save of that record from an older page (the live .7) drops the picks; the course history keeps them. Known gap: the Send text names another race's fix as plain "Windward". The comment at `course_v8.html:260` still calls a picked chip page state, not saved; the code saves it |
-| A30 | Line ends (committee boat, Start Pin, Finish Pin) chosen from any race's fixes | BUILT AND TESTED | PAGE_VERSION 2026-10-06.20; committed in `dd86687`. Saved in `lineSel` as before; `auto` keeps its own rule and never picks a later race's fix. Tested on the shadow copy; not confirmed live |
-| A31 | Course chart drawn from the sketch's data; the Legs block in the left column from 1100 px | BUILT AND TESTED | Chart in PAGE_VERSION 2026-10-06.22, Legs position in .23; committed in `dd86687`. Tested on the shadow copy; not confirmed live |
-| A32 | As-sailed overlay in Check recorded marks: the selected race and start over the recorded lines, unused recorded lines faded | BUILT AND TESTED | PAGE_VERSION 2026-10-06.24; committed in `dd86687`. Tested on the shadow copy; not confirmed live |
+| A29 | Picked chips: any recorded fix of the day brought into a race's chip bank and saved with the race | BUILT AND TESTED | Page side in PAGE_VERSION 2026-10-06.20; saved with the race (`picked` in the `_starts|N` record) in .21; committed in `dd86687`. Tested on the shadow copy (`/course-test/`); not confirmed live. `marks.php` stores the field unchanged (`test_marks.py` 17). A save of that record from an older page (the .7 page, live until 9 October 2026) drops the picks; the course history keeps them. Known gap: the Send text names another race's fix as plain "Windward". The comment at `course_v8.html:260` still calls a picked chip page state, not saved; the code saves it. Uploaded to the live paths on 9 October 2026 (PAGE_VERSION 2026-10-06.24). Not confirmed live: no race has used it, no course has been saved on the live server since the upload, and the live course data is not yet repaired (the Race 1 repair exists on the test copy only). |
+| A30 | Line ends (committee boat, Start Pin, Finish Pin) chosen from any race's fixes | BUILT AND TESTED | PAGE_VERSION 2026-10-06.20; committed in `dd86687`. Saved in `lineSel` as before; `auto` keeps its own rule and never picks a later race's fix. Tested on the shadow copy; not confirmed live. Uploaded to the live paths on 9 October 2026; not confirmed live (no race has used it). |
+| A31 | Course chart drawn from the sketch's data; the Legs block in the left column from 1100 px | BUILT AND TESTED | Chart in PAGE_VERSION 2026-10-06.22, Legs position in .23; committed in `dd86687`. Tested on the shadow copy; not confirmed live. Uploaded to the live paths on 9 October 2026; not confirmed live (no race has used it). |
+| A32 | As-sailed overlay in Check recorded marks: the selected race and start over the recorded lines, unused recorded lines faded | BUILT AND TESTED | PAGE_VERSION 2026-10-06.24; committed in `dd86687`. Tested on the shadow copy; not confirmed live. Uploaded to the live paths on 9 October 2026; not confirmed live (no race has used it). |
 
 ---
 
@@ -147,7 +147,7 @@ Built after the Phase 1 audit, in place of the withdrawn decisions work (A1, C7)
 
 | Date | Race or event | What was checked | Result |
 |---|---|---|---|
-| | | | |
+| 2026-10-09 | Upload, not a race: RO page PAGE_VERSION 2026-10-06.24 and `marks.php` (318d09b) | Re-downloaded and hashed; the live page loaded the 4 October day; PHP 5.5.38; `/marks/data/` 403; opened and working on a PC and a tablet (Pat); no course saved on live; not a race. | Uploaded. Nothing confirmed live |
 
 First live check: the next race day. Nothing in this file is CONFIRMED LIVE yet.
 
@@ -175,3 +175,5 @@ First live check: the next race day. Nothing in this file is CONFIRMED LIVE yet.
 - 2026-10-08: C8 added (DECIDED, any race day); C9 added (INTENDED, pin automatic choices; RO-key lock).
 - 2026-10-08: A29 to A32 added, BUILT AND TESTED on the shadow copy (picked chips, line ends from any race, chart from the same data with the Legs position, as-sailed overlay); not confirmed live.
 - 2026-10-08: References corrected: the repository has one GitHub issue (#1).
+- 2026-10-09: Uploaded to the live paths by Pat (FileZilla, Binary mode; each file re-downloaded and hashed). First /marks/marks.php: the 318d09b version (23,076 bytes, SHA-256 05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca) replaced the 4a66559 version (10,487 bytes, a104989efcb6a767aa4fe0c2aaf09f7ffcb389ca46bec112cafcf2ae3b187f04). Then /course/index.html: PAGE_VERSION 2026-10-06.24 (280,789 bytes, 3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b) replaced .7 (2aec398; 257,628 bytes, 157ce311615d4243fe09e5196250cf418bef74c7282c339a04ed7f997c388a10). Backups taken first, outside the repository (release_2026-10-09). Tests re-run beforehand: test_marks.py on PHP 8.4.26 and 5.5.38, test_build_test.py and build_test.py passed. No device may edit courses on the .7 page after the upload.
+- 2026-10-09: A26: PHP 5.5.38, the server software (Apache) and the data/ 403 checked; X-RO-Key pass-through unchecked; the course history file not yet written on live. A29 to A32: uploaded to the live paths, not confirmed live; states unchanged. Live-test log: the 9 October upload (not a race).

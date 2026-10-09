@@ -288,7 +288,7 @@ footer "© 2026 Pat Tanner ORC Ireland".
   are saved with its start groups as `picked` (server references, `s:<id>`) in its
   `_starts|N` record; a race without picks saves exactly as before, and `marks.php`
   stores the field unchanged. A pick whose fix is no longer on the server is
-  dropped. A save of that record from an older page (the live .7) drops the picks;
+  dropped. A save of that record from an older page (the .7 page, live until 9 October 2026) drops the picks;
   the course history keeps the earlier version. Picked fixes have a dashed ring in
   the sea colour in Check recorded marks.
 - *Line ends from any race*: the Committee boat, Start Pin and Finish Pin lists
@@ -475,7 +475,7 @@ Run it, on PHP 8.4 and on PHP 5.5 like the live host, before uploading any chang
 
 Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
 package on Linux), found on PATH or through the `PHP_CGI` environment variable.
-Tested with PHP 8.4 on Windows; the live host may differ.
+Tested with PHP 8.4.26 and 5.5.38 on Windows; the live host runs PHP 5.5.38 (checked 9 October 2026).
 
     tests/test_build_test.py  Tests for scripts/build_test.py.
 
@@ -502,7 +502,11 @@ added or dropped must update the test. Needs no PHP and no browser.
 
 `pages/course/index.html` is not in the repository: `rebuild_page.py` writes it on
 every run as a byte-identical copy of `course_v8.html`, which stays the source. Upload
-that file as `/course/index.html`; never edit it by hand.
+that file as `/course/index.html`; never edit it by hand. A copy of `course_v8.html`
+renamed to `index.html` is the same bytes while the snapshot is current
+(`rebuild_page.py --dry-run` says so); the 9 October 2026 upload was such a copy.
+Either way, compare its SHA-256 with `course_v8.html` before uploading and again after
+re-downloading it.
 
 The race key is kept out of this public repository. Copy `pages/marks/key.example.js`
 to `key.js`, set the key, and upload it next to `marks.php`: both pages load it and
@@ -521,7 +525,7 @@ registers it on each open, and it removes itself again at once. Put the real
 name.
 
 `marks.php` keeps its data in `/marks/data/` and writes an `.htaccess` there that
-denies web access. That only works on Apache or LiteSpeed; check it on the live server.
+denies web access. That only works on Apache or LiteSpeed; check it on the live server (9 October 2026: a request for a non-existent file under `/marks/data/` is refused with 403).
 
 ## Parallel test install
 
@@ -586,6 +590,27 @@ older one and can stay. Put a day's file back from the dated copy only if that f
 itself must be restored: it removes anything recorded or saved since the copy.
 Backups of `/marks/data/` will contain the RO key file (`data/ro-key.php`) once it is
 in place: keep them outside the repository and never share them.
+
+**9 October 2026 upload.** `marks.php` first: the 318d09b version (23,076 bytes,
+SHA-256 `05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`) replaced
+the 4a66559 version (10,487 bytes,
+`a104989efcb6a767aa4fe0c2aaf09f7ffcb389ca46bec112cafcf2ae3b187f04`). Then the page:
+`course_v8.html` at 318d09b, PAGE_VERSION 2026-10-06.24 (280,789 bytes,
+`3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b`), copied and
+renamed to `index.html`, replaced .7 (2aec398; 257,628 bytes,
+`157ce311615d4243fe09e5196250cf418bef74c7282c339a04ed7f997c388a10`). Both went up
+with FileZilla in Binary mode and were re-downloaded and hashed; the live page loaded
+the 4 October day, and was opened and working on a PC and a tablet (Pat). No course
+has been saved on live since, and no race has used it. The old files are kept outside
+the repository in `release_2026-10-09`: `marks.php.live-2026-10-09`,
+`index.html.live-2026-10-09` and `marks-data-2026-10-09`, with the upload copies
+`marks.php` and `index.html`. To roll back, upload `marks.php.live-2026-10-09` as
+`/marks/marks.php` and `index.html.live-2026-10-09` as `/course/index.html`. A .7
+page clears a line end that names a later race's fix, and drops a race's picked
+chips, on its first save of that record, so those choices are lost after a page
+rollback (the course history keeps the replaced versions while the new `marks.php`
+stays). After the upload no device may edit courses on the .7 page: close every open
+`/course/` tab and reopen it with signal.
 
 ## Before any release
 

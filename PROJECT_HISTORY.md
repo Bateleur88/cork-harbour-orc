@@ -514,6 +514,12 @@ This section supersedes these points of section 18: step 6 ("derived from the re
 
 Not verified: none of this has been used in a live race. The laid-mark choice and automatic line ends are still not saved with the course.
 
+## 20. 9 October 2026: the RO page and marks.php uploaded
+
+On 9 October 2026 Pat uploaded `marks.php` (the version at `318d09b`) and then the RO page at PAGE_VERSION 2026-10-06.24 (commit `dd86687`, unchanged at `318d09b`) to the live paths by hand, after taking dated backups and re-running the tests on PHP 8.4.26 and 5.5.38. Each file was re-downloaded and its SHA-256 checked. The live page loaded the 4 October day, and was opened and working on a PC and a tablet (Pat). The page replaced PAGE_VERSION 2026-10-06.7 (`2aec398`), which had been uploaded as a renamed copy of `course_v8.html` by Pat's recollection; the live file's bytes are identical to `course_v8.html` at `2aec398`. `marks.php` replaced the version from `4a66559`. The live host runs PHP 5.5.38 on Apache, and a request for `/marks/data/`, and for a non-existent file under it, is refused with 403.
+
+Not verified: no race has used the new page. No course has been saved on the live server since the upload, so the course history has not yet been written there. The live course records for 4 October are still those the .7 page saved; the as-sailed repair of Race 1 exists only on the test copy.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
