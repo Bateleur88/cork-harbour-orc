@@ -524,6 +524,12 @@ Later on 9 October 2026 Pat redid the Race 1 repair of 4 October on the live pag
 
 Correction (9 October 2026): the live Race 1 repair uses the Start Pin R1 12:32, a Race 1 fix chosen by Pat, and the finish set to Start line, the same as the test copy. The paragraph above wrongly says the Start Pin and Finish Pin were taken from Race 2.
 
+## 21. 9 October 2026: course saves made visible (PAGE_VERSION 2026-10-06.25)
+
+Reading the page after the Race 1 repair showed that course saves were silent: a refused save was caught and never shown, loading a day could send saves without an edit, and a change of day deleted the old day's unsent edits without checking that they had been sent (`STATUS.md` A33, A34, A35). PAGE_VERSION 2026-10-06.25 (commit `0db8b42`, static guards `6ca1ef3`) shows every save result in Setup and in the Race view, says when a load leads to a save, and stops a change of day while anything is unsent, with "Change day anyway" only for records the server refused or failed, or records made for a third day. All 34 manual tests passed on the test copy. Later the same day Pat uploaded it as `/course/index.html` after taking dated backups; `marks.php` was not changed. It was opened on the PC and the tablet with no page script errors; no day was loaded for the check.
+
+Not verified: no race has used .25, and no course has been saved with it on the live server. Known limits are recorded in `STATUS.md` A34, A35 and A36.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues

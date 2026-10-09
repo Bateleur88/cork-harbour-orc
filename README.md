@@ -661,6 +661,22 @@ rollback (the course history keeps the replaced versions while the new `marks.ph
 stays). After the upload no device may edit courses on the .7 page: close every open
 `/course/` tab and reopen it with signal.
 
+**9 October 2026 upload of PAGE_VERSION 2026-10-06.25.** No race was within 12 hours.
+The three backups were taken first, in FileZilla in Binary mode, outside the repository
+in `release_2026-10-09_25`: `marks.php.live-2026-10-09_25` (the 318d09b version,
+`05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
+`index.html.live-2026-10-09_25` (the live .24,
+`3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b`) and
+`marks-data-2026-10-09_25`. Then only the page: `course_v8.html` at 0db8b42,
+PAGE_VERSION 2026-10-06.25 (295,269 bytes,
+`2775387969964d825a8e18f20d932370f778d26ae4d79395cc6a0161e9eb9009`), copied as
+`index.html` and uploaded as `/course/index.html` in Binary mode; re-downloaded, the
+hash matched. `marks.php` is unchanged (318d09b). The page was opened on the PC and
+the tablet (Pat) and showed PAGE_VERSION 2026-10-06.25 with no page script errors; no
+day was loaded and nothing edited for the check. To roll back, upload
+`index.html.live-2026-10-09_25` as `/course/index.html`; `marks.php` and `data/` stay
+as they are.
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
