@@ -1,0 +1,14 @@
+{
+  "format": "orc-constructed-course",
+  "version": 1,
+  "name": "INCOMPLETE - start line not recorded, first leg (Start - Windward) missing. Autumn League, Sun 27 Sept 2026, Race 1, Start 1",
+  "north": "magnetic",
+  "anchor": { "lat": 51.783433, "lng": -8.252583 },
+  "legs": [
+    { "name": "Windward - Gybe",     "distance": 0.78, "course": 144, "windDirection": 280 },
+    { "name": "Gybe - Leeward",      "distance": 0.73, "course": 48,  "windDirection": 280 },
+    { "name": "Leeward - Windward",  "distance": 1.01, "course": 278, "windDirection": 280 },
+    { "name": "Windward - Leeward",  "distance": 1.01, "course": 98,  "windDirection": 280 },
+    { "name": "Leeward - Finish",    "distance": 0.34, "course": 271, "windDirection": 280 }
+  ]
+}
