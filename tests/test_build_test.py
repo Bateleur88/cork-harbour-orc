@@ -28,6 +28,10 @@ altered in ways it must refuse and checks that it writes nothing:
                 resets the save state and names saveStatus and
                 dayAnyway; "Race key not loaded yet" has its save message; the comment above Check recorded marks says
                 picked chips are saved. Guards, not proof: no JavaScript is run
+  5  copy       static guards for "Copy for Sail Scoring" in the live page (2026-10-06.26; STATUS A37): #ccCopy once,
+                labelled "Copy for Sail Scoring"; the "Copy legs for SailScoring" button, its line format and its
+                copy code unchanged; ccDoc takes its legs from legPts with the leg table's figures and writes nothing;
+                buildLegs calls setCC beside each setSS. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -146,6 +150,30 @@ def t4_save_guards():
            "saved with the race's start groups); one element for both views" in page and 'chip bank (page' not in page)
 
 
+def t5_copy_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    report('5 copy: id="ccCopy" exactly once, labelled "Copy for Sail Scoring"',
+           page.count('id="ccCopy"') == 1 and 'id="ccCopy" style="grid-column:1/-1">Copy for Sail Scoring</button>' in page)
+    report('5 copy: the "Copy legs for SailScoring" button unchanged',
+           page.count('id="ssCopy"') == 1 and 'id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button>' in page)
+    report('5 copy: the leg table line format unchanged', "g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg),3)));" in code)
+    report('5 copy: the leg table copy code unchanged',
+           "await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';"
+           "setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);" in code and
+           "ssText=lines.join('\\n');" in fn_body(code, 'function setSS('))
+    cd = fn_body(code, 'function ccDoc(')
+    report('5 copy: ccDoc found', bool(cd))
+    report("5 copy: ccDoc takes the leg table's legs and figures",
+           'legPts(r,st)' in cd and 'g.parts.forEach' in cd and 'pt.nm.toFixed(2)' in cd and 'magOf(pt.brg)' in cd)
+    report('5 copy: ccDoc writes nothing',
+           not re.search(r'\b(commit|save|stamp|scheduleSave|render|course)\(', cd) and not re.search(r'\bS\.\w+(\[[^\]]*\])?\s*=[^=]', cd))
+    bl = fn_body(code, 'function buildLegs(')
+    report('5 copy: buildLegs calls setCC beside each setSS', bl.count('setSS(') == 2 and bl.count('setCC();') == 2)
+
+
 def t2_refusals(tmp):
     live = read(PAGE)
     out = os.path.join(tmp, 'out2')
@@ -216,6 +244,7 @@ def main():
         t2_refusals(tmp)
         t3_allowed(tmp)
         t4_save_guards()
+        t5_copy_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
