@@ -536,7 +536,9 @@ On 10 October 2026 two sample documents in Sail Scoring's ORC constructed course
 
 The same day the Course Plot gained "Copy for Sail Scoring" (page commit `3ece041`, static guards `c06c18b`), beside the "Copy legs for SailScoring" block, which is unchanged. It copies the selected race and start with the leg table's own figures, and names in the document any leg left out or measured from a stand-in. On the test copy with the 27 September day, Race 1 Start 1 matched the complete sample in every field apart from the anchor (about 0.6 m off, because the sample's positions were rounded) and the new series field. The page's own output was then accepted by Sail Scoring (six legs, 4.54 nm).
 
-Not verified: not uploaded to the live paths; no race has used it. The sample showed that Sail Scoring uses the document's name as the race title, so warnings in the name are a stopgap until a note field exists.
+Later on 10 October 2026 Pat uploaded it as `/course/index.html` after taking dated backups and re-running the tests; `marks.php` was not changed. Re-downloaded, the hash matched. It was opened on the PC and the tablet, showing PAGE_VERSION .26 and the new block, with no page script errors in the PC's console; no day was loaded for the check.
+
+Not verified: no race has used .26, and "Copy for Sail Scoring" has not yet been used on the live page. The sample showed that Sail Scoring uses the document's name as the race title, so warnings in the name are a stopgap until a note field exists.
 
 ------------------------------------------------------------------------
 

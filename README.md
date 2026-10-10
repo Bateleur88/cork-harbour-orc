@@ -707,6 +707,26 @@ day was loaded and nothing edited for the check. To roll back, upload
 `index.html.live-2026-10-09_25` as `/course/index.html`; `marks.php` and `data/` stay
 as they are.
 
+**10 October 2026 upload of PAGE_VERSION 2026-10-06.26.** No race was within 12 hours:
+the page is next used at about 10:00 on 11 October 2026 (first warning signal 11:00),
+and the upload was finished by 12:49 on 10 October. The three backups were taken
+first, in FileZilla in Binary mode, outside the repository in `release_2026-10-10_26`:
+`marks.php.live-2026-10-10` (the 318d09b version,
+`05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
+`index.html.live-2026-10-10` (the live .25,
+`2775387969964d825a8e18f20d932370f778d26ae4d79395cc6a0161e9eb9009`) and
+`marks-data-2026-10-10`. Beforehand `tests/test_marks.py` passed on PHP 8.4.26 and
+5.5.38, and `tests/test_build_test.py` passed. Then only the page: `course_v8.html` at
+c06c18b (page commit 3ece041), PAGE_VERSION 2026-10-06.26 (301,337 bytes,
+`1ac99aea21df9198e753530b95d5d995dd4a1883879eed03379c2827c6fd1d1f`), copied as
+`index.html` into the same folder and uploaded as `/course/index.html` in Binary
+mode; re-downloaded, the hash matched. `marks.php` is unchanged (318d09b). The page
+was opened on the PC and the tablet (Pat) and showed PAGE_VERSION 2026-10-06.26 with
+the "Course for Sail Scoring" block in section 6; the PC's console showed no page
+script errors. No day was loaded and nothing edited for the check. To roll back,
+upload `index.html.live-2026-10-10` as `/course/index.html`; `marks.php` and `data/`
+stay as they are, since .26 changes no stored data.
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
