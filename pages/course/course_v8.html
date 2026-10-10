@@ -358,6 +358,12 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <pre id="ssOut" class="setupOnly"></pre>
   <p class="cardnote setupOnly" id="ssTotal"></p>
   <div class="row"><button class="btn" id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button></div>
+  <!-- the selected race and start as one JSON document in Sail Scoring's ORC constructed course format (ccDoc); the
+       warnings beside the button are always shown, those in the document's name included -->
+  <h3 class="ssHead">Course for Sail Scoring</h3>
+  <div id="ccWarn" role="status" aria-live="polite"></div>
+  <div class="row"><button class="btn" id="ccCopy" style="grid-column:1/-1">Copy for Sail Scoring</button></div>
+  <div id="ccFallback" hidden><p class="cardnote flag">Could not copy to the clipboard: select the text below and copy it by hand.</p><textarea id="ccText" readonly aria-label="Course for Sail Scoring"></textarea></div>
 
   <div class="raceOnly" id="slotCB"></div>
   <div class="raceOnly" id="slotFix"></div>
@@ -376,7 +382,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.25';
+const PAGE_VERSION='2026-10-06.26';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -1422,7 +1428,7 @@ function buildLegs(){
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
   const twsv=S.tws===''?null:+S.tws;
   const host=$('legs');
-  if(pts.length<2||!cs.length){lastPlot=null;$('laidNote').innerHTML='';lastTotal=0;setSS([],'');host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
+  if(pts.length<2||!cs.length){lastPlot=null;$('laidNote').innerHTML='';lastTotal=0;setSS([],'');setCC();host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
   let rows='',total=0,lines=[],ss=[];
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i],b=pts[i+1];
@@ -1462,6 +1468,7 @@ function buildLegs(){
   const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
   setSS(ss,(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
     (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
+  setCC();
   const an=analysis(cs,twdv), warn=farLine.concat(checks(ents,cs));
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
@@ -1492,6 +1499,58 @@ function setSS(lines,note,courseTotal,legs){
   $('ssTotal').textContent=lines.length?'These lines add to '+own.toFixed(2)+' nm; the course total is '+courseTotal.toFixed(2)+
     ' nm. They can differ by a few hundredths because each leg is rounded separately; the course total is the accurate one.':'';
 }
+/* "Copy for Sail Scoring": race r, start st (the selected ones unless given) as one JSON document in Sail Scoring's ORC
+   constructed course format ("format": "orc-constructed-course", version 1), not the Course Record (STATUS.md A37).
+   READ ONLY, like legPts: it writes nothing. The legs are the SailScoring leg table's, from the same legPts parts: one
+   entry per physical leg, the distance to 0.01 nm and the bearing as magOf gives it. Name: series, race date (the day
+   loaded, as dayMoment takes it; the start time entered is the actual start, Irish clock time on that day), race, start;
+   the series also as "series", left out when not set. Anchor: where the first exported leg starts. A leg that cannot be
+   measured is left out, never made up (INCOMPLETE); a leg measured from a laid mark's planning position, or to the start
+   line used as the finish while its warning shows, is exported (STAND-IN): both kinds go at the front of the name, one
+   prefix per kind, INCOMPLETE first. The card's start or finish point standing in, a wind speed with no direction (left
+   out) and an unset series are shown beside the button only. No start time: nothing is exported.
+   Returns {block} (why there is nothing to copy) or {text, warns} (every line to show beside the button). */
+const CC_MON=['Jan','Feb','Mar','Apr','May','June','July','Aug','Sept','Oct','Nov','Dec'], CC_DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function ccDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';
+  const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));   // a calendar day: the weekday is the same in every time zone
+  return CC_DAY[d.getUTCDay()]+' '+(+m[3])+' '+CC_MON[+m[2]-1]+' '+m[1];}
+function ccDoc(r,st){r=r??S.race;st=st??S.start;
+  const k=ckey(r,st), L=legPts(r,st), cs=L.cs;
+  if(L.pts.length<2||!cs.length||!L.legs.length)return {block:'Build a course to copy it for Sail Scoring.'};
+  if(!S.startTimes[k])return {block:'Start time missing: set the start time for this start to copy it for Sail Scoring.',err:true};
+  const first=cs[0].name, last=cs[cs.length-1].name, inc=[], sti=[], side=[], cardSti=[];
+  if(!L.sPt)inc.push('start line not recorded, first leg (Start - '+first+') missing');
+  if(!L.fPt&&(L.ccfg||finishMode(r,st)!=='last'))inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');
+  if(L.sPt&&!L.sl)cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point'+
+    (cardEndMode('s',r,st)==='card'?' (Card mark chosen)':''));
+  const seen=new Set();
+  cs.forEach(m=>{if(m.laidSt&&!m.atFix&&!seen.has(m.laidSt.key)){seen.add(m.laidSt.key);sti.push(m.card+' not laid, legs to and from it measured from its planning position');}});
+  if(L.fsx&&L.fsx.kind==='startline'&&L.fsx.warn)sti.push('finish line not recorded, last leg ('+last+' - Finish) measured to the start line');
+  if(L.fPt&&!L.fl&&L.fsx&&L.fsx.kind==='cardpt')cardSti.push('finish line not recorded, last leg ('+last+' - '+L.fPt.name+') measured to the card\'s '+L.ccfg.f+' finish point'+
+    (cardEndMode('f',r,st)==='card'?' (Card mark chosen)':''));
+  const w=(S.winds||{})[k]||{}, num=v=>v!==''&&v!=null&&isFinite(+v)?+v:null, twd=num(w.twd), tws=num(w.tws);
+  if(tws!==null&&twd===null)side.push('Wind speed not copied: no wind direction entered.');
+  const ser=String(series.name||'').trim();
+  if(!ser)side.push('Series name not set: the copy has no series. Set it at the top of Setup.');
+  const pre=[inc.length&&'INCOMPLETE - '+inc.join('; '),sti.length&&'STAND-IN - '+sti.join('; ')].filter(Boolean);
+  const label=[ser,ccDate(S.pulledDay||$('day').value),'Race '+r,'Start '+(st+1)].filter(Boolean).join(', ');
+  const name=(pre.length?pre.join('. ')+'. ':'')+label;
+  const wind=(twd!==null?', "windDirection": '+twd:'')+(twd!==null&&tws!==null?', "windSpeed": '+tws:'');
+  const legs=[];
+  L.legs.forEach(g=>g.parts.forEach(pt=>legs.push('    { "name": '+JSON.stringify(pt.from+' - '+pt.to)+', "distance": '+pt.nm.toFixed(2)+
+    ', "course": '+magOf(pt.brg)+wind+' }')));
+  const a=L.pts[0];
+  const text='{\n  "format": "orc-constructed-course",\n  "version": 1,\n  "name": '+JSON.stringify(name)+',\n'+
+    (ser?'  "series": '+JSON.stringify(ser)+',\n':'')+'  "north": "magnetic",\n'+
+    '  "anchor": { "lat": '+a.lat.toFixed(6)+', "lng": '+a.lon.toFixed(6)+' },\n  "legs": [\n'+legs.join(',\n')+'\n  ]\n}\n';
+  return {text,warns:pre.map(t=>t+'.').concat(cardSti.length?['STAND-IN - '+cardSti.join('; ')+'.']:[],side)};}
+let ccText='';
+function setCC(){const d=ccDoc(), b=$('ccCopy');
+  ccText=d.block?'':d.text; b.disabled=!ccText;
+  $('ccWarn').innerHTML=d.block?'<p class="'+(d.err?'status err':'cardnote')+'">'+esc(d.block)+'</p>':
+    d.warns.map(t=>'<p class="cardnote flag">'+esc(t)+'</p>').join('');
+  // a copy that failed shows the text to copy by hand: keep it in step, and take it away when there is nothing to copy
+  if(!ccText)$('ccFallback').hidden=true; else if(!$('ccFallback').hidden)$('ccText').value=ccText;}
 function setOut(t){
   text=t;$('out').textContent=t||'Build a course to get the summary.';
   const wa=$('wa');
@@ -2485,6 +2544,9 @@ $('legs').addEventListener('click',e=>{const b=e.target.closest('.segToggle');if
 $('ssCopy').onclick=async()=>{if(!ssText)return;
   try{await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);}
   catch(e){const r=document.createRange();r.selectNodeContents($('ssOut'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
+$('ccCopy').onclick=async()=>{if(!ccText)return;
+  try{await navigator.clipboard.writeText(ccText);$('ccFallback').hidden=true;$('ccCopy').textContent='Copied';setTimeout(()=>$('ccCopy').textContent='Copy for Sail Scoring',1500);}
+  catch(e){$('ccText').value=ccText;$('ccFallback').hidden=false;$('ccText').focus();$('ccText').select();}};
 $('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 /* ---------- Clear everything ----------
    S=fresh() resets what is saved on this phone; clearPageState() resets what a fresh load starts with that is NOT in S
