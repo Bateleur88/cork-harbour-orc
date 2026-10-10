@@ -530,6 +530,14 @@ Reading the page after the Race 1 repair showed that course saves were silent: a
 
 Not verified: no race has used .25, and no course has been saved with it on the live server. Known limits are recorded in `STATUS.md` A34, A35 and A36.
 
+## 22. 10 October 2026: a constructed-course hand-off to Sail Scoring (PAGE_VERSION 2026-10-06.26)
+
+On 10 October 2026 two sample documents in Sail Scoring's ORC constructed course format, made from the 27 September Race 1 course, were pasted into Sail Scoring's Add start dialog and accepted (`docs/orc-constructed-course-tests/`). For each leg the format carries its distance, magnetic course and wind, and an anchor where the first leg starts: the known geographical anchor that section 11 lists among the richer hand-off contents. It is Sail Scoring's format, not the Course Record of section 14 (`STATUS.md` A37; C5 and ROADMAP Phase 7 apply to the Course Record only).
+
+The same day the Course Plot gained "Copy for Sail Scoring" (page commit `3ece041`, static guards `c06c18b`), beside the "Copy legs for SailScoring" block, which is unchanged. It copies the selected race and start with the leg table's own figures, and names in the document any leg left out or measured from a stand-in. On the test copy with the 27 September day, Race 1 Start 1 matched the complete sample in every field apart from the anchor (about 0.6 m off, because the sample's positions were rounded) and the new series field. The page's own output was then accepted by Sail Scoring (six legs, 4.54 nm).
+
+Not verified: not uploaded to the live paths; no race has used it. The sample showed that Sail Scoring uses the document's name as the race title, so warnings in the name are a stopgap until a note field exists.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues

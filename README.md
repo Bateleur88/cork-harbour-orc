@@ -397,8 +397,8 @@ footer "© 2026 Pat Tanner ORC Ireland".
   the dumb-viewer rule above. Harp, Ringabella, Dosco and EF4 are permanently
   moored, not laid: they always use the workbook position, and only their published
   coordinates are in question. The Marks sheet Type says which is which.
-- *Outputs* (section 6): a WhatsApp message of the course, legs and positions; and
-  the **leg table for SailScoring**, below.
+- *Outputs* (section 6): a WhatsApp message of the course, legs and positions; the
+  **leg table for SailScoring**; and **Copy for Sail Scoring**, both below.
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
   courses saved there come back with Get latest marks. The series name and race key
@@ -442,6 +442,33 @@ from the card's stand-in start and finish, and that the bearings given are magne
 (see the assumption above). Because
 each physical leg is rounded separately, the lines can add to a few hundredths
 more or less than the legs table's total.
+
+**Copy for Sail Scoring.** The selected race and start as one JSON document in Sail
+Scoring's ORC constructed course format (`"format": "orc-constructed-course"`,
+version 1), copied to the clipboard for Sail Scoring's Add start dialog. It is not
+the Course Record (`STATUS.md` C2, A37). The legs are those of the leg table above:
+one per physical leg, from the same function, the distance to 0.01 nm and the
+bearing in whole degrees magnetic (`"north": "magnetic"`), each named "From - To" as
+the legs table names its ends ("Start - Windward"). The name is the series, race
+date, race and start ("Autumn League, Sun 27 Sept 2026, Race 1, Start 1"); the
+series is also given as `"series"`, left out when the series name is not set. The
+anchor is where the first leg starts, usually the start line's midpoint, to 6
+decimals. Wind direction (°M, as entered) is on every leg, or on none when not
+entered; wind speed likewise, left out when no direction is entered. Marks, line
+ends, recorded times, fixes, recorders, devices and keys are not exported.
+
+- A start with no start time is not exported: the button is disabled and "Start
+  time missing" shows. The start time entered is taken as the actual start.
+- A leg that cannot be measured (no start line, or no finish line where the finish
+  needs one) is left out, never made up, and named at the front of the name:
+  "INCOMPLETE - start line not recorded, first leg (Start - Windward) missing. …".
+  A leg measured from a laid mark's planning position, or to the start line used as
+  the finish while its warning shows, is exported and named with "STAND-IN - …".
+  Every warning in the name also shows beside the button. The card's start or
+  finish point standing in, a wind speed with no direction and an unset series are
+  shown beside the button only.
+- Sail Scoring shows the name as the race title, so warnings in it are a stopgap
+  until it offers a note field (`docs/orc-constructed-course-tests/README.md`).
 
 ## Scripts
 
@@ -535,6 +562,9 @@ refused and leaves an earlier build untouched. It also checks that the page's
 storage key names (what follows `STORE+`) are exactly the known list, `pv-`,
 `race-key`, `course-plot-v1` and `course-series`, so a key
 added or dropped must update the test. Needs no PHP and no browser.
+Static guards also check that the "Copy for Sail Scoring" button appears once, that
+the leg table for SailScoring, its line format and its copy code are unchanged, and
+that the copy takes its legs from the leg table's function and changes nothing.
 
 ## Deploying the pages
 
