@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 9 October 2026. Baseline: Phase 1 audit of commit `f30882f` (`docs/audit/PHASE1_AUDIT.md`, which stays unchanged as the dated snapshot).
+Last updated: 10 October 2026. Baseline: Phase 1 audit of commit `f30882f` (`docs/audit/PHASE1_AUDIT.md`, which stays unchanged as the dated snapshot).
 
 This file tracks progress against the audit findings and the 4 October live-test problems. The audit is the baseline; this file is where progress is recorded.
 
@@ -114,6 +114,14 @@ Built after the Phase 1 audit, in place of the withdrawn decisions work (A1, C7)
 | A31 | Course chart drawn from the sketch's data; the Legs block in the left column from 1100 px | BUILT AND TESTED | Chart in PAGE_VERSION 2026-10-06.22, Legs position in .23; committed in `dd86687`. Tested on the shadow copy; not confirmed live. Uploaded to the live paths on 9 October 2026; not confirmed live (no race has used it). |
 | A32 | As-sailed overlay in Check recorded marks: the selected race and start over the recorded lines, unused recorded lines faded | BUILT AND TESTED | PAGE_VERSION 2026-10-06.24; committed in `dd86687`. Tested on the shadow copy; not confirmed live. Uploaded to the live paths on 9 October 2026; not confirmed live (no race has used it). |
 
+### 2.7 Hand-off to Sail Scoring (built after the audit)
+
+Built after the Phase 1 audit. It is not the Course Record (C2). The A references continue.
+
+| Ref | Item | State | Notes |
+|---|---|---|---|
+| A37 | "Copy for Sail Scoring": one race and start copied to the clipboard as a JSON document in Sail Scoring's ORC constructed course format | IN PROGRESS | Requested by Pat 10 October 2026. Sail Scoring's format (`"format": "orc-constructed-course"`, version 1, `"north": "magnetic"`), not the Course Record (C2); C5 and ROADMAP Phase 7 apply to the Course Record only (Pat, 10 October 2026). Test files in `docs/orc-constructed-course-tests/` (commit `225c40a`): sample data for Sail Scoring's handling, accepted by its Add start dialog on 10 October 2026; the page is compared with the complete file only, and the missing case is checked against the rules. On 10 October 2026 Sail Scoring also accepted the complete document with a different `windSpeed` on each leg and an extra top-level `"series"`, which caused no error. Legs, distances and magnetic bearings from the same function as the leg table (`legPts`), one entry per physical leg; the "Copy legs for SailScoring" button and its output unchanged. Name: series, race date (from the start time entered, taken as the actual start), race and start; the series also as a top-level `"series"`, left out when the series name is empty, with a warning beside the button. Wind direction and wind speed each on every leg or on none; a wind speed with no wind direction is left out, with a warning beside the button only. A leg that cannot be measured is left out and named in an INCOMPLETE warning; a leg measured from a laid mark's planning position, or to the start line used as the finish while its warning shows, is named in a STAND-IN warning; each of these goes at the front of the name and also shows beside the button. A leg measured from the card's start point or to its finish point gets a STAND-IN warning beside the button only, not in the name (card courses are often sailed without both start line ends recorded). A start with no start time is not exported. Open: the warnings belong in a separate note field once Sail Scoring offers one (test README). |
+
 ---
 
 ## 3. Coordination and design decisions
@@ -190,3 +198,4 @@ First live check: the next race day. Nothing in this file is CONFIRMED LIVE yet.
 - 2026-10-09: A33, A34 and A35 to BUILT AND TESTED: PAGE_VERSION 2026-10-06.25 (page 0db8b42, guards 6ca1ef3, test build b84315b9a1e8e84db53c95ee7186e9006da6b3ec09210aab4d2238896d4e5fc5); all 34 manual tests passed on /course-test/; not confirmed live. A34 and A35: one known limit each, decided not to fix in .25. A36 added (OPEN). A29: the comment at course_v8.html:260 corrected.
 - 2026-10-09: Correction: the live Race 1 repair of 4 October uses the Start Pin R1 12:32 (a Race 1 fix, chosen by Pat) and the finish set to Start line, the same as the test copy, not a Start Pin and Finish Pin from Race 2 as the two 9 October repair lines above and the live-test log say. A30's note corrected: no line end from another race has been used on the live server yet. A34's note corrected: a .7 device clears no Race 1 line end on loading 4 October; the picked chip is the remaining risk. Live-test log: correction row added.
 - 2026-10-09: PAGE_VERSION 2026-10-06.25 (0db8b42) uploaded to /course/index.html by Pat (FileZilla, Binary mode; 295,269 bytes, SHA-256 2775387969964d825a8e18f20d932370f778d26ae4d79395cc6a0161e9eb9009; re-downloaded, hash matched), replacing .24 (3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b); marks.php unchanged (318d09b). No race within 12 hours; the three backups taken first, outside the repository (release_2026-10-09_25). Opened on the PC and the tablet: .25, no page script errors, no day loaded. A33, A34, A35: uploaded, not confirmed live; states unchanged. Live-test log: the upload (not a race).
+- 2026-10-10: A37 added (IN PROGRESS): "Copy for Sail Scoring", one race and start as Sail Scoring's ORC constructed course JSON, with the series field and INCOMPLETE and STAND-IN warnings; section 2.7 added. ROADMAP Phase 7: note that it and C5 apply to the Course Record only.

@@ -1,6 +1,6 @@
 # ROADMAP
 
-Status: PUBLIC DRAFT, 7 October 2026, revised 8 October 2026. Redacted from a private working draft: private correspondence is not summarised here. For discussion only; nothing here is agreed with anyone outside this project. The Phase 1 audit is complete (`docs/audit/PHASE1_AUDIT.md`). Nothing is a commitment until Decision 1 has been settled with the Sail Scoring maintainer.
+Status: PUBLIC DRAFT, 7 October 2026, revised 8 October 2026; Phase 7 note added 10 October 2026. Redacted from a private working draft: private correspondence is not summarised here. For discussion only; nothing here is agreed with anyone outside this project. The Phase 1 audit is complete (`docs/audit/PHASE1_AUDIT.md`). Nothing is a commitment until Decision 1 has been settled with the Sail Scoring maintainer.
 
 Sources for this revision, all read on 7 October 2026:
 
@@ -415,6 +415,8 @@ Use historical or live DBSC races without affecting race management. Compare the
 
 ### Phase 7: Course Record interoperability (in parallel)
 Once the format is agreed in `course-cards`: adapter/exporter from existing internal data to the Course Record. Start with paste/upload, not an API. Do not emit records from the RO page until the format, the bearing convention and the line-end convention are agreed with Mark.
+
+Note (10 October 2026): this phase, and `STATUS.md` C5, concern the Course Record only. The Course Plot's "Copy for Sail Scoring" button (`STATUS.md` A37) emits Sail Scoring's ORC constructed course format, which is a different format and not the Course Record, so this rule does not apply to it.
 
 ### Phase 8: Controlled DBSC operational trial
 Only after shadow testing: one race area, one operation, limited users, existing DBSC process remains authoritative.
