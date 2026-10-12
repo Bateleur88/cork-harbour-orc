@@ -742,6 +742,27 @@ script errors. No day was loaded and nothing edited for the check. To roll back,
 upload `index.html.live-2026-10-10` as `/course/index.html`; `marks.php` and `data/`
 stay as they are, since .26 changes no stored data.
 
+**12 October 2026 upload of PAGE_VERSION 2026-10-06.29.** No race was within 12 hours
+(the next race is on 18 October 2026). Beforehand the RO devices showed no unsent fixes
+on the live .26 page. The three backups were taken first, in FileZilla in Binary mode,
+outside the repository in `release_2026-10-12_29`: `marks.php.live-2026-10-12` (the
+318d09b version, `05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
+`index.html.live-2026-10-12` (the live .26,
+`1ac99aea21df9198e753530b95d5d995dd4a1883879eed03379c2827c6fd1d1f`) and
+`marks-data-2026-10-12`. Beforehand `tests/test_marks.py` passed on PHP 8.4.26 and
+5.5.38, and `tests/test_build_test.py` passed. Then only the page: `course_v8.html` at
+0cb5563, PAGE_VERSION 2026-10-06.29 (322,727 bytes,
+`8a58a11b28d2b9aa65e991d711a19d2f256121253dd3769bd525c5129bc14a38`), as
+`pages/course/index.html`, uploaded as `/course/index.html` in Binary mode;
+re-downloaded, the hash matched. `marks.php` is unchanged (318d09b) and was not
+re-uploaded. Every `/course/` tab was closed and reopened on the PC and the tablet (Pat):
+view-source showed PAGE_VERSION 2026-10-06.29 on both, and the PC's console showed no
+page script errors. No day was loaded and nothing was typed, pasted or recorded on the
+live page for the check. To roll back, upload `index.html.live-2026-10-12` as
+`/course/index.html`; `marks.php` and `data/` stay as they are, since .29 changes no
+stored format (course rows saved from pasted positions are hidden on .26, as before,
+and fixes in a device's "Not sent" list stay on that device).
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
