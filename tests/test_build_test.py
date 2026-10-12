@@ -56,6 +56,13 @@ altered in ways it must refuse and checks that it writes nothing:
                 the Fixed marks fold is there, closed; the WhatsApp text has no analysis, wind, route notes or labels;
                 the approved wording is present; far positions are named under Check recorded marks and drawn "off the
                 plot". Guards, not proof: no JavaScript is run
+  8  .31        static guards for the five fixes after Pat's test of 2026-10-06.30-test (STATUS A40): Course Card marks
+                are not carried into later races' chips; every race drawn gets its All races switch (Course Card marks
+                and the selected race's course too); the paste box and the typing box refuse a card mark's own name
+                (laid marks excepted, no other names) and store nothing, the typing box before it asks for a position;
+                a routing waypoint with nothing on one side is warned on its row, belongs to no leg and makes Copy for
+                Sail Scoring INCOMPLETE (ccDoc changes by that one line only); the laid-mark notice's earlier total
+                takes a leg through RO-chosen waypoints with roLeg. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -249,7 +256,8 @@ def t6_a38_guards():
       and "noS&&noF?'start line and finish line':noS?'start line':'finish line'" in cd and "'mark missing: '" in cd)
     g('Copy for Sail Scoring: one count in the name, each leg once, the reasons joined by "; "',
       "n=ml.length+(noS?1:0)+(noF?1:0)" in cd and "incS.push(nOf(n,'leg','legs')+' not measured ('+why.join('; ')+')')" in cd
-      and cd.count('incS.push(') == 1)
+      # one count for legs not measured; .31 adds one more, for a routing waypoint with nothing on one side (orphanText)
+      and sum(1 for x in cd.split(chr(10)) if 'incS.push(' in x and 'orphanText(L)' not in x) == 1)
     g('Copy for Sail Scoring: the full warnings stay beside the button', 'warns:pre.map(' in cd and "'INCOMPLETE - '+inc.join('; ')" in cd)
     g('the check count says fixes and marks', "' fixes and marks')+' to check'" in rf)
     # 2026-10-06.28: three fixes after Pat's test of 2026-10-06.27-test
@@ -381,8 +389,12 @@ def t7_a40_guards():
     g('no Position Source, Source URL or Verification / Use text in the page',
       not any(x in low for x in ('eoceanic', 'position source', 'source url', 'verification / use', 'reference mark only')))
     for head, want in CODE_29.items():
-        got = hashlib.sha256(fn_body(code, head).encode()).hexdigest()
-        g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29', got == want)
+        body = fn_body(code, head)
+        if head == 'function ccDoc(':   # .31 adds one line, the routing waypoint INCOMPLETE (orphanText)
+            body = chr(10).join(x for x in body.split(chr(10)) if 'orphanText(L)' not in x)
+        got = hashlib.sha256(body.encode()).hexdigest()
+        g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
+          head == 'function ccDoc(' else ''), got == want)
     g('card marks are added only by tap, import or a saved row (four callers)', code.count('pushCardMark(') == 5,
       str(code.count('pushCardMark(')))
     g('the page never reverses a route itself', not re.search(r"split\('\|'\)\.reverse\(\)|segs\.slice\(\)\.reverse", code))
@@ -401,6 +413,37 @@ def t7_a40_guards():
       and "$('fxFar').textContent=" in code)
 
 
+def t8_fixes31_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('8 .31: ' + name, ok)
+    g('1 Course Card marks are not carried into later races', 'S.marks.filter(m=>m.race<S.race&&!isCourseCard(m))' in fn_body(code, 'function bank('))
+    rf = fn_body(code, 'function renderFix(')
+    g('2 every race drawn gets its switch', 'all.map(m=>m.race).concat(cardsIn.map(m=>m.race),lastPlot&&lastPlot.pts.length>1?[r]:[])' in rf
+      and rf.find('const cardsIn=') < rf.find('const days='))
+    g('3 cardNameOf: own names only, laid marks excepted, compared as norm',
+      "function cardNameOf(nm){const k=norm(nm);return k?Object.keys(CARD.marks).find(x=>!CARD.marks[x].laid&&norm(x)===k)||'':'';}" in code)
+    g('3 the refusal message', "c+' is on the course card: tap it under Fixed marks. If the buoy has moved, give it a different name, such as '+c+' moved.'" in code)
+    rp = fn_body(code, 'function readPaste(')
+    g('3 every pasted line goes through the refusal', 'const add=m=>{const c=cardNameOf(m.name);if(c){' in rp and rp.count('add({') == 3
+      and 'push(m)' not in rp.replace('m.pasted=true;push(m);added.push(m);', ''))
+    am = code[code.find("$('addManual').onclick"):]
+    g('3 the typing box refuses before it asks for a position and stores nothing',
+      -1 < am.find('cardNameOf(name.trim())') < am.find("prompt('Position") and
+      am.find('cardNameOf(name.trim())') < am.find('S.outbox.push'))
+    lp = fn_body(code, 'function legPts(')
+    g('4 legPts keeps a routing waypoint with nothing on one side out of every leg',
+      'orphan.push({i:x.i,lead:true})' in lp and 'orphan.push({i:x.i,lead:false})' in lp and ',orphan};' in lp)
+    g('4 its row says so', "routing waypoint must sit between two marks: move it with '+(orph.lead?'↓':'↑')" in code)
+    g('4 Copy for Sail Scoring says INCOMPLETE', 'if(orphanText(L)){inc.push(orphanText(L));incS.push(' in fn_body(code, 'function ccDoc('))
+    g('4 the leg table says so', 'orphanText(L)?[orphanText(L)+' in fn_body(code, 'function buildLegs('))
+    ln = fn_body(code, 'function laidNotice(')
+    g('5 the laid-mark notice counts RO-chosen waypoints', 'function laidNotice(pts,total,legs){' in code and
+      'g&&g.ro?roLeg(oldPts[i],g.route,oldPts[i+1])' in ln and 'laidNotice(pts,total,L.legs);' in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -411,6 +454,7 @@ def main():
         t5_copy_guards()
         t6_a38_guards()
         t7_a40_guards()
+        t8_fixes31_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

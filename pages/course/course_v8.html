@@ -395,7 +395,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.30';
+const PAGE_VERSION='2026-10-06.31';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -490,7 +490,9 @@ function readPaste(txt){
   let race=1, date=S.date; const added=[];   // a pasted header never sets the series: it is set on this page only
   const hdr=txt.match(/^\s*\*(.+?)\s*[–-]\s*(.+?)\*/m);
   if(hdr)date=hdr[2].trim();
-  const add=m=>{m.pasted=true;push(m);added.push(m);};
+  // a line naming a card mark is refused and stores nothing (cardNameOf); the other lines are read as before
+  const refused=[]; added.refused=refused;
+  const add=m=>{const c=cardNameOf(m.name);if(c){if(!refused.includes(c))refused.push(c);return;}m.pasted=true;push(m);added.push(m);};
   txt.split(/\r?\n/).forEach(line=>{
     line=line.trim(); if(!line||/^```/.test(line))return;
     // a row copied from the card (the workbook's Marks sheet): tab-separated columns, "E4 / North Cardinal", the type,
@@ -534,7 +536,9 @@ function bank(){
   const here=S.marks.filter(m=>m.race===S.race);
   const names=new Set(here.map(m=>m.name.toLowerCase()));
   const carried={};
-  S.marks.filter(m=>m.race<S.race).forEach(m=>{const k=m.name.toLowerCase();if(names.has(k))return;
+  // a Course Card mark is not carried: in a later race the RO taps it from the Fixed marks list (Pat, 12 October 2026);
+  // recorded fixes, typed positions, laid marks and routing waypoints are carried as before
+  S.marks.filter(m=>m.race<S.race&&!isCourseCard(m)).forEach(m=>{const k=m.name.toLowerCase();if(names.has(k))return;
     const c=carried[k]; if(!c||m.race>c.race||(m.race===c.race&&m.fix>c.fix))carried[k]=m;});
   return Object.values(carried).sort((a,b)=>a.race-b.race).concat(here);
 }
@@ -662,6 +666,12 @@ function isLaidCard(m){return !!(m&&m.card&&CARD.marks[m.card]&&CARD.marks[m.car
    and shallows; a laid mark (above); and a Course Card mark, every other mark with a position in the Marks sheet (the
    fixed marks and Grassy Mid), at its card position. The card's own start and finish points standing in for a line
    (virtual) are none of these. A card mark is never a recorded fix. */
+/* A name that is a card mark's own name, capitals, spaces and punctuation ignored (norm, as for laid marks): a fixed mark,
+   Grassy Mid or a routing waypoint, never a laid mark. No other names: aliases are for the RO's course message reader
+   (STATUS A43). The paste box and the typing box refuse such a name and store nothing: a card mark is tapped under Fixed
+   marks (Pat, 12 October 2026). Returns the card's own name, or ''. */
+function cardNameOf(nm){const k=norm(nm);return k?Object.keys(CARD.marks).find(x=>!CARD.marks[x].laid&&norm(x)===k)||'':'';}
+function cardRefusal(c){return c+' is on the course card: tap it under Fixed marks. If the buoy has moved, give it a different name, such as '+c+' moved.';}
 function isRwCard(m){return !!(m&&m.card&&!m.virtual&&CARD.marks[m.card]&&CARD.marks[m.card].rw);}
 function isCourseCard(m){const c=m&&m.card&&!m.virtual&&CARD.marks[m.card];return !!(c&&!c.laid&&!c.rw);}
 function cardKind(m){return isRwCard(m)?'routing waypoint':isLaidCard(m)&&!m.virtual?'laid mark':isCourseCard(m)?'Course Card':'';}
@@ -751,12 +761,6 @@ function legGeom(a,b){
         r={nm,m:nm*1852,brg};}
       fixNote=moved.filter((t,k,arr)=>arr.indexOf(t)===k).join('; ');
     }
-  }else if(isRwCard(a)||isRwCard(b)){
-    // a leg ending at a routing waypoint the RO placed (one at the end of a course, with no finish after it): as roLeg, the
-    // workbook's figures and no label if it is exactly a chord the workbook tested, otherwise straight and labelled
-    const t=!a.atFix&&!b.atFix?testedChords()[a.card+'|'+b.card]:null;
-    if(t)r={nm:t.nm,m:t.nm*1852,brg:t.brg};
-    fixNote=t?'':'not depth-checked';
   }else{
     // no route in the snapshot: measured straight, never refused; touching a Course Card mark, labelled (STATUS A40)
     if((isCourseCard(a)||isCourseCard(b))&&!moved.some(t=>/not depth-checked/.test(t)))moved.push('not depth-checked');
@@ -785,7 +789,8 @@ function roLeg(a,vias,b){
     fixNote:untested?'not depth-checked':'',parts,route:vias,ro:true};
 }
 let laidPending={}, lastTotal=0, lastPullAt=0;
-function laidNotice(pts,total){
+// legs (legPts): so the earlier total takes a leg through RO-chosen routing waypoints as every other figure does (roLeg)
+function laidNotice(pts,total,legs){
   const host=$('laidNote'); laidPending={};
   const seen=new Set(), changed={}, sugg=[]; let dirty=false;
   pts.forEach(p=>{const st=p.laidSt; if(!st||seen.has(st.key))return; seen.add(st.key);
@@ -797,7 +802,8 @@ function laidNotice(pts,total){
   const bits=[], keys=Object.keys(changed);
   if(keys.length){
     const oldPts=pts.map(p=>{const c=p.laidSt&&changed[p.laidSt.key];return c?Object.assign({},p,{lat:c.ack.lat,lon:c.ack.lon,atFix:c.ack.src!=='card'}):p;});
-    let old=0; for(let i=0;i<oldPts.length-1;i++)if(!oldPts[i].missing&&!oldPts[i+1].missing)old+=legGeom(oldPts[i],oldPts[i+1]).r.nm;
+    let old=0; for(let i=0;i<oldPts.length-1;i++)if(!oldPts[i].missing&&!oldPts[i+1].missing){const g=(legs||[])[i];
+      old+=(g&&g.ro?roLeg(oldPts[i],g.route,oldPts[i+1]):legGeom(oldPts[i],oldPts[i+1])).r.nm;}
     keys.forEach(k=>{const c=changed[k];
       bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was '+esc(c.ack.label)+'. It has moved '+Math.round(rhumb(c.ack,c.cur).m)+' m, so the legs to and from it have changed.</p>');});
     bits.push('<p class="note flag">Course '+old.toFixed(2)+' → '+total.toFixed(2)+' nm. <button data-a="ack">OK</button></p>');
@@ -1130,6 +1136,7 @@ function render(){
       :'<div class="meta warnTxt">Record the missing end to get the line and bias.</div>')+
     '</div><div></div></li>';
   if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
+  const Lr=legPts();   // read only: which routing waypoints have nothing on one side (orphan)
   cs.forEach((e,i)=>{const m=markById(e.id);
     const li=document.createElement('li');
     // a row whose mark cannot be found is shown, never hidden (STATUS A38); the legs either side of it are not measured
@@ -1154,8 +1161,9 @@ function render(){
         (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
     const far=farNm(m), other=isPasted(m)?'pasted position · this device only':isTypedPos(m)?'typed position':'';
     // a routing waypoint is not rounded: no side; ↓ as well as ↑, to move it to its place in the course (STATUS A40)
-    const kind=cardKind(m), rw=isRwCard(m);
+    const kind=cardKind(m), rw=isRwCard(m), orph=(Lr.orphan||[]).find(o=>o.i===i);
     li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+fixSrc(m)+'</b>'+(kind?' · '+kind:'')+flag+laid+
+      (orph?'<div class="meta warnTxt">⚠ routing waypoint must sit between two marks: move it with '+(orph.lead?'↓':'↑')+'</div>':'')+
       (other?'<div class="meta">'+other+'</div>':'')+(far?'<div class="meta warnTxt">⚠ '+esc(farText(far))+'</div>':'')+'</div>'+
       '<div class="acts">'+(rw?'':'<button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>')+
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button>'+
@@ -1553,18 +1561,24 @@ function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
       (fPt&&fPt.moveNote?'s from it and to it follow the card\'s routes':' from it follows the card\'s route')+
       ' from '+ccfg.s+', which assumes the line is close to it: check on the chart.');}
   const cardEnds=!sl&&!!sPt;
-  // the points legs join, in order; ro[i]: the routing waypoints the RO placed between pts[i] and pts[i+1]. One before any
-  // point, or after the last with no finish point, has no leg to belong to, and is a point of its own
-  const all=(sPt?[sPt]:[]).concat(rows.map((e,i)=>rm[i]||{id:e.id,name:'mark missing',missing:true}), fPt?[fPt]:[]);
-  const pts=[], ro=[];
-  all.forEach(p=>{if(isRwCard(p)&&pts.length)ro[pts.length-1].push(p);else{pts.push(p);ro.push([]);}});
-  if(pts.length){const tail=ro[pts.length-1];ro[pts.length-1]=[];tail.forEach(p=>{pts.push(p);ro.push([]);});}
+  // the points legs join, in order; ro[i]: the routing waypoints the RO placed between pts[i] and pts[i+1]. One with nothing
+  // on one side (before the first point with no start line, or after the last with no finish point) belongs to no leg: it
+  // is in orphan ({i: its row, lead: true before the first point}), no leg is measured to or from it, and the row, the leg
+  // table and Copy for Sail Scoring say so (Pat, 12 October 2026)
+  const items=(sPt?[{p:sPt}]:[]).concat(rows.map((e,i)=>({p:rm[i]||{id:e.id,name:'mark missing',missing:true},i})), fPt?[{p:fPt}]:[]);
+  const pts=[], ro=[], orphan=[];
+  items.forEach(x=>{if(isRwCard(x.p)){if(pts.length)ro[pts.length-1].push(x);else orphan.push({i:x.i,lead:true});}else{pts.push(x.p);ro.push([]);}});
+  if(pts.length){ro[pts.length-1].forEach(x=>orphan.push({i:x.i,lead:false}));ro[pts.length-1]=[];}
+  const rop=ro.map(a=>a.map(x=>x.p));
   const seq=pts.filter(p=>p!==sPt&&p!==fPt);
   const legs=[];let total=0;
   if(pts.length>=2&&cs.length)for(let i=0;i<pts.length-1;i++){
     if(pts[i].missing||pts[i+1].missing){legs.push({missing:true,r:{nm:0,m:0,brg:0},via:'',viaText:'',fixNote:'',parts:[],route:[]});continue;}
-    const g=ro[i]&&ro[i].length?roLeg(pts[i],ro[i],pts[i+1]):legGeom(pts[i],pts[i+1]);legs.push(g);total+=g.r.nm;}
-  return {r,st,ents,cs,rows,miss,seq,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts,legs,total};}
+    const g=rop[i]&&rop[i].length?roLeg(pts[i],rop[i],pts[i+1]):legGeom(pts[i],pts[i+1]);legs.push(g);total+=g.r.nm;}
+  return {r,st,ents,cs,rows,miss,seq,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts,legs,total,orphan};}
+// the routing waypoints of a course with nothing on one side (legPts orphan), by name, each once
+function orphanNames(L){return [...new Set((L.orphan||[]).map(o=>{const m=markById(L.rows[o.i].id);return m?m.name:'';}).filter(Boolean))];}
+function orphanText(L){const n=orphanNames(L);return n.length?'routing waypoint '+n.join(', ')+' not between two marks: no leg is measured to or from it':'';}
 // "N legs not measured: a mark is missing" for the leg table, WhatsApp text and leg table note; '' when none is missing
 function missLegsText(L){const n=L.legs.filter(g=>g.missing).length;
   return n?nOf(n,'leg','legs')+' not measured: '+nOf(L.miss.length,'mark is','marks are')+' missing':'';}
@@ -1614,7 +1628,7 @@ function buildLegs(){
     // waypoints reads mark to mark, with its whole distance
     lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+' · '+pad(brgM,3)+'°M ('+pad(brgT,3)+'°T) · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
   }
-  laidNotice(pts,total); lastTotal=total;
+  laidNotice(pts,total,L.legs); lastTotal=total;
   const from=sl?'from the midpoint of the recorded start line (committee boat and pin)':
     sPt&&cardEndMode('s')==='card'?'from the card\'s '+ccfg.s+' start (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
@@ -1631,7 +1645,7 @@ function buildLegs(){
   setSS(ss,(ml?'INCOMPLETE: '+ml+', so they are not in these lines. ':'')+(ccLine?ccLine+' ':'')+(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
     (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   setCC();
-  const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(farLine,checks(ents,cs));
+  const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(orphanText(L)?[orphanText(L)+'. Move it between two marks.']:[],farLine,checks(ents,cs));
   host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
@@ -1706,6 +1720,7 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   {const n=ml.length+(noS?1:0)+(noF?1:0), why=[L.miss.length&&'mark missing: '+[...new Set(L.miss.map(x=>missName(x.id)))].join(', '),
      (noS||noF)&&(noS&&noF?'start line and finish line':noS?'start line':'finish line')+' not recorded'].filter(Boolean);
    if(n)incS.push(nOf(n,'leg','legs')+' not measured ('+why.join('; ')+')');}
+  if(orphanText(L)){inc.push(orphanText(L));incS.push('routing waypoint '+orphanNames(L).join(', ')+' not between two marks');}   // L.orphan
   if(L.sPt&&!L.sl)cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point'+
     (cardEndMode('s',r,st)==='card'?' (Card mark chosen)':''));
   const seen=new Set();
@@ -2036,7 +2051,9 @@ function renderFix(){
   // candidates (fixes recorded after the start) are counted apart: they are not faults and no default line uses them.
   // For a fix the box calls a candidate (selected start; with All races, every race), the "after the Finish Pin" check
   // is not shown or counted: the neutral candidate note says it. Its other flags stay as they are.
-  const days=[...new Set(all.map(m=>m.race))].sort((a,b)=>a-b), scope=fxAll?{races:days}:{race:r,start:S.start};
+  // every race with anything drawn has its switch: its fixes, the Course Card marks in its courses, and the selected race's
+  // as-sailed course (Pat, 12 October 2026)
+  const days=[...new Set(all.map(m=>m.race).concat(cardsIn.map(m=>m.race),lastPlot&&lastPlot.pts.length>1?[r]:[]))].sort((a,b)=>a-b), scope=fxAll?{races:days}:{race:r,start:S.start};
   const cands=fxResolve(all,scope).candidates, nc=cands.length;
   cands.forEach(c=>{const f=(fl.get(c.ref)||[]).filter(x=>x.id!=='afterFinish');if(f.length)fl.set(c.ref,f);else fl.delete(c.ref);});
   const rflags=rf.filter(f=>fxAll||f.race===r), flagged=shown.filter(m=>fl.has(refFor(m)));
@@ -2800,15 +2817,16 @@ $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;st
 $('read').onclick=()=>{
   const t=$('paste').value;
   if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
-  const got=readPaste(t), n=got.length;
+  const got=readPaste(t), n=got.length, refused=got.refused||[];
   // "4 pasted positions read for Race 1: E4, No.10, No.3, No.12. They are kept on this device only: …" (STATUS A38)
   const byRace=[...new Set(got.map(m=>m.race))].map(r=>{const l=got.filter(m=>m.race===r);
     return nOf(l.length,'pasted position','pasted positions')+' read for Race '+r+': '+l.map(m=>m.name).join(', ');});
   const far=got.map(m=>({m,d:farNm(m)})).filter(x=>x.d).map(x=>' ⚠ '+x.m.name+' (Race '+x.m.race+') is '+farText(x.d)+'.');
-  $('readStatus').textContent=n?byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join(''):
-    'No positions found. Check the message was pasted whole.';
-  $('readStatus').className='status '+(n&&!far.length?'ok':'err');
-  if(n){$('paste').value='';const r=races();if(!r.includes(S.race))S.race=r[0];}
+  $('readStatus').textContent=(n?byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join(''):
+    refused.length?'':'No positions found. Check the message was pasted whole.')+(refused.length?(n?' ':'')+refused.map(cardRefusal).join(' '):'');
+  $('readStatus').className='status '+(n&&!far.length&&!refused.length?'ok':'err');
+  // the message stays in the box while a line was refused, so it can be put right
+  if(n){if(!refused.length)$('paste').value='';const r=races();if(!r.includes(S.race))S.race=r[0];}
   commit();
 };
 /* Fixed marks (STATUS A40): one button per mark with a position in the Marks sheet, under its Type (the snapshot's group),
@@ -2836,6 +2854,7 @@ $('viewChart').onclick=()=>setView(true);
 if(S.chart)setView(true);
 $('addManual').onclick=()=>{
   const name=prompt('Mark name');if(!name)return;
+  {const c=cardNameOf(name.trim());if(c){$('readStatus').textContent=cardRefusal(c);$('readStatus').className='status err';return;}}   // nothing stored
   const pos=prompt('Position — e.g. 51 49.123 N 008 17.456 W, or 51.818717 -8.290933');if(!pos)return;
   const p=parsePos(pos);
   if(!p){$('readStatus').textContent='Could not read that position.';$('readStatus').className='status err';return;}
