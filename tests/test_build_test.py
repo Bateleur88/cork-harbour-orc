@@ -234,7 +234,10 @@ def t6_a38_guards():
     g('approved wording: Check recorded marks', "'pasted position, on this device only · '" in rf and "'pasted position'" in rf)
     g('Copy for Sail Scoring: the race name first, then the warnings in short form',
       "const name=label+(preS.length?' - '+preS.join('. '):'');" in cd and "'INCOMPLETE - '+incS.join('; ')" in cd
-      and "'2 legs not measured (start line and finish line not recorded)'" in cd and "' not measured (mark missing: '" in cd)
+      and "noS&&noF?'start line and finish line':noS?'start line':'finish line'" in cd and "'mark missing: '" in cd)
+    g('Copy for Sail Scoring: one count in the name, each leg once, the reasons joined by "; "',
+      "n=ml.length+(noS?1:0)+(noF?1:0)" in cd and "incS.push(nOf(n,'leg','legs')+' not measured ('+why.join('; ')+')')" in cd
+      and cd.count('incS.push(') == 1)
     g('Copy for Sail Scoring: the full warnings stay beside the button', 'warns:pre.map(' in cd and "'INCOMPLETE - '+inc.join('; ')" in cd)
     g('the check count says fixes and marks', "' fixes and marks')+' to check'" in rf)
     g('the RIB page is not touched by this step', 'notSent' not in read(os.path.join(ROOT, 'pages', 'record', 'record.html')))

@@ -1594,17 +1594,21 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   if(L.pts.length<2||!cs.length||!L.legs.length)return {block:'Build a course to copy it for Sail Scoring.'};
   if(!S.startTimes[k])return {block:'Start time missing: set the start time for this start to copy it for Sail Scoring.',err:true};
   // the first and last rows of the course as sailed, a missing mark's placeholder included (seq)
-  // inc: each INCOMPLETE warning in full, for beside the button; incS: the same in short form, for the name
+  // inc: each INCOMPLETE warning in full, for beside the button. incS: the short form for the name, one count of the
+  // legs not measured, each leg once, and the reasons, e.g. "3 legs not measured (mark missing: No.12; start line not
+  // recorded)". The legs to and from a missing mark are those legPts marks missing; a leg from or to a line not
+  // recorded is never among them (with no line there is no such leg in L.legs), so the start leg next to a missing
+  // first mark is counted once, for the start line, as is the finish leg next to a missing last mark
   const first=L.seq[0].name, last=L.seq[L.seq.length-1].name, inc=[], incS=[], sti=[], side=[], cardSti=[];
+  const ml=L.legs.map((g,i)=>g.missing?'('+L.pts[i].name+' - '+L.pts[i+1].name+')':null).filter(Boolean);
   // a leg to or from a missing mark is not measured: it is left out and named, as a leg with no line is
-  {const ml=L.legs.map((g,i)=>g.missing?'('+L.pts[i].name+' - '+L.pts[i+1].name+')':null).filter(Boolean);
-   if(ml.length){inc.push(nOf(L.miss.length,'mark','marks')+' missing, '+(ml.length===1?'leg ':'legs ')+ml.join(', ')+' not measured');
-     incS.push(nOf(ml.length,'leg','legs')+' not measured (mark missing: '+[...new Set(L.miss.map(x=>missName(x.id)))].join(', ')+')');}}
+  if(ml.length)inc.push(nOf(L.miss.length,'mark','marks')+' missing, '+(ml.length===1?'leg ':'legs ')+ml.join(', ')+' not measured');
   const noS=!L.sPt, noF=!L.fPt&&(L.ccfg||finishMode(r,st)!=='last');
   if(noS)inc.push('start line not recorded, first leg (Start - '+first+') missing');
   if(noF)inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');
-  if(noS||noF)incS.push(noS&&noF?'2 legs not measured (start line and finish line not recorded)':
-    '1 leg not measured ('+(noS?'start':'finish')+' line not recorded)');
+  {const n=ml.length+(noS?1:0)+(noF?1:0), why=[L.miss.length&&'mark missing: '+[...new Set(L.miss.map(x=>missName(x.id)))].join(', '),
+     (noS||noF)&&(noS&&noF?'start line and finish line':noS?'start line':'finish line')+' not recorded'].filter(Boolean);
+   if(n)incS.push(nOf(n,'leg','legs')+' not measured ('+why.join('; ')+')');}
   if(L.sPt&&!L.sl)cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point'+
     (cardEndMode('s',r,st)==='card'?' (Card mark chosen)':''));
   const seen=new Set();
