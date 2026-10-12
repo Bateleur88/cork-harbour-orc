@@ -434,18 +434,33 @@ footer "© 2026 Pat Tanner ORC Ireland".
   headings first, in sheet order, then "Club laid mark", then one "Routing waypoints"
   heading for all eight. A tap adds the mark to the race being built, at its card
   position, and a row with no side at the end of the course; the side button sets P
-  or S, and a second rounding is tapped from its chip. Only a tapped mark is added to
+  or S, and a second rounding is tapped from its chip. A Course Card mark is not
+  carried into a later race's chips: there it is tapped from the list again (recorded
+  fixes, typed positions, laid marks and routing waypoints are carried as before).
+  Only a tapped mark is added to
   the device, never every mark at once (the magnetic variation is worked out from
   the marks loaded). Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
   rows (Grassy Mid keeps its card warning); Curlane, Dutchman and White Bay read
   "laid mark" and follow the laid-mark rules below; a routing waypoint reads
   "routing waypoint", has no side button, has ↓ as well as ↑ and ✕ to move it to its
   place in the course, and is not shown or counted in Check recorded marks, where the
-  as-sailed course is drawn through it with a small dot. Marks of an imported card
+  as-sailed course is drawn through it with a small dot. A routing waypoint with
+  nothing on one side (the first row with no start line, or the last with no finish
+  point) belongs to no leg: its row says "routing waypoint must sit between two
+  marks: move it with ↓" (or "↑" when it is last), the leg table says so, no leg is
+  measured to or from it, the WhatsApp text leaves it out, and Copy for Sail Scoring
+  is INCOMPLETE until it is moved. With a start line or a finish point it sits between
+  the line and a mark, as any waypoint between two marks. Marks of an imported card
   course get the same labels. A saved row naming a card mark is rebuilt from the
   card on every device; a name not in the card shows "Mark missing". "Read marks
-  from a WhatsApp message" is unchanged: a pasted line is a pasted position, whatever
-  its name (aliases and card marks from pasted lines are for `STATUS.md` A43).
+  from a WhatsApp message" and "Add a mark by typing its position" refuse a card
+  mark's own name (a fixed mark, Grassy Mid or a routing waypoint; capitals, spaces
+  and punctuation ignored, no other names) and store nothing: "E4 is on the course
+  card: tap it under Fixed marks. If the buoy has moved, give it a different name,
+  such as E4 moved." The other lines of a pasted message are read as before, and
+  the message stays in the box. Laid marks are not refused (aliases are for
+  `STATUS.md` A43). Under All races in Check recorded marks every race with anything
+  drawn has its switch, Course Card marks included.
 - *Far positions* (`STATUS.md` A45): a typed or pasted position more than 8 nm from
   the map centre is left out of the zoom of both Check recorded marks views and not
   drawn, with a line under the view ("1 position more than 8 nm away is not drawn:
@@ -636,7 +651,10 @@ For 2026-10-06.30 (`STATUS.md` A40, A45) they check that the snapshot has all 63
 marks, its authored routes and courses are exactly v3.19's plus 85 exact reverses,
 no Position Source, Source URL or Verification / Use text is in the page, Copy for
 Sail Scoring and the SailScoring lines are unchanged from .29, and the WhatsApp text
-carries no analysis, route notes or labels.
+carries no analysis, route notes or labels. For 2026-10-06.31 they check the five
+fixes after Pat's test of .30: Course Card marks not carried, the All races
+switches, the card-name refusal, a routing waypoint with nothing on one side, and
+the laid-mark notice's total.
 
 ## Deploying the pages
 
