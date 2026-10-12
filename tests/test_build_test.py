@@ -45,7 +45,8 @@ altered in ways it must refuse and checks that it writes nothing:
                 name first, then the warnings in short form, the full ones beside the button; the approved wording is
                 present. 2026-10-06.28: the typing message follows its fix (sent, refused, waiting, sending again,
                 removed), the line under Get latest marks splits recorded fixes and typed positions, and a pasted
-                position's detail says it is a chip of its race. Guards, not proof: no JavaScript is run
+                position's detail says it is a chip of its race. 2026-10-06.29: so does a typed position's, and no
+                detail says "Not offered as a chip". Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -259,6 +260,10 @@ def t6_a38_guards():
     g('a pasted position\'s detail says it is a chip of its race',
       -1 < ph.find("if(isPasted(m))return") < ph.find('if(!pickable(m))') and "A chip of Race '+m.race+', as a pasted position on this device only." in ph
       and 'Not offered as a chip: \'+(isPasted' not in ph)
+    # 2026-10-06.29: a typed position's detail says it is a chip of its race; no detail says "Not offered as a chip"
+    g("a typed position's detail says it is a chip of its race, and why it cannot be added to another race",
+      "'A chip of Race '+m.race+', as a typed position'" in ph and 'Being typed in by hand, not recorded by GPS' in ph)
+    g('no detail line says "Not offered as a chip"', 'Not offered as a chip' not in code)
     g('the RIB page is not touched by this step', 'notSent' not in read(os.path.join(ROOT, 'pages', 'record', 'record.html')))
 
 

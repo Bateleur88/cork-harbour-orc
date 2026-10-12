@@ -387,7 +387,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.28';
+const PAGE_VERSION='2026-10-06.29';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -562,7 +562,10 @@ function pickFix(k){const m=S.marks.find(x=>refFor(x)===k), r=S.race, st=$('fxSt
 function pickHtml(m){const r=S.race, k=refFor(m);
   if(isLineMark(m.name))return '<p class="cardnote fxDetAct">A line end: choose it in the Start line or Finish line list of the course, which offers this fix for any race.</p>';
   if(isPasted(m))return '<p class="cardnote fxDetAct">A chip of Race '+m.race+', as a pasted position on this device only. Being on this device only, it cannot be added to another race\'s chips.</p>';
-  if(!pickable(m))return '<p class="cardnote fxDetAct">Not offered as a chip: '+(m.acc===0?'a typed position (±0)':'not on the server yet')+'.</p>';
+  // a typed position is a chip of its own race, but only a recorded fix can be added to another race's chips (pickable)
+  if(!pickable(m))return '<p class="cardnote fxDetAct">'+(m.acc===0?'A chip of Race '+m.race+', as a typed position'+(m.notSent?' (not sent: refused)':m.pending?' (waiting to send)':'')+
+    '. Being typed in by hand, not recorded by GPS, it cannot be added to another race\'s chips.':
+    'A chip of Race '+m.race+', waiting to send from this device. Once it is on the server, it can be added to another race\'s chips.')+'</p>';
   return '<div class="fxDetAct"><button type="button" class="fxBtn" data-fx="addchip" data-ref="'+esc(k)+'">Add to Race '+r+' chips</button>'+
     ((S.picked[r]||[]).includes(k)?' <small>picked for Race '+r+'</small>':'')+'</div>';}
 // the "Picked for Race N" group under the chips: a fix that is also a chip of the race (moved into it, say) is not repeated.
