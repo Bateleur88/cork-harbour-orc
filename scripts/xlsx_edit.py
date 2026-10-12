@@ -101,7 +101,8 @@ class Workbook:
 
         Refused if the sheet has anything else that addresses rows (merged cells, filters,
         conditional formats, validations, hyperlinks, tables, frozen panes, selections, print
-        breaks, a dimension) or if any formula in the workbook exists to be broken."""
+        breaks, a dimension) or if any formula in the workbook exists to be broken. Empty
+        self-closing rows are renumbered; deleting one is refused."""
         part, s = self._xml(sheet)
         for tag in ('dimension', 'mergeCells', 'autoFilter', 'conditionalFormatting', 'dataValidations',
                     'hyperlinks', 'tableParts', 'pane', 'selection', 'rowBreaks'):
@@ -111,12 +112,15 @@ class Workbook:
             if re.match(r'xl/worksheets/[^/]+\.xml$', n) and n not in self.removed:
                 if re.search(r'<(?:x:)?f[ >]', self.parts.get(n) or self.zin.read(n).decode('utf-8')):
                     raise ValueError(f'{n} has formulas, which deleting rows could break')
-        if re.search(r'<x:row [^>]*/>', s):
-            raise ValueError(f'{sheet}: has empty self-closing rows; not handled here')
         gone = sorted(set(rows))
         found = set(int(r) for r in re.findall(r'<x:row r="(\d+)"', s))
         if not set(gone) <= found:
             raise KeyError(f'{sheet}: rows not found {sorted(set(gone) - found)}')
+        # an empty row written as one self-closing tag (<x:row r="61" />) is renumbered like any other row, but is
+        # never itself deleted here: deleting one is refused rather than handled
+        empty = set(int(r) for r in re.findall(r'<x:row r="(\d+)"[^>]*/>', s))
+        if empty & set(gone):
+            raise ValueError(f'{sheet}: rows {sorted(empty & set(gone))} are empty self-closing rows; not handled here')
 
         def shift(n):
             return n - sum(1 for g in gone if g < n)
@@ -130,7 +134,13 @@ class Workbook:
                 return m.group(0)
             row = re.sub(r'(<x:row r=")%d"' % n, r'\g<1>%d"' % k, m.group(0), count=1)
             return re.sub(r'(<x:c r="[A-Z]+)%d"' % n, r'\g<1>%d"' % k, row)
-        self.parts[part] = re.sub(r'<x:row r="(\d+)"[^>]*>.*?</x:row>', one, s, flags=re.S)
+
+        def one_empty(m):
+            n = int(m.group(1))
+            return '<x:row r="%d"%s/>' % (shift(n), m.group(2))
+        # full rows only: the opening tag must not be self-closing, or the match would run on into the next row
+        s = re.sub(r'<x:row r="(\d+)"[^>]*(?<!/)>.*?</x:row>', one, s, flags=re.S)
+        self.parts[part] = re.sub(r'<x:row r="(\d+)"([^>]*)/>', one_empty, s)
 
     def set_cell(self, sheet, row, col, value, numeric=False):
         """Replace one cell. Row numbers are worksheet rows: data row i of a

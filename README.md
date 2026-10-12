@@ -8,8 +8,8 @@ SailScoring `course-cards` issues #16 to #19.
 
 | | |
 |---|---|
-| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx` |
-| SHA-256 | `ff0ae3ee4cbd4216caaa0e5608848a6c8ca7ba82a3d41612bfd0069b9a735220` |
+| Master workbook | `RCYC_Cork_Harbour_ORC_MASTER_v3_20_DUPLICATES_REMOVED.xlsx` |
+| SHA-256 | `9fdaaf5b50ab9f6df3e6df047dc1b8a7f68361cc1298fb75356822d4190097aa` |
 | Courses | 40, all matching the printed 2026 card |
 | Configurations | 360 (40 courses x 3 starts x 3 finishes), none missing |
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
@@ -32,7 +32,7 @@ snapshot generated from the workbook above. See [The pages](#the-pages).
 2. **Audit the workbook.** Read-only; prints a report and exits non-zero on any
    failure. Expect 16 PASS lines and the counts in the table above:
 
-       python scripts/audit_workbook.py RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx
+       python scripts/audit_workbook.py RCYC_Cork_Harbour_ORC_MASTER_v3_20_DUPLICATES_REMOVED.xlsx
 
 3. **Check the file is the one described.** The audit prints its SHA-256; it should
    match the table above.
@@ -209,7 +209,7 @@ footer "© 2026 Pat Tanner ORC Ireland".
   field is empty with a red border and says so. An edit made without signal is
   kept on the phone and saved when there is signal.
 - *Import a harbour course* (section 2) is folded away, closed each time the page
-  opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_19,
+  opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_20,
   40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
   Whether it is open is not saved.
 - *Check recorded marks* (end of section 1, closed by default): a plot, read-only
@@ -516,7 +516,7 @@ shorter than the geodesic distances in ORC Distance Bearings.
 also includes every other GeoTIFF under RASTER_DIR, so the evidence would differ
 from the register's. Cork Harbour work uses GEO12_04, then KRY12_05, then CB12_01:
 
-    python scripts/test_chords.py RCYC_Cork_Harbour_ORC_MASTER_v3_19_CAGE_CORROBORATED.xlsx E:\Infomar --rasters GEO12_04,KRY12_05,CB12_01
+    python scripts/test_chords.py RCYC_Cork_Harbour_ORC_MASTER_v3_20_DUPLICATES_REMOVED.xlsx E:\Infomar --rasters GEO12_04,KRY12_05,CB12_01
 
 **`xlsx_edit.py`** has no command line: it is used from Python. `Workbook(path)`
 opens a workbook; `set_cell`, `append_readme`, `remove_sheet` and `delete_rows`
