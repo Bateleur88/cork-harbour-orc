@@ -216,10 +216,14 @@ footer "© 2026 Pat Tanner ORC Ireland".
   except *Add to Race N chips* (below), of
   every fix loaded for the race selected, or for all races, for the RO or scorer to
   spot one out of place. It is one element shown in both views (at the bottom of Race
-  view). Its closed line counts fixes: "2 fixes to check" is two fixes with at least
-  one flag each, however many flags they have; a note about the race as a whole (no
+  view). Its closed line counts recorded fixes (RIB fixes and the committee boat
+  recorded with this page's button) and other marks (typed and pasted positions)
+  apart, e.g. "5 recorded fixes · 49 other marks"; "2 fixes and marks to check" is two
+  fixes or marks with at least one flag each ("1 fix or mark to check" for one), however
+  many flags they have; a note about the race as a whole (no
   committee boat of its own) is counted apart as a race note. Shape and colour give the race;
-  a typed position (±0, no phone) is hollow, an estimate; a fix carried in from an
+  a typed position (±0, no phone) is hollow, an estimate; a pasted position (on this
+  device only) is half-filled; a fix carried in from an
   earlier race (such as Race 1's committee boat) is dashed. With *All races* ticked
   each fix has a short label (`R2 L 13:21`: race, mark initial, time; CB, SP and FP
   for the committee boat, start pin and finish pin, with a key under the sketch), a
@@ -353,7 +357,14 @@ footer "© 2026 Pat Tanner ORC Ireland".
   in for it, and the page says so. A course built before the day's marks could be
   loaded, at the dock say, is kept when they load. A course row whose fix comes
   from another race, earlier or later, names it, e.g. "Leeward (R3 14:39)"; a second
-  fix of the same race reads "(fix 2)".
+  fix of the same race reads "(fix 2)". The line under Get latest marks counts the
+  day's fixes on the server as Check recorded marks does: "5 recorded fixes · 8 typed
+  positions for Sun 11 Oct 2026". A position pasted into the WhatsApp reader stays on
+  this device only and is never sent; a course row saved from one never matches a fix
+  on the server. On another device it matches a pasted position with the same race and
+  name, if that device has one (decided by Pat 12 October 2026), and otherwise shows as
+  "Mark missing". Any course row whose mark cannot be found is shown as "Mark missing",
+  never hidden, and the legs to and from it are not measured (`STATUS.md` A38).
 - *Race view*: what is needed after the gun. A header with race and start pickers,
   the course and its total; an alert strip for anything that changes during a race
   (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh
@@ -459,12 +470,16 @@ ends, recorded times, fixes, recorders, devices and keys are not exported.
 
 - A start with no start time is not exported: the button is disabled and "Start
   time missing" shows. The start time entered is taken as the actual start.
-- A leg that cannot be measured (no start line, or no finish line where the finish
-  needs one) is left out, never made up, and named at the front of the name:
-  "INCOMPLETE - start line not recorded, first leg (Start - Windward) missing. …".
-  A leg measured from a laid mark's planning position, or to the start line used as
-  the finish while its warning shows, is exported and named with "STAND-IN - …".
-  Every warning in the name also shows beside the button. The card's start or
+- A leg that cannot be measured (no start line, no finish line where the finish
+  needs one, or a mark missing) is left out, never made up, and named after the race
+  name in short form, one count of the legs not measured, each leg once, with the
+  reasons: "Autumn League, Sun 27 Sept 2026, Race 1, Start 1 - INCOMPLETE - 1 leg not
+  measured (start line not recorded)", or "… - INCOMPLETE - 3 legs not measured (mark
+  missing: No.12; start line not recorded)". A leg measured from a laid mark's
+  planning position, or to the start line used as the finish while its warning
+  shows, is exported and named with "STAND-IN - …", after INCOMPLETE where both
+  apply. Every warning in the name also shows beside the button, in full, naming
+  each leg. The card's start or
   finish point standing in, a wind speed with no direction and an unset series are
   shown beside the button only.
 - Sail Scoring shows the name as the race title, so warnings in it are a stopgap

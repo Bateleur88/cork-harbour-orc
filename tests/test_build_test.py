@@ -43,7 +43,9 @@ altered in ways it must refuse and checks that it writes nothing:
                 leg, and a row naming a fix that is gone keeps its reference; the count is split into recorded fixes and
                 other marks, and flagged ones are "fixes and marks to check"; Copy for Sail Scoring's name is the race
                 name first, then the warnings in short form, the full ones beside the button; the approved wording is
-                present. Guards, not proof: no JavaScript is run
+                present. 2026-10-06.28: the typing message follows its fix (sent, refused, waiting, sending again,
+                removed), the line under Get latest marks splits recorded fixes and typed positions, and a pasted
+                position's detail says it is a chip of its race. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -240,6 +242,23 @@ def t6_a38_guards():
       and cd.count('incS.push(') == 1)
     g('Copy for Sail Scoring: the full warnings stay beside the button', 'warns:pre.map(' in cd and "'INCOMPLETE - '+inc.join('; ')" in cd)
     g('the check count says fixes and marks', "' fixes and marks')+' to check'" in rf)
+    # 2026-10-06.28: three fixes after Pat's test of 2026-10-06.27-test
+    ns = code[code.find("$('notSent').onclick="):]
+    ns = ns[:ns.find('\n', ns.find("removed from this device.','');commit();};"))]
+    g('the typing message follows its fix: sent, refused, waiting', 'function readSays(f,msg,cls)' in code
+      and "readSays(f,outRefused(f,why),'err')" in so and "readSays(f,outName(f)+': sent.'" in so
+      and 's0.outbox.forEach(q=>readSays(q,outWait(q,stop.k,stop.e),' in so)
+    g('the typing message follows its fix: sending again, removed',
+      "readSays(x.f,outName(x.f)+': sending again" in ns and "readSays(x.f,outName(x.f)+': removed from this device.'" in ns)
+    g('readSays changes only a message still about that fix', "el.textContent.indexOf(outName(f)+':')!==0)return;" in code)
+    pl = fn_body(code, 'async function pull(')
+    g('the line under Get latest marks splits recorded fixes and typed positions',
+      "nOf(list.length-nTyped,'recorded fix','recorded fixes')" in pl and "nOf(nTyped,'typed position','typed positions')" in pl
+      and "list.filter(m=>m.acc===0&&!m.device)" in pl)
+    ph = fn_body(code, 'function pickHtml(')
+    g('a pasted position\'s detail says it is a chip of its race',
+      -1 < ph.find("if(isPasted(m))return") < ph.find('if(!pickable(m))') and "A chip of Race '+m.race+', as a pasted position on this device only." in ph
+      and 'Not offered as a chip: \'+(isPasted' not in ph)
     g('the RIB page is not touched by this step', 'notSent' not in read(os.path.join(ROOT, 'pages', 'record', 'record.html')))
 
 

@@ -387,7 +387,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.27';
+const PAGE_VERSION='2026-10-06.28';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -561,7 +561,8 @@ function pickFix(k){const m=S.marks.find(x=>refFor(x)===k), r=S.race, st=$('fxSt
 // the button (or why there is none) under the tapped fix's detail
 function pickHtml(m){const r=S.race, k=refFor(m);
   if(isLineMark(m.name))return '<p class="cardnote fxDetAct">A line end: choose it in the Start line or Finish line list of the course, which offers this fix for any race.</p>';
-  if(!pickable(m))return '<p class="cardnote fxDetAct">Not offered as a chip: '+(isPasted(m)?'a pasted position, on this device only':m.acc===0?'a typed position (±0)':'not on the server yet')+'.</p>';
+  if(isPasted(m))return '<p class="cardnote fxDetAct">A chip of Race '+m.race+', as a pasted position on this device only. Being on this device only, it cannot be added to another race\'s chips.</p>';
+  if(!pickable(m))return '<p class="cardnote fxDetAct">Not offered as a chip: '+(m.acc===0?'a typed position (±0)':'not on the server yet')+'.</p>';
   return '<div class="fxDetAct"><button type="button" class="fxBtn" data-fx="addchip" data-ref="'+esc(k)+'">Add to Race '+r+' chips</button>'+
     ((S.picked[r]||[]).includes(k)?' <small>picked for Race '+r+'</small>':'')+'</div>';}
 // the "Picked for Race N" group under the chips: a fix that is also a chip of the race (moved into it, say) is not repeated.
@@ -2207,7 +2208,10 @@ async function pull(quiet){
     if(list.length)S.date=longDate(day);
     S.pulledDay=day;
     const rs=races(); if(!rs.includes(S.race))S.race=rs[0];
-    st.textContent=list.length?list.length+' fix'+(list.length>1?'es':'')+' for '+longDate(day)+' · updated '+hhmm(Date.now()):'No marks recorded yet for '+longDate(day)+'.';
+    // split as Check recorded marks splits them (STATUS A38): a typed position is on the server with accuracy 0 and no phone
+    const nTyped=list.filter(m=>m.acc===0&&!m.device).length;
+    st.textContent=list.length?nOf(list.length-nTyped,'recorded fix','recorded fixes')+(nTyped?' · '+nOf(nTyped,'typed position','typed positions'):'')+
+      ' for '+longDate(day)+' · updated '+hhmm(Date.now()):'No marks recorded yet for '+longDate(day)+'.';
     st.className='status '+(list.length?'ok':'');
     try{
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
@@ -2523,6 +2527,12 @@ function outWait(f,k,e){const r=outReason(k,e);
   return f.acc===0?outName(f)+': saved on this device, not sent: '+r+(k==='noreply'?', trying again in 15 s.':'. Trying again every 15 s.')+outFar(f):
     k==='nosignal'?'Committee boat fix saved on this phone – will send when there is signal.':
     'Committee boat fix saved on this phone – not sent: '+r+(k==='noreply'?', trying again in 15 s.':'. Trying again every 15 s.');}
+/* The message under Get latest marks that "Add a mark by typing its position" wrote ("<name>, typed position, Race N:
+   saved on this device. Sending…") follows its fix: when the fix is sent, refused, waiting or removed, the message says
+   so, so the page never shows "Sending…" for a fix that is not being sent. Only a message still about that fix is
+   changed: one another action has written since is left as it is. */
+function readSays(f,msg,cls){const el=$('readStatus');if(f.acc!==0||el.textContent.indexOf(outName(f)+':')!==0)return;
+  el.textContent=msg;el.className='status'+(cls?' '+cls:'');}
 function outRefused(f,why){return outName(f)+': refused by the server ('+why+'). Not saved on the server; kept on this device in the "Not sent" list.'+outFar(f);}
 // a typed position far from the harbour keeps its flag in every message about it (farNm)
 function outFar(f){const d=f.acc===0&&isFinite(f.lat)&&isFinite(f.lon)?rhumb(HARBOUR_CENTRE,f).nm:0;return d>FAR_NM?' ⚠ It is '+farText(d)+'.':'';}
@@ -2541,13 +2551,14 @@ async function sendOutbox(){
         if(k==='refused'||k==='full'){const why=(e&&e.text)||(k==='full'?'day full':'server '+e.status);
           s0.outbox.shift(); s0.notSent.push({f,why,status:e.status,at:Date.now()});
           const pm=s0.marks.find(m=>m.pid===f.id); if(pm)pm.notSent=true;
-          moved++; said.push(outRefused(f,why)); if(S===s0)save(); continue;}
+          moved++; said.push(outRefused(f,why)); if(S===s0){save();readSays(f,outRefused(f,why),'err');} continue;}
         stop={f,k,e}; break;}
       s0.outbox.shift(); s0.marks=s0.marks.filter(m=>m.pid!==f.id); if(S===s0)save();
-      sent++; said.push(f.acc===0?outName(f)+': sent.'+outFar(f):'Committee boat sent.');
+      sent++; said.push(f.acc===0?outName(f)+': sent.'+outFar(f):'Committee boat sent.'); if(S===s0)readSays(f,outName(f)+': sent.'+outFar(f),'ok');
     }
     if(S===s0){
-      if(stop){said.push(outWait(stop.f,stop.k,stop.e)+(s0.outbox.length>1?' '+(s0.outbox.length-1)+' more waiting behind it, in order.':''));}
+      if(stop){said.push(outWait(stop.f,stop.k,stop.e)+(s0.outbox.length>1?' '+(s0.outbox.length-1)+' more waiting behind it, in order.':''));
+        s0.outbox.forEach(q=>readSays(q,outWait(q,stop.k,stop.e),''));}
       $('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved?' err':stop?'':' ok');
       if(moved)commit();
       if(sent&&!stop)await pull(true);}
@@ -2564,10 +2575,12 @@ function renderNotSent(){const box=$('notSent'), L=S.notSent||[];
       '<button type="button" data-ns="remove" data-i="'+i+'">Remove from this device</button></li>').join('')+'</ul>';}
 $('notSent').onclick=e=>{const b=e.target.closest('button[data-ns]');if(!b)return;const i=+b.dataset.i, x=S.notSent[i];if(!x)return;
   if(b.dataset.ns==='again'){S.notSent.splice(i,1);const pm=S.marks.find(m=>m.pid===x.f.id);if(pm)delete pm.notSent;
-    S.outbox.push(x.f);$('cbStatus').textContent=outName(x.f)+': sending again…';$('cbStatus').className='status';commit();sendOutbox();return;}
+    S.outbox.push(x.f);$('cbStatus').textContent=outName(x.f)+': sending again…';$('cbStatus').className='status';
+    readSays(x.f,outName(x.f)+': sending again…','');commit();sendOutbox();return;}
   if(!confirm('Remove '+outName(x.f)+' from this device? It is not saved on the server, so it will be gone.'))return;
   S.notSent.splice(i,1);S.marks=S.marks.filter(m=>m.pid!==x.f.id);
-  $('cbStatus').textContent=outName(x.f)+': removed from this device.';$('cbStatus').className='status';commit();};
+  $('cbStatus').textContent=outName(x.f)+': removed from this device.';$('cbStatus').className='status';
+  readSays(x.f,outName(x.f)+': removed from this device.','');commit();};
 
 /* ---------- series name: send an unsent edit, then take the server's copy ---------- */
 function showSeries(msg,cls){
