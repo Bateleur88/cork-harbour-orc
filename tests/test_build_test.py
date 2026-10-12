@@ -32,6 +32,18 @@ altered in ways it must refuse and checks that it writes nothing:
                 labelled "Copy for Sail Scoring"; the "Copy legs for SailScoring" button, its line format and its
                 copy code unchanged; ccDoc takes its legs from legPts with the leg table's figures and writes nothing;
                 buildLegs calls setCC beside each setSS. Guards, not proof: no JavaScript is run
+  6  A38        static guards for typed and pasted positions and the queue (2026-10-06.27; STATUS A38): the position
+                reader takes ' ′ ’ as the minutes mark; a card row (tabs) is named by its short name; pasted positions
+                are marked and get an id ("paste|") no server fix can have; each queued send has the 20 s limit, a
+                refusal (400, 429) goes to the "Not sent" list and the queue carries on, anything else stops it;
+                #notSent once, moved with the committee boat button, drawn on every render, reset by Clear everything;
+                Clear everything counts "Not sent" fixes and pasted positions; the 8 nm flag is measured from
+                51.82 N 8.27 W and only for typed and pasted positions; a missing mark stays a row ("Mark missing"),
+                its legs are not measured, Copy for Sail Scoring names them INCOMPLETE and anchors on the first measured
+                leg, and a row naming a fix that is gone keeps its reference; the count is split into recorded fixes and
+                other marks, and flagged ones are "fixes and marks to check"; Copy for Sail Scoring's name is the race
+                name first, then the warnings in short form, the full ones beside the button; the approved wording is
+                present. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -174,6 +186,60 @@ def t5_copy_guards():
     report('5 copy: buildLegs calls setCC beside each setSS', bl.count('setSS(') == 2 and bl.count('setCC();') == 2)
 
 
+def t6_a38_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('6 A38: ' + name, ok)
+    pp = fn_body(code, 'function parsePos(')
+    g('parsePos takes a plain, prime or curly minutes mark', pp.count("\\s*['\u2032\u2019]?\\s*") == 2)
+    rp = fn_body(code, 'function readPaste(')
+    g('readPaste names a card row by its short name', "line.indexOf('\\t')>=0" in rp and "cols[0].split(' / ')[0].trim()" in rp)
+    g('readPaste marks every position pasted and returns them', 'm.pasted=true;push(m);added.push(m);' in rp and 'return added;' in rp
+      and 'push({' not in rp)
+    g('a pasted id starts with "paste|"', "function pasteId(race,nm,fix){return 'paste|'+" in code
+      and 'm.pasted?pasteId(m.race,m.name,m.fix):' in fn_body(code, 'function push('))
+    so = fn_body(code, 'async function sendOutbox(')
+    g('sendOutbox found', bool(so))
+    g('each queued send has the 20 s limit', 'postFix(f,OUTBOX_TIMEOUT_MS)' in so and 'const OUTBOX_TIMEOUT_MS=20000;' in code)
+    g('a refusal (400, 429) goes to Not sent and the queue carries on',
+      "if(k==='refused'||k==='full')" in so and 's0.notSent.push(' in so and 'continue;}' in so)
+    g('anything else stops the queue, keeping every fix', 'stop={f,k,e}; break;' in so and so.count('s0.outbox.shift()') == 2)
+    g('sendOutbox has no empty catch', not re.search(r'catch\s*\(\s*\w*\s*\)\s*\{\s*\}', so))
+    g('id="notSent" exactly once', page.count('id="notSent"') == 1)
+    g('Not sent moves with the committee boat button', "['notSent','slotCB']" in code)
+    g('Not sent drawn on every render', 'renderNotSent();\n}' in fn_body(code, 'function render('))
+    g('notSent in the fresh state (Clear everything resets it)', 'outbox:[],notSent:[]' in fn_body(code, 'function fresh('))
+    ut = fn_body(code, 'function unsentText(')
+    g('Clear everything counts Not sent and pasted positions', 'S.notSent' in ut and 'S.marks.filter(isPasted)' in ut)
+    g('the 8 nm flag: 51.82 N 8.27 W, typed and pasted only', 'const HARBOUR_CENTRE={lat:51.82,lon:-8.27}, FAR_NM=8;' in code
+      and 'if(!isOtherMark(m)' in fn_body(code, 'function farNm('))
+    lp = fn_body(code, 'function legPts(')
+    g('legPts keeps a missing mark as a placeholder', "{id:e.id,name:'mark missing',missing:true}" in lp
+      and 'legs.push({missing:true' in lp and 'rows,miss,seq' in lp)
+    bl = fn_body(code, 'function buildLegs(')
+    g('buildLegs says a leg is not measured, before its total', -1 < bl.find('if(g.missing)') < bl.find('total+=r.nm;'))
+    cd = fn_body(code, 'function ccDoc(')
+    g('Copy for Sail Scoring names missing legs INCOMPLETE and anchors on the first measured leg',
+      'g.missing?' in cd and 'inc.push(' in cd and 'const a=L.pts[i0];' in cd)
+    g('section 3 shows a missing mark as a row', "⚠ Mark missing" in fn_body(code, 'function render('))
+    g('a row naming a fix that is gone keeps its reference', "return m?m.id:r;}" in fn_body(code, 'function resolveRef(')
+      and "if(!m&&/^s:/.test(id))return id;" in fn_body(code, 'function refOf('))
+    rf = fn_body(code, 'function renderFix(')
+    g('the count is split into recorded fixes and other marks', "'recorded fix','recorded fixes'" in rf and "'other mark','other marks'" in rf)
+    g('approved wording: reader message', "' read for Race '" in code and
+      "' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'" in code)
+    g('approved wording: chip', "'pasted position',m.time,accOf(m),'this device only'" in code)
+    g('approved wording: Check recorded marks', "'pasted position, on this device only · '" in rf and "'pasted position'" in rf)
+    g('Copy for Sail Scoring: the race name first, then the warnings in short form',
+      "const name=label+(preS.length?' - '+preS.join('. '):'');" in cd and "'INCOMPLETE - '+incS.join('; ')" in cd
+      and "'2 legs not measured (start line and finish line not recorded)'" in cd and "' not measured (mark missing: '" in cd)
+    g('Copy for Sail Scoring: the full warnings stay beside the button', 'warns:pre.map(' in cd and "'INCOMPLETE - '+inc.join('; ')" in cd)
+    g('the check count says fixes and marks', "' fixes and marks')+' to check'" in rf)
+    g('the RIB page is not touched by this step', 'notSent' not in read(os.path.join(ROOT, 'pages', 'record', 'record.html')))
+
+
 def t2_refusals(tmp):
     live = read(PAGE)
     out = os.path.join(tmp, 'out2')
@@ -245,6 +311,7 @@ def main():
         t3_allowed(tmp)
         t4_save_guards()
         t5_copy_guards()
+        t6_a38_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

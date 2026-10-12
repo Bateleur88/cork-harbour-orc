@@ -64,6 +64,9 @@ body:not(.race) .raceOnly{display:none!important}
 #rSum{flex:1 1 100%;color:var(--muted);font-size:.92rem}
 #raceAlertList .note,#raceAlertList .newer{margin:8px 0}
 #slotCB .ghost{margin-top:18px}
+.notSent{margin:10px 0 0;padding:8px 10px;border:1px solid var(--warn);border-radius:10px;font-size:.95rem}
+.notSent p{margin:0 0 6px}.notSent li{margin:6px 0}.notSent ul{margin:0;padding-left:18px}
+.notSent button{margin:6px 8px 0 0;padding:6px 10px;border-radius:8px;border:2px solid var(--sea);background:transparent;color:var(--sea);font-weight:700}
 /* the lines above the legs table share one box instead of one box each */
 .info{margin:8px 0;padding:6px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
 .info .note{margin:0;padding:5px 0;border:none;border-radius:0;background:none}
@@ -255,6 +258,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <button class="ghost" id="dayAnyway" type="button" hidden></button>
   <button class="ghost" id="recCB">Record committee boat here</button>
   <p class="status" id="cbStatus" role="status" aria-live="polite"></p>
+  <!-- fixes the server refused (400) or a full day (429): kept on this device, never sent again by themselves (renderNotSent) -->
+  <div class="notSent" id="notSent" hidden></div>
   <details class="backup">
     <summary>Other ways to add a mark</summary>
     <textarea id="paste" placeholder="Paste one or more WhatsApp messages here, then tap Read marks." style="margin-top:10px"></textarea>
@@ -382,7 +387,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.26';
+const PAGE_VERSION='2026-10-06.27';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -419,7 +424,7 @@ async function keyFetch(url,opts){
 const K=STORE+'course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],laidSel:{},laidNo:{},laidAck:{},lineFlags:{},picked:{},mode:'setup'};}
+function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],notSent:[],laidSel:{},laidNo:{},laidAck:{},lineFlags:{},picked:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -459,26 +464,38 @@ function legType(a){return a<=50?'beat':a>=140?'run':'reach';}
 function ddm(v,isLat){const h=isLat?(v>=0?'N':'S'):(v>=0?'E':'W');const a=Math.abs(v);let d=Math.floor(a),ms=((a-d)*60).toFixed(3);if(ms==='60.000'){d++;ms='0.000';}return pad(d,isLat?2:3)+'°'+(parseFloat(ms)<10?'0':'')+ms+"'"+h;}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-/* ---------- parsing ---------- */
+/* ---------- parsing ----------
+   The minutes mark may be a plain ', a prime ′ (the card's own) or a curly ’ (what a phone keyboard often types). */
 function parsePos(str){
   str=str.replace(/[–—]/g,'-').trim();
-  let m=str.match(/(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*'?\s*([NSns])[,\s]+(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*'?\s*([EWew])/);
+  let m=str.match(/(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*['′’]?\s*([NSns])[,\s]+(\d{1,3})\s*[°:\s]\s*(\d{1,2}(?:\.\d+)?)\s*['′’]?\s*([EWew])/);
   if(m){const lat=(+m[1]+ +m[2]/60)*(/s/i.test(m[3])?-1:1), lon=(+m[4]+ +m[5]/60)*(/w/i.test(m[6])?-1:1);return{lat,lon};}
   m=str.match(/(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/);
   if(m)return{lat:+m[1],lon:+m[2]};
   return null;
 }
+/* Pasted positions (the WhatsApp reader) stay on this device only: they are never sent to the server. Each is marked
+   pasted, and its id has a form of its own (pasteId) that a fix loaded from the server can never have, so a course row
+   saved from one never matches a server fix, even one later recorded with the same race, name and order (STATUS A38).
+   Returns the marks read, in order. */
 function readPaste(txt){
-  let race=1, added=0, date=S.date;   // a pasted header never sets the series: it is set on this page only
+  let race=1, date=S.date; const added=[];   // a pasted header never sets the series: it is set on this page only
   const hdr=txt.match(/^\s*\*(.+?)\s*[–-]\s*(.+?)\*/m);
   if(hdr)date=hdr[2].trim();
+  const add=m=>{m.pasted=true;push(m);added.push(m);};
   txt.split(/\r?\n/).forEach(line=>{
     line=line.trim(); if(!line||/^```/.test(line))return;
+    // a row copied from the card (the workbook's Marks sheet): tab-separated columns, "E4 / North Cardinal", the type,
+    // then the position. The name is the short name only, the first column before " / "; the type column and the
+    // second name are not used. The RIB page's own backup format has no tabs and is read as before
+    if(line.indexOf('\t')>=0){const cols=line.split('\t'), pos=parsePos(cols.slice(1).join(' ')), nm=cols[0].split(' / ')[0].trim();
+      if(pos&&nm)add({race,name:nm,fix:1,lat:pos.lat,lon:pos.lon,acc:null,time:''});
+      return;}
     let m=line.match(/\*?Race\s+(\d+)/i);
-    if(m&&!/[NS]['\d]/.test(line)){race=+m[1];return;}
+    if(m&&!/[NS]['′’\d]/.test(line)){race=+m[1];return;}
     // CSV: race,"name",fix,lat,lon,acc,time
     m=line.match(/^(\d+)\s*,\s*"?([^",]+)"?\s*,\s*(\d+)\s*,\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*,\s*(\d+)?\s*,\s*([\d:]+)?/);
-    if(m){push({race:+m[1],name:m[2].trim(),fix:+m[3],lat:+m[4],lon:+m[5],acc:m[6]?+m[6]:null,time:m[7]||''});added++;return;}
+    if(m){add({race:+m[1],name:m[2].trim(),fix:+m[3],lat:+m[4],lon:+m[5],acc:m[6]?+m[6]:null,time:m[7]||''});return;}
     if(/^race\s*,\s*mark/i.test(line))return;
     // text: Name – 53°08.728'N 007°00.705'W (±4 m, 19:15)
     const pos=parsePos(line);
@@ -487,17 +504,19 @@ function readPaste(txt){
       const fixm=nm.match(/\(?moved,?\s*fix\s*(\d+)\)?/i)||line.match(/fix\s*(\d+)/i);
       const t=line.match(/(\d{1,2}:\d{2})/);
       const a=line.match(/±\s*(\d+)/);
-      push({race,name:nm.replace(/\s*\((moved[^)]*)\)/i,'').trim(),fix:fixm?+fixm[1]:1,lat:pos.lat,lon:pos.lon,acc:a?+a[1]:null,time:t?t[1]:''});
-      added++;
+      add({race,name:nm.replace(/\s*\((moved[^)]*)\)/i,'').trim(),fix:fixm?+fixm[1]:1,lat:pos.lat,lon:pos.lon,acc:a?+a[1]:null,time:t?t[1]:''});
     }
   });
   S.date=date;
   return added;
 }
 function cardId(race,nm){return 'card|'+race+'|'+String(nm).toLowerCase();}
+// a pasted position's id: it starts with "paste|", which no server fix's id (race|name|order) or card mark's id can
+function pasteId(race,nm,fix){return 'paste|'+race+'|'+String(nm).toLowerCase()+'|'+fix;}
 function push(m){
-  // card marks get their own ids: a RIB fix of the same name must never overwrite one, nor be overwritten by it
-  m.id=m.card?cardId(m.race,m.card):m.race+'|'+m.name.toLowerCase()+'|'+m.fix;
+  // card marks get their own ids: a RIB fix of the same name must never overwrite one, nor be overwritten by it.
+  // Pasted positions likewise (pasteId)
+  m.id=m.card?cardId(m.race,m.card):m.pasted?pasteId(m.race,m.name,m.fix):m.race+'|'+m.name.toLowerCase()+'|'+m.fix;
   const i=S.marks.findIndex(x=>x.id===m.id);
   if(i>=0)S.marks[i]=m; else S.marks.push(m);
 }
@@ -542,7 +561,7 @@ function pickFix(k){const m=S.marks.find(x=>refFor(x)===k), r=S.race, st=$('fxSt
 // the button (or why there is none) under the tapped fix's detail
 function pickHtml(m){const r=S.race, k=refFor(m);
   if(isLineMark(m.name))return '<p class="cardnote fxDetAct">A line end: choose it in the Start line or Finish line list of the course, which offers this fix for any race.</p>';
-  if(!pickable(m))return '<p class="cardnote fxDetAct">Not offered as a chip: '+(m.acc===0?'a typed position (±0)':'not on the server yet')+'.</p>';
+  if(!pickable(m))return '<p class="cardnote fxDetAct">Not offered as a chip: '+(isPasted(m)?'a pasted position, on this device only':m.acc===0?'a typed position (±0)':'not on the server yet')+'.</p>';
   return '<div class="fxDetAct"><button type="button" class="fxBtn" data-fx="addchip" data-ref="'+esc(k)+'">Add to Race '+r+' chips</button>'+
     ((S.picked[r]||[]).includes(k)?' <small>picked for Race '+r+'</small>':'')+'</div>';}
 // the "Picked for Race N" group under the chips: a fix that is also a chip of the race (moved into it, say) is not repeated.
@@ -629,6 +648,19 @@ function isLaidCard(m){return !!(m&&m.card&&CARD.marks[m.card]&&CARD.marks[m.car
 function laidNames(){return Object.keys(CARD.marks).filter(k=>CARD.marks[k].laid);}
 function fkey(x){return x.sid?'s:'+x.sid:'l:'+x.id;}
 function ribFix(x){return !x.card&&!x.pending&&!x.virtual&&x.acc!==0;}       // a position typed on this page (±0) is not a RIB fix
+/* Other marks (STATUS A38): positions entered by hand, not recorded by GPS. A pasted position (the WhatsApp reader) is on
+   this device only; one pasted before 2026-10-06.27 has no "pasted" mark but is the only kind of mark with no server id
+   that is neither waiting to send nor from the card. A typed position is saved on the server with accuracy 0 and no
+   phone. Recorded fixes are the rest: RIB fixes and the committee boat recorded with this page's button. */
+function isPasted(m){return !!m&&(!!m.pasted||(!m.card&&!m.virtual&&!m.pending&&!m.sid&&!m.server));}
+function isTypedPos(m){return !!m&&!m.card&&!m.virtual&&!isPasted(m)&&m.acc===0&&!m.device;}
+function isOtherMark(m){return isPasted(m)||isTypedPos(m);}
+/* A typed or pasted position far from the harbour is flagged as a possible error (a longitude typed without its minus
+   sign, say), never refused. Measured from the map centre, 51.82 N 8.27 W, the point the charts open on; every mark in
+   the workbook (v3.19) is within 7 nm of it. Recorded fixes are never flagged. */
+const HARBOUR_CENTRE={lat:51.82,lon:-8.27}, FAR_NM=8;
+function farNm(m){if(!isOtherMark(m)||!isFinite(m.lat)||!isFinite(m.lon))return 0;const d=rhumb(HARBOUR_CENTRE,m).nm;return d>FAR_NM?d:0;}
+function farText(d){return Math.round(d)+' nm from the map centre (51.82 N, 8.27 W): check the position, for example a longitude typed without its minus sign';}
 function laterFix(a,b){return a.race!==b.race?a.race>b.race:(a.tms&&b.tms?a.tms>b.tms:a.fix>b.fix);}
 function lev(a,b){const d=Array.from({length:b.length+1},(_,j)=>j);
   for(let i=1;i<=a.length;i++){let p=d[0];d[0]=i;for(let j=1;j<=b.length;j++){const t=d[j];d[j]=Math.min(d[j]+1,d[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t;}}
@@ -712,7 +744,7 @@ function laidNotice(pts,total){
   const bits=[], keys=Object.keys(changed);
   if(keys.length){
     const oldPts=pts.map(p=>{const c=p.laidSt&&changed[p.laidSt.key];return c?Object.assign({},p,{lat:c.ack.lat,lon:c.ack.lon,atFix:c.ack.src!=='card'}):p;});
-    let old=0; for(let i=0;i<oldPts.length-1;i++)old+=legGeom(oldPts[i],oldPts[i+1]).r.nm;
+    let old=0; for(let i=0;i<oldPts.length-1;i++)if(!oldPts[i].missing&&!oldPts[i+1].missing)old+=legGeom(oldPts[i],oldPts[i+1]).r.nm;
     keys.forEach(k=>{const c=changed[k];
       bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was '+esc(c.ack.label)+'. It has moved '+Math.round(rhumb(c.ack,c.cur).m)+' m, so the legs to and from it have changed.</p>');});
     bits.push('<p class="note flag">Course '+old.toFixed(2)+' → '+total.toFixed(2)+' nm. <button data-a="ack">OK</button></p>');
@@ -978,14 +1010,20 @@ function render(){
     const b=document.createElement('button');b.className='chip'+(m.manual?' manual':'')+(m.card?' card':'')+(m.card&&m.flag&&!(lm&&lm.atFix)?' flagged':'')+(phones>1?' split':'');
     if(m.card&&m.flag&&!(lm&&lm.atFix))b.title=m.flag;
     if(phones>1)b.title=(lm?lm.laidSt.fixes:sameMark(m)).map(x=>'Fix '+x.fix+': '+[x.time,accOf(x),whoOf(x)].filter(Boolean).join(', ')).join('\n');
+    // a pasted position: "pasted position · 10:15 · ±4 m · this device only" (time and accuracy only when pasted);
+    // a typed position: "typed position" and its time, or what is happening to it while it is not on the server
     const info=lm?[m.race<S.race?'from Race '+m.race:'',laidSrc(lm)]:
+      isPasted(m)?[m.race<S.race?'from Race '+m.race:'','pasted position',m.time,accOf(m),'this device only']:
+      isTypedPos(m)?[m.race<S.race?'from Race '+m.race:'','typed position',m.notSent?'not sent: refused':m.pending?'waiting to send':m.time]:
       [m.race<S.race?'from Race '+m.race:'',m.card?(m.flag?'course card ⚠':'course card'):(m.pending?'waiting to send':(m.time||'typed')),accOf(m),whoOf(m)];
+    const far=farNm(m);
     // a chip adds a mark to the course: "+" says so, and the badge counts how often it is already in (a mark can be rounded twice)
     const used=course().filter(e=>e.id===m.id).length;
     b.setAttribute('aria-label','Add '+m.name+(used?', already in the course '+used+(used>1?' times':' time'):''));
     b.innerHTML='<span class="plus" aria-hidden="true">+</span> '+esc(m.name)+(m.fix>1?' (fix '+m.fix+')':'')+
       (used?'<span class="used" aria-hidden="true">×'+used+'</span>':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
       (phones>1?'<small class="warnTxt">⚠ fixes from '+phones+' phones</small>':'')+
+      (far?'<small class="warnTxt">⚠ '+esc(farText(far))+'</small>':'')+
       (lm&&lm.laidSt.suggest.length?'<small class="warnTxt">Possible fix: '+lm.laidSt.suggest.map(x=>'"'+esc(x.name)+'" '+esc(x.time)).join(', ')+'</small>':'');
     b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};bk.appendChild(b);});
   renderPicked(bm);
@@ -1013,8 +1051,14 @@ function render(){
       :'<div class="meta warnTxt">Record the missing end to get the line and bias.</div>')+
     '</div><div></div></li>';
   if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
-  cs.forEach((e,i)=>{const m=markById(e.id);if(!m)return;
+  cs.forEach((e,i)=>{const m=markById(e.id);
     const li=document.createElement('li');
+    // a row whose mark cannot be found is shown, never hidden (STATUS A38); the legs either side of it are not measured
+    if(!m){li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b class="warnTxt">⚠ Mark missing</b><div class="meta warnTxt">'+esc(missingText(e.id))+
+        '. The legs to and from it are not measured.</div></div>'+
+      '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for the missing mark">'+(e.side||'–')+'</button>'+
+      '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
+      ol.appendChild(li);return;}
     const nw=newerFix(m), stm=mins(startTime());
     let flag='';
     const laterUsesNew=nw&&cs.some((x,j)=>j>i&&x.id===nw.id);
@@ -1029,7 +1073,9 @@ function render(){
         (st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
           ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></div>':'')+
         (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
-    li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+fixSrc(m)+'</b>'+flag+laid+'</div>'+
+    const far=farNm(m), other=isPasted(m)?'pasted position · this device only':isTypedPos(m)?'typed position':'';
+    li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+fixSrc(m)+'</b>'+flag+laid+
+      (other?'<div class="meta">'+other+'</div>':'')+(far?'<div class="meta warnTxt">⚠ '+esc(farText(far))+'</div>':'')+'</div>'+
       '<div class="acts"><button data-a="side" data-i="'+i+'" aria-label="Rounding side for '+esc(m.name)+'">'+(e.side||'–')+'</button>'+
       '<button data-a="up" data-i="'+i+'" aria-label="Move up"'+(i?'':' disabled')+'>↑</button><button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
@@ -1051,7 +1097,7 @@ function render(){
          ' <button type="button" class="ghost lineAct" data-act="markFinish">Mark finish line</button>'):'');}}
   $('toRace').hidden=!cs.length;
   buildLegs();
-  applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix();
+  applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix(); renderNotSent();
 }
 /* section 2 after import: one line (course, card distance, laid marks and flags) instead of the chooser;
    "Choose another course" reopens it until the next import. The section's own summary line names the card in use
@@ -1102,7 +1148,7 @@ function commit(){save();render();if(typeof scheduleSave==='function')scheduleSa
    in Setup and a slot in Race view, so there is only ever one of each. Anything that changes during a race and needs
    the RO (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh stopping) is collected in the
    alert strip at the top of Race view, with the same buttons as in Setup. The view never switches by itself. */
-const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB'],['fixCheck','slotFix']];
+const SHARED=[['laidNote','slotLaid'],['windFields','slotWind'],['recCB','slotCB'],['cbStatus','slotCB'],['notSent','slotCB'],['fixCheck','slotFix']];
 const homes={};
 SHARED.forEach(([id])=>{const h=document.createElement('span');h.hidden=true;$(id).before(h);homes[id]=h;});
 // at 1100 px and up (the two-column layout) "Check recorded marks" sits in #slotFixWide, after the sketch, in both views
@@ -1314,7 +1360,7 @@ function endPicker(w,cardStandIn){
 }
 function card(ents){
   const out=['Start'];
-  ents.forEach(e=>{const n=markById(e.id).name;out.push(abbr(n)+(e.side?'('+e.side+')':''));});
+  ents.forEach(e=>{const m=markById(e.id), n=m?m.name:'mark missing';out.push(abbr(n)+(e.side?'('+e.side+')':''));});
   if(finishMode()!=='last')out.push('Finish'); else if(out.length>1)out[out.length-1]+=' (finish)';
   return out.join(' – ');
 }
@@ -1395,11 +1441,18 @@ function buildShift(cs){
    show the legs a change would give before anything is changed. ov (optional): rows, [{id, side}] used instead of that
    start's course rows; lineSel, {'race|start': {cb, pin, fcb, fpin}} used instead of those starts' line-end choices
    (later starts that inherit a choice follow it). Neither is changed. Returns the points, each leg's legGeom result and
-   the total in nm, summed in sailing order as buildLegs shows it, with the line and finish state buildLegs uses. */
+   the total in nm, summed in sailing order as buildLegs shows it, with the line and finish state buildLegs uses.
+   A row whose mark cannot be found (STATUS A38) is never left out quietly: a placeholder {missing:true} stands in its
+   place in pts (seq: the rows in order, each its mark or its placeholder), and each leg to or from it is {missing:true},
+   not measured, with no parts and nothing added to the total. ents and cs hold the rows that have a mark, as before;
+   rows holds every row and miss the missing ones. With no missing row, pts and legs are exactly as before. */
 function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
   const k=ckey(r,st), sel=ov.lineSel?(x=>Object.prototype.hasOwnProperty.call(ov.lineSel,x)?ov.lineSel[x]:S.lineSel[x]):undefined;
-  const ents=(ov.rows||S.courses[k]||[]).map(e=>typeof e==='string'?{id:e,side:''}:e).filter(e=>markById(e.id));
+  const rows=(ov.rows||S.courses[k]||[]).map(e=>typeof e==='string'?{id:e,side:''}:e);
+  const ents=rows.filter(e=>markById(e.id));
   const cs=ents.map(e=>markById(e.id));
+  const miss=rows.map((e,i)=>markById(e.id)?null:{i,id:e.id}).filter(Boolean);
+  const seq=miss.length?rows.map(e=>markById(e.id)||{id:e.id,name:'mark missing',missing:true}):cs;
   const sl=legStartLine(r,st,sel), fl=finishLine(r,st,sel), fsx=finishState(r,st,sel), slRec=startLine(r,st,sel);
   /* with no committee boat recorded, fall back to the card's own start and finish marks (unless Laid line is chosen) */
   const ccfg=(S.cardCfg||{})[k];
@@ -1416,10 +1469,15 @@ function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
       (fPt&&fPt.moveNote?'s from it and to it follow the card\'s routes':' from it follows the card\'s route')+
       ' from '+ccfg.s+', which assumes the line is close to it: check on the chart.');}
   const cardEnds=!sl&&!!sPt;
-  const pts=(sPt?[sPt]:[]).concat(cs, fPt?[fPt]:[]);
+  const pts=(sPt?[sPt]:[]).concat(seq, fPt?[fPt]:[]);
   const legs=[];let total=0;
-  if(pts.length>=2&&cs.length)for(let i=0;i<pts.length-1;i++){const g=legGeom(pts[i],pts[i+1]);legs.push(g);total+=g.r.nm;}
-  return {r,st,ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts,legs,total};}
+  if(pts.length>=2&&cs.length)for(let i=0;i<pts.length-1;i++){
+    if(pts[i].missing||pts[i+1].missing){legs.push({missing:true,r:{nm:0,m:0,brg:0},via:'',fixNote:'',parts:[],route:[]});continue;}
+    const g=legGeom(pts[i],pts[i+1]);legs.push(g);total+=g.r.nm;}
+  return {r,st,ents,cs,rows,miss,seq,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts,legs,total};}
+// "N legs not measured: a mark is missing" for the leg table, WhatsApp text and leg table note; '' when none is missing
+function missLegsText(L){const n=L.legs.filter(g=>g.missing).length;
+  return n?nOf(n,'leg','legs')+' not measured: '+nOf(L.miss.length,'mark is','marks are')+' missing':'';}
 function buildLegs(){
   course();   // as before: the selected start's course entry is created and tidied here; legPts itself never writes
   const L=legPts(), {ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts}=L;
@@ -1428,12 +1486,22 @@ function buildLegs(){
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
   const twsv=S.tws===''?null:+S.tws;
   const host=$('legs');
-  if(pts.length<2||!cs.length){lastPlot=null;$('laidNote').innerHTML='';lastTotal=0;setSS([],'');setCC();host.innerHTML='<p class="empty">Add marks to see legs.</p>'+(sl?analysis(cs,twdv).html:'');$('plotWrap').hidden=true;setOut('');buildShift(cs);return;}
+  if(pts.length<2||!cs.length){
+    // every row's mark missing: said in the legs, the leg table and the WhatsApp text, never shown as an empty course
+    const mt=L.miss.length?nOf(L.miss.length,'mark','marks')+' in this course '+(L.miss.length===1?'is':'are')+' missing, so no leg can be measured':'';
+    lastPlot=null;$('laidNote').innerHTML='';lastTotal=0;setSS([],mt?'INCOMPLETE: '+mt+'.':'');setCC();
+    host.innerHTML=(mt?'<p class="note flag">⚠ '+esc(mt)+'. The rows are shown in section 3.</p>':'<p class="empty">Add marks to see legs.</p>')+(sl?analysis(cs,twdv).html:'');
+    $('plotWrap').hidden=true;setOut('',mt?'No summary: '+mt+'.':'');buildShift(cs);return;}
+  const ml=missLegsText(L);
   let rows='',total=0,lines=[],ss=[];
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i],b=pts[i+1];
     const g=L.legs[i], {r,via,fixNote}=g;
     g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg),3)));   // SailScoring: "nm °M", one line per physical leg
+    // a leg to or from a missing mark (STATUS A38): a row that says so, no figures, nothing in the SailScoring lines
+    if(g.missing){rows+='<tr><td>Leg '+(i+1)+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+
+        '<br><span class="viaTxt warnTxt">not measured: mark missing</span></td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr>';
+      lines.push('Leg '+(i+1)+': '+a.name+' → '+b.name+' · not measured: mark missing');continue;}
     total+=r.nm;
     const isLine=false;
     const brgT=Math.round(r.brg)%360;
@@ -1466,22 +1534,24 @@ function buildLegs(){
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
-  setSS(ss,(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
+  setSS(ss,(ml?'INCOMPLETE: '+ml+', so they are not in these lines. ':'')+(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
     (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   setCC();
-  const an=analysis(cs,twdv), warn=farLine.concat(checks(ents,cs));
-  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(ents))+'</b></p></div>'+
+  const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(farLine,checks(ents,cs));
+  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
-    '</tbody><tfoot><tr><td>Total</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
+    '</tbody><tfoot><tr><td>'+(ml?'Total of measured legs':'Total')+'</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
   // the sketch and the chart draw the same points, lines and legs (plot, drawChartInner): the chart never works them out again
   const plotLines=[slRec&&{a:slRec.cb,b:slRec.pin,kind:'start'},fl&&fl!==slRec&&{a:fl.cb,b:fl.pin,kind:'finish'}].filter(Boolean);
   lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:cardEndMode('s')==='card'};
   plot(pts,plotLines);
   buildShift(cs);
   const head=[series.name,S.date].filter(Boolean).join(' – ')||'Course';
-  setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(ents)+'\n'+ents.map((e,i)=>{const m=markById(e.id);return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
-    '\nTotal '+total.toFixed(2)+' nm'+(an.txt.length?'\n'+an.txt.join('\n'):'')+(twdM===null?'':'\nWind '+pad(twdM,3)+'°M'+(twsv===null?'':' '+twsv+' kn'))+'\n\n'+
+  setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(L.rows)+'\n'+L.rows.map((e,i)=>{const m=markById(e.id);
+      if(!m)return (i+1)+'. mark missing'+(e.side?' ('+e.side+')':'');
+      return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
+    (ml?'\nTotal of measured legs '+total.toFixed(2)+' nm ('+ml+')':'\nTotal '+total.toFixed(2)+' nm')+(an.txt.length?'\n'+an.txt.join('\n'):'')+(twdM===null?'':'\nWind '+pad(twdM,3)+'°M'+(twsv===null?'':' '+twsv+' kn'))+'\n\n'+
     [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+laidTag(m)+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
 }
 /* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
@@ -1491,7 +1561,7 @@ const openLegs=new Set();   // legs-table rows opened to show their physical leg
 function setSS(lines,note,courseTotal,legs){
   ssText=lines.join('\n');
   $('ssNote').textContent=note;
-  $('ssOut').textContent=ssText||'Build a course to get the leg table.';
+  $('ssOut').textContent=ssText||(note?'No legs to copy.':'Build a course to get the leg table.');
   $('ssCopy').disabled=!ssText;
   $('ssCount').textContent=lines.length?lines.length+' physical leg'+(lines.length>1?'s':'')+(lines.length>legs?', passages split':''):'';
   // the block's own total, from the rounded lines exactly as copied
@@ -1506,9 +1576,11 @@ function setSS(lines,note,courseTotal,legs){
    loaded, as dayMoment takes it; the start time entered is the actual start, Irish clock time on that day), race, start;
    the series also as "series", left out when not set. Anchor: where the first exported leg starts. A leg that cannot be
    measured is left out, never made up (INCOMPLETE); a leg measured from a laid mark's planning position, or to the start
-   line used as the finish while its warning shows, is exported (STAND-IN): both kinds go at the front of the name, one
-   prefix per kind, INCOMPLETE first. The card's start or finish point standing in, a wind speed with no direction (left
-   out) and an unset series are shown beside the button only. No start time: nothing is exported.
+   line used as the finish while its warning shows, is exported (STAND-IN): both kinds go in the name after the race
+   name, one per kind, INCOMPLETE first, INCOMPLETE in short form (how many legs and why: "Race 1, Start 1 - INCOMPLETE -
+   1 leg not measured (start line not recorded)"); beside the button each is given in full, naming every leg. The
+   card's start or finish point standing in, a wind speed with no direction (left out) and an unset series are shown
+   beside the button only. No start time: nothing is exported.
    Returns {block} (why there is nothing to copy) or {text, warns} (every line to show beside the button). */
 const CC_MON=['Jan','Feb','Mar','Apr','May','June','July','Aug','Sept','Oct','Nov','Dec'], CC_DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function ccDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';
@@ -1516,11 +1588,23 @@ function ccDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return CC_DAY[d.getUTCDay()]+' '+(+m[3])+' '+CC_MON[+m[2]-1]+' '+m[1];}
 function ccDoc(r,st){r=r??S.race;st=st??S.start;
   const k=ckey(r,st), L=legPts(r,st), cs=L.cs;
+  // every mark of the course missing (STATUS A38): no leg can be measured, so nothing can be copied; said in red
+  if(L.miss.length&&!cs.length)return {block:'INCOMPLETE - '+nOf(L.miss.length,'mark','marks')+' in this course '+(L.miss.length===1?'is':'are')+
+    ' missing, so no leg can be measured. Nothing to copy.',err:true};
   if(L.pts.length<2||!cs.length||!L.legs.length)return {block:'Build a course to copy it for Sail Scoring.'};
   if(!S.startTimes[k])return {block:'Start time missing: set the start time for this start to copy it for Sail Scoring.',err:true};
-  const first=cs[0].name, last=cs[cs.length-1].name, inc=[], sti=[], side=[], cardSti=[];
-  if(!L.sPt)inc.push('start line not recorded, first leg (Start - '+first+') missing');
-  if(!L.fPt&&(L.ccfg||finishMode(r,st)!=='last'))inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');
+  // the first and last rows of the course as sailed, a missing mark's placeholder included (seq)
+  // inc: each INCOMPLETE warning in full, for beside the button; incS: the same in short form, for the name
+  const first=L.seq[0].name, last=L.seq[L.seq.length-1].name, inc=[], incS=[], sti=[], side=[], cardSti=[];
+  // a leg to or from a missing mark is not measured: it is left out and named, as a leg with no line is
+  {const ml=L.legs.map((g,i)=>g.missing?'('+L.pts[i].name+' - '+L.pts[i+1].name+')':null).filter(Boolean);
+   if(ml.length){inc.push(nOf(L.miss.length,'mark','marks')+' missing, '+(ml.length===1?'leg ':'legs ')+ml.join(', ')+' not measured');
+     incS.push(nOf(ml.length,'leg','legs')+' not measured (mark missing: '+[...new Set(L.miss.map(x=>missName(x.id)))].join(', ')+')');}}
+  const noS=!L.sPt, noF=!L.fPt&&(L.ccfg||finishMode(r,st)!=='last');
+  if(noS)inc.push('start line not recorded, first leg (Start - '+first+') missing');
+  if(noF)inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');
+  if(noS||noF)incS.push(noS&&noF?'2 legs not measured (start line and finish line not recorded)':
+    '1 leg not measured ('+(noS?'start':'finish')+' line not recorded)');
   if(L.sPt&&!L.sl)cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point'+
     (cardEndMode('s',r,st)==='card'?' (Card mark chosen)':''));
   const seen=new Set();
@@ -1533,13 +1617,18 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   const ser=String(series.name||'').trim();
   if(!ser)side.push('Series name not set: the copy has no series. Set it at the top of Setup.');
   const pre=[inc.length&&'INCOMPLETE - '+inc.join('; '),sti.length&&'STAND-IN - '+sti.join('; ')].filter(Boolean);
+  const preS=[incS.length&&'INCOMPLETE - '+incS.join('; '),sti.length&&'STAND-IN - '+sti.join('; ')].filter(Boolean);
   const label=[ser,ccDate(S.pulledDay||$('day').value),'Race '+r,'Start '+(st+1)].filter(Boolean).join(', ');
-  const name=(pre.length?pre.join('. ')+'. ':'')+label;
+  // the race name first, then the warnings in short form (the full ones are beside the button)
+  const name=label+(preS.length?' - '+preS.join('. '):'');
   const wind=(twd!==null?', "windDirection": '+twd:'')+(twd!==null&&tws!==null?', "windSpeed": '+tws:'');
   const legs=[];
   L.legs.forEach(g=>g.parts.forEach(pt=>legs.push('    { "name": '+JSON.stringify(pt.from+' - '+pt.to)+', "distance": '+pt.nm.toFixed(2)+
     ', "course": '+magOf(pt.brg)+wind+' }')));
-  const a=L.pts[0];
+  // the anchor is where the first exported leg starts: the first point, unless the legs from it were not measured
+  const i0=L.legs.findIndex(g=>!g.missing);
+  if(i0<0)return {block:pre.join('. ')+'. No leg can be measured. Nothing to copy.',err:true};
+  const a=L.pts[i0];
   const text='{\n  "format": "orc-constructed-course",\n  "version": 1,\n  "name": '+JSON.stringify(name)+',\n'+
     (ser?'  "series": '+JSON.stringify(ser)+',\n':'')+'  "north": "magnetic",\n'+
     '  "anchor": { "lat": '+a.lat.toFixed(6)+', "lng": '+a.lon.toFixed(6)+' },\n  "legs": [\n'+legs.join(',\n')+'\n  ]\n}\n';
@@ -1551,8 +1640,9 @@ function setCC(){const d=ccDoc(), b=$('ccCopy');
     d.warns.map(t=>'<p class="cardnote flag">'+esc(t)+'</p>').join('');
   // a copy that failed shows the text to copy by hand: keep it in step, and take it away when there is nothing to copy
   if(!ccText)$('ccFallback').hidden=true; else if(!$('ccFallback').hidden)$('ccText').value=ccText;}
-function setOut(t){
-  text=t;$('out').textContent=t||'Build a course to get the summary.';
+// none (optional): what to say instead of "Build a course…" when there is no text, e.g. every mark of the course missing
+function setOut(t,none){
+  text=t;$('out').textContent=t||none||'Build a course to get the summary.';
   const wa=$('wa');
   if(t){wa.href='https://wa.me/?text='+encodeURIComponent(t);wa.removeAttribute('aria-disabled');}
   else{wa.removeAttribute('href');wa.setAttribute('aria-disabled','true');}
@@ -1567,8 +1657,10 @@ function courseMarks(cs,segs){
   const seen=new Set(), out=[];
   marks.forEach(m=>{if(seen.has(m.id))return;seen.add(m.id);out.push({m,label:m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'')});});
   return out;}
-function plot(cs,segs){
+function plot(pts,segs){
   segs=segs||[];
+  // a missing mark (STATUS A38) has no position: it is not drawn, and neither are the legs to and from it
+  const cs=pts.filter(m=>!m.missing);
   const W=340,H=380,P=34;
   const all=cs.concat(...segs.map(g=>[g.a,g.b]));
   const lat0=all.reduce((s,m)=>s+m.lat,0)/all.length, k=Math.cos(rad(lat0));
@@ -1578,8 +1670,8 @@ function plot(cs,segs){
   const cx=(x0+x1)/2, cy=(y0+y1)/2;
   const px=m=>W/2+(m.lon*k-cx)*s, py=m=>H/2-(m.lat-cy)*s;
   let g='';
-  for(let i=0;i<cs.length-1;i++)
-    g+='<line x1="'+px(cs[i]).toFixed(1)+'" y1="'+py(cs[i]).toFixed(1)+'" x2="'+px(cs[i+1]).toFixed(1)+'" y2="'+py(cs[i+1]).toFixed(1)+'" stroke="var(--sea)" stroke-width="2" marker-end="url(#ah)"/>';
+  for(let i=0;i<pts.length-1;i++){if(pts[i].missing||pts[i+1].missing)continue;
+    g+='<line x1="'+px(pts[i]).toFixed(1)+'" y1="'+py(pts[i]).toFixed(1)+'" x2="'+px(pts[i+1]).toFixed(1)+'" y2="'+py(pts[i+1]).toFixed(1)+'" stroke="var(--sea)" stroke-width="2" marker-end="url(#ah)"/>';}
   segs.forEach(sg=>{g+='<line x1="'+px(sg.a).toFixed(1)+'" y1="'+py(sg.a).toFixed(1)+'" x2="'+px(sg.b).toFixed(1)+'" y2="'+py(sg.b).toFixed(1)+'" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 4"/>';});
   courseMarks(cs,segs).forEach(({m,label})=>{
     const x=px(m),y=py(m);
@@ -1682,7 +1774,6 @@ function fixAge(m){if(typeof m.tms!=='number')return null;
   if(t>=m.tms-60000&&t<=m.tms+86400000)return {s:(t-m.tms)/1000,by:'id'};
   return typeof m.rcv==='number'?{s:m.rcv-m.tms/1000,by:'server'}:null;}
 function fmtAge(s){return s<120?Math.round(s)+' s':(s/60).toFixed(1)+' min';}
-function fxTyped(m){return m.acc===0&&!m.device;}
 function fxHms(m){return typeof m.tms==='number'?hhmm(m.tms)+':'+pad(new Date(m.tms).getSeconds(),2):(m.time||'');}
 function askText(name,r){return name+', Race '+r+': please go back to the mark, wait ten seconds, then tap Record again.';}
 // every check, on every fix of the day: per fix (keyed by refFor) and per race
@@ -1691,6 +1782,8 @@ function fxChecks(list){
   const add=(m,lvl,txt,id)=>{const k=refFor(m);if(!fl.has(k))fl.set(k,[]);fl.get(k).push({lvl,txt,id});};
   const latestOf=(r,test)=>{let b=null;list.forEach(m=>{if(m.race<=r&&test(m.name)&&(!b||m.race>b.race||
     (m.race===b.race&&(fixMoment(m)||0)>(fixMoment(b)||0))))b=m;});return b;};
+  // a typed or pasted position far from the harbour (farNm): a possible error, flagged, never refused (STATUS A38)
+  list.forEach(m=>{const d=farNm(m);if(d)add(m,'check',farText(d)+'.','far');});
   list.forEach(m=>{const a=fixAge(m);if(!a||a.s<FIX_AGE_CHECK_S)return;const bad=a.s>FIX_AGE_BAD_S;
     add(m,bad?'bad':'check','Position '+fmtAge(a.s)+' old when '+(a.by==='id'?'the phone saved it':
       'the server received it (a fix sent later, after no signal, also shows this)')+(bad?': probably not where the mark is.':': the phone may have used an earlier position.'));});
@@ -1821,8 +1914,12 @@ function renderFix(){
   // the closed line counts fixes (a fix with several flags is one); a race-level note (no committee boat, a carried
   // line end off square) is not a fix of the race shown, so it is counted apart
   const nBad=flagged.filter(m=>fl.get(refFor(m)).some(f=>f.lvl==='bad')).length, n=flagged.length, nr=rflags.length;
-  $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+own.length+' fix'+(own.length===1?'':'es')+
-    (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+' fix'+(n===1?'':'es')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
+  // the count split (STATUS A38): recorded fixes (RIB fixes and the committee boat from this page's button), and other
+  // marks (typed and pasted positions)
+  const nOther=own.filter(isOtherMark).length, nRec=own.length-nOther;
+  $('fixSum').textContent='Check recorded marks · '+(fxAll?'all races':'Race '+r)+': '+nOf(nRec,'recorded fix','recorded fixes')+
+    (nOther?' · '+nOf(nOther,'other mark','other marks'):'')+
+    (carried.length?' + '+carried.length+' from earlier races':'')+(n?' · '+n+(n===1?' fix or mark':' fixes and marks')+' to check'+(nBad?' ('+nBad+' likely wrong)':''):'')+
     (nr?' · '+nr+' race note'+(nr===1?'':'s'):'')+(nc?' · '+nc+' candidate'+(nc===1?'':'s'):'');
   $('fixSum').className=nBad?'bad':'';
   if(!$('fixCheck').open)return;
@@ -1840,9 +1937,10 @@ function renderFix(){
     '" title="Race '+x+'"><span aria-hidden="true">'+FX_SHAPE[(x-1)%4]+'</span> R'+x+'</button>').join(''):'';
   const ph=phoneLetters();
   const car=m=>fxAll?!on(m.race):m.race<r, into=m=>fxAll?(usedBy.get(refFor(m))||[]).join(', '):r;
-  const lab1=m=>[m.name,m.time,fxTyped(m)?'estimate (typed)':accOf(m)].filter(Boolean).join(' ');
+  // "E4 pasted position" (with its time and accuracy when they were pasted); "E4 10:15 typed position"
+  const lab1=m=>(isPasted(m)?[m.name,'pasted position',m.time,accOf(m)]:[m.name,m.time,isTypedPos(m)?'typed position':accOf(m)]).filter(Boolean).join(' ');
   const lab2=m=>[fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'carried from Race '+m.race:'',cset.has(refFor(m))?'candidate':'',
-    m.recorder||(m.device?'Phone '+ph[m.device]:''),m.pending?'waiting to send':''].filter(Boolean).join(' · ');
+    m.recorder||(m.device?'Phone '+ph[m.device]:''),m.notSent?'not sent: refused':m.pending?'waiting to send':''].filter(Boolean).join(' · ');
   $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart;
   // the as-sailed course of the selected race and start, over the recorded lines, from the main sketch's data (fxOverlay)
   const ov=fxOverlay(r,on(r)?lastPlot:null,res);
@@ -1855,6 +1953,10 @@ function renderFix(){
   $('fxKey').innerHTML=smp('wl','W–L leg')+smp('wlc','W–L leg carried from an earlier race')+smp('start','start line')+
     smp('finish','recorded finish line (committee boat to Finish Pin)')+smp('cand','candidate start line, not used by default')+
     '<span class="fxK"><svg class="fxKRing" width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--sea)" stroke-width="2" stroke-dasharray="4 3"/></svg>Picked for this race</span>'+
+    // the three kinds of point (STATUS A38): a recorded fix filled, a typed position hollow, a pasted position half-filled
+    '<span class="fxK"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--ink)"/></svg>recorded fix</span>'+
+    '<span class="fxK"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/></svg>typed position</span>'+
+    '<span class="fxK"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--ink)" fill-opacity=".35" stroke="var(--ink)" stroke-width="2"/></svg>pasted position, on this device only</span>'+
     '. The page\'s default finish is the start line. The recorded lines are the page\'s automatic defaults, not the RO\'s choices; the as-sailed course (below) is the course built in section 3. A dark outline: the fix a line joins where a mark has several.'+
     (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'')+
     (ov.legs.length?'<br><span class="fxK"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="'+fxCol(r)+'" stroke-width="'+FX_AS.w+'"/></svg>'+
@@ -1873,14 +1975,16 @@ function renderFix(){
   // the tapped fix, in short: name, race, time, accuracy, phone letter and position, and the button that brings it into the
   // chip bank of the race being built (pickHtml)
   const sm=seen.find(m=>refFor(m)===fxSel);
-  $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+' · '+esc(fxHms(sm)||'time not known')+' · '+
-    (fxTyped(sm)?'estimate, typed in':esc(accOf(sm)||'accuracy not known'))+' · Phone '+(sm.device?esc(ph[sm.device]):'none')+
-    '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+(car(sm)?' · carried into Race '+esc(String(into(sm))):'')+(sm.pending?' · waiting to send from this phone':'')+pickHtml(sm)+'</div>':
+  $('fxDet').innerHTML=sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+' · '+
+    (isPasted(sm)?'pasted position, on this device only · '+(sm.time?'time '+esc(sm.time):'time not given')+' · '+(accOf(sm)?'accuracy '+esc(accOf(sm)):'accuracy not given'):
+    esc(fxHms(sm)||'time not known')+' · '+(isTypedPos(sm)?'typed position, an estimate':esc(accOf(sm)||'accuracy not known'))+' · Phone '+(sm.device?esc(ph[sm.device]):'none'))+
+    '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+(car(sm)?' · carried into Race '+esc(String(into(sm))):'')+(sm.notSent?' · not sent: refused by the server, kept on this device in the "Not sent" list':sm.pending?' · waiting to send from this phone':'')+pickHtml(sm)+'</div>':
     !seen.length?'<p class="empty">'+(shown.length?'Every race is switched off above.':'No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.')+'</p>':'';
-  $('fxListBox').hidden=!seen.length; $('fxListSum').textContent='All fixes ('+seen.length+')';
+  $('fxListBox').hidden=!seen.length; $('fxListSum').textContent=(seen.some(isOtherMark)?'All fixes and marks (':'All fixes (')+seen.length+')';
   $('fxList').innerHTML=seen.map(m=>{const k=refFor(m), f=fl.get(k)||[];
     return '<li'+(k===fxSel?' class="sel"':'')+'><button type="button" class="fxRow" data-fx="pick" data-k="'+esc(k)+'"><span style="color:'+fxCol(m.race)+'" aria-hidden="true">'+
-      FX_SHAPE[(m.race-1)%4]+'</span> '+esc(lab1(m)+(lab2(m)?' · '+lab2(m):'')+(pk.has(k)?' · picked for Race '+r:''))+'</button>'+f.map(fxFlag).join('')+(f.length?fxAsk(askText(m.name,m.race)):'')+'</li>';}).join('');
+      FX_SHAPE[(m.race-1)%4]+'</span> '+esc(lab1(m)+(lab2(m)?' · '+lab2(m):'')+(pk.has(k)?' · picked for Race '+r:''))+'</button>'+f.map(fxFlag).join('')+
+      (f.length&&!isOtherMark(m)?fxAsk(askText(m.name,m.race)):'')+'</li>';}).join('');   // no RIB re-record request for a typed or pasted position
 }
 // the sketch: north up, same projection as the course plot; shape and colour by race, hollow for a typed estimate,
 // dashed and faded for a fix carried in from an earlier race, a ring for a flag (the warning colour only for likely wrong),
@@ -1921,7 +2025,8 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset,pk,ov,r){
      t+='<polygon class="fxAs" points="'+f(6,0)+' '+f(-5,4.5)+' '+f(-5,-4.5)+'" fill="'+col+'" stroke="var(--surface)" stroke-width="1"/>';});}
   pts.forEach(p=>{const m=p.m, key=refFor(m), f=fl.get(key)||[], col=fxCol(m.race), ol=res.outline.has(key)&&!car(m);
     const attr=car(m)?'fill="none" stroke="'+col+'" stroke-width="2" stroke-dasharray="3 2" opacity=".6"':
-      fxTyped(m)?'fill="var(--surface)" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':'fill="'+col+'" stroke="'+(ol?'var(--ink)" stroke-width="2"':'var(--surface)" stroke-width="1"');
+      isPasted(m)?'fill="'+col+'" fill-opacity=".35" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':   // a pasted position: half-filled
+      isTypedPos(m)?'fill="var(--surface)" stroke="'+(ol?'var(--ink)':col)+'" stroke-width="2"':'fill="'+col+'" stroke="'+(ol?'var(--ink)" stroke-width="2"':'var(--surface)" stroke-width="1"');
     h+='<circle data-k="'+esc(key)+'" cx="'+p.x+'" cy="'+p.y+'" r="16" fill="transparent" style="cursor:pointer"/>';
     g+='<g data-k="'+esc(key)+'" style="cursor:pointer">'+
       (pk.has(key)?'<circle cx="'+p.x+'" cy="'+p.y+'" r="18" fill="none" stroke="var(--sea)" stroke-width="2" stroke-dasharray="4 3"/>':'')+
@@ -1981,7 +2086,7 @@ function fxDrawChart(shown,fl,lab,car,res,pk,ov,r){
     // a fix picked for the race being built: a dashed ring in the sea colour, under the fix and never taking a tap
     if(pk.has(refFor(m)))L.circleMarker([m.lat,m.lon],{radius:13,color:cv('--sea'),weight:2,fill:false,dashArray:'4,3',interactive:false}).addTo(FxLayer);
     L.circleMarker([m.lat,m.lon],{radius:res.outline.has(refFor(m))&&!c?8:7,color:bad?cv('--warn'):col,weight:bad?4:f.length?3:2,fillColor:col,
-      fillOpacity:c||fxTyped(m)?0:.9,dashArray:c?'3,3':null})
+      fillOpacity:c||isTypedPos(m)?0:isPasted(m)?.35:.9,dashArray:c?'3,3':null})
       .bindTooltip(lab(m),{sticky:true}).on('click',()=>{fxSel=refFor(m);$('fxStatus').textContent='';renderFix();$('fxDet').scrollIntoView({block:'nearest'});}).addTo(FxLayer);});
 }
 // the sketch stays up until Leaflet has loaded, so a refresh while it loads never leaves the box empty
@@ -2180,8 +2285,23 @@ if(S.lineShape!==2){Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]
 
 /* ---------- built courses saved on the server ---------- */
 if(!S.synced||typeof S.synced!=='object')S.synced={};
-function refOf(id){const m=markById(id);return m&&m.sid?'s:'+m.sid:'l:'+id;}
-function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===r.slice(2));return m?m.id:null;}return r.slice(2);}
+/* A row naming a server fix that is not loaded (deleted, say) keeps its reference as its id ('s:<server id>'): it is
+   shown as "mark missing", saved back unchanged, and found again by the next load if the fix comes back (STATUS A38).
+   Before 2026-10-06.27 such a row was dropped from this device's copy of the course. */
+function refOf(id){const m=markById(id);if(!m&&/^s:/.test(id))return id;return m&&m.sid?'s:'+m.sid:'l:'+id;}
+function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===r.slice(2));return m?m.id:r;}return r.slice(2);}
+// what is known about a course row whose mark cannot be found, from the row's own reference
+function missingText(id){const p=String(id).split('|'), nm='"'+missName(id)+'"';
+  if(/^s:/.test(id))return 'A recorded fix that is no longer among the day\'s fixes on the server';
+  if(p[0]==='card')return 'Card mark '+nm+' is not in this page\'s course card';
+  if(p[0]==='paste')return 'Pasted position '+nm+' (Race '+p[1]+'): pasted on another device or cleared from this one, and never on the server';
+  return nm+' (Race '+p[0]+') is not among this device\'s marks: a position pasted on another device or cleared from this one, or a fix not loaded';}
+// a missing mark's name, from its row's reference: ids keep names in lower case, so a card mark's own spelling is used
+// where one matches ("no.12" -> "No.12"); a recorded fix's reference holds no name
+function missName(id){const p=String(id).split('|');
+  const nm=/^s:/.test(id)?'':p[0]==='card'?p.slice(2).join('|'):p[0]==='paste'?p.slice(2,-1).join('|'):p.slice(1,-1).join('|');
+  if(!nm)return 'a fix no longer on the server';
+  return Object.keys(CARD.marks).find(x=>x.toLowerCase()===nm)||nm;}
 function recordFor(k){
   if(k==='_starts')return {classes:S.dayClasses};
   // a race's start groups, and its picked chips as "picked" only when it has any, so a race without picks saves exactly as before
@@ -2365,10 +2485,11 @@ if(S.recShape!==2){Object.keys(S.synced||{}).forEach(k=>{const v=S.synced[k];
 
 /* ---------- committee boat fix from this phone ---------- */
 if(!Array.isArray(S.outbox))S.outbox=[];
+if(!Array.isArray(S.notSent))S.notSent=[];
 function cbLabel(){return 'Record committee boat here – Race '+S.race;}
 /* A refused reply throws 'server <status>' as before (syncSeries tests for 'server 400'), with e.status and e.text, the
    server's own error text cut to 120 characters (shown escaped). ms: abandon the request after ms milliseconds, an
-   AbortError ("no reply"); only course saves pass it, the outbox and the series name do not. */
+   AbortError ("no reply"); course saves and the queue (sendOutbox) pass it, the series name does not. */
 async function postFix(body,ms){
   const ac=ms&&typeof AbortController==='function'?new AbortController():null, tm=ac?setTimeout(()=>ac.abort(),ms):0;
   try{
@@ -2378,25 +2499,71 @@ async function postFix(body,ms){
       const e=new Error('server '+r.status);e.status=r.status;e.text=t;throw e;}
   }finally{if(tm)clearTimeout(tm);}
 }
+/* ---------- the queue: committee boat fixes and typed positions waiting to send (STATUS A38) ----------
+   Sent in order, each with a 20 s limit. The server's reply decides what happens to the fix at the front:
+   - saved: it leaves the queue and the next is sent;
+   - no signal, no reply within 20 s, race key missing or refused (403), server error (500): the run stops, every fix
+     stays in the queue in order, and the 15 s timer tries again from the same fix. Nothing is removed;
+   - refused for itself (400: bad fix, bad id, bad date) or the day full (429): sending it again cannot work, so it is
+     moved to the "Not sent" list on this device (S.notSent) with the server's reason, and the queue carries on with the
+     next fix. It is never sent again by itself: "Send again" puts it back in the queue, "Remove from this device"
+     deletes it. A fix sent again keeps its id, and the server just replaces a fix with the same id, so it is never
+     doubled. A queue stuck behind a refused fix on an older page clears itself on the first send from this one.
+   Every outcome says what the fix is and what happened to it, in #cbStatus; a committee boat keeps its old wording
+   for "sent" and "no signal". */
+const OUTBOX_TIMEOUT_MS=20000;
+function outName(f){return f.acc===0?f.name+', typed position, Race '+f.race:'Committee boat, Race '+f.race;}
+function outReason(k,e){return k==='nosignal'?'no signal':k==='noreply'?'no reply from the server':k==='key'?'race key not loaded yet':
+  k==='auth'?'race key refused by the server':'server error '+(e&&e.status||'')+(e&&e.text?' ('+e.text+')':'');}
+function outWait(f,k,e){const r=outReason(k,e);
+  return f.acc===0?outName(f)+': saved on this device, not sent: '+r+(k==='noreply'?', trying again in 15 s.':'. Trying again every 15 s.')+outFar(f):
+    k==='nosignal'?'Committee boat fix saved on this phone – will send when there is signal.':
+    'Committee boat fix saved on this phone – not sent: '+r+(k==='noreply'?', trying again in 15 s.':'. Trying again every 15 s.');}
+function outRefused(f,why){return outName(f)+': refused by the server ('+why+'). Not saved on the server; kept on this device in the "Not sent" list.'+outFar(f);}
+// a typed position far from the harbour keeps its flag in every message about it (farNm)
+function outFar(f){const d=f.acc===0&&isFinite(f.lat)&&isFinite(f.lon)?rhumb(HARBOUR_CENTRE,f).nm:0;return d>FAR_NM?' ⚠ It is '+farText(d)+'.':'';}
 let sending=false;
 async function sendOutbox(){
   if(sending||!S.outbox.length)return; sending=true;
   // Clear everything replaces S: a send already under way finishes with the state it started with, and then neither
   // writes to the cleared page nor starts a load that would bring the day back. After a clear, the request already in
   // flight completes, but the rest of the old outbox is not sent.
-  const s0=S;
+  const s0=S, said=[]; let sent=0, moved=0, stop=null;
   try{
     while(S===s0&&s0.outbox.length){
-      const f=s0.outbox[0]; await postFix(f);
+      const f=s0.outbox[0];
+      try{await postFix(f,OUTBOX_TIMEOUT_MS);}
+      catch(e){const k=saveKind(e);
+        if(k==='refused'||k==='full'){const why=(e&&e.text)||(k==='full'?'day full':'server '+e.status);
+          s0.outbox.shift(); s0.notSent.push({f,why,status:e.status,at:Date.now()});
+          const pm=s0.marks.find(m=>m.pid===f.id); if(pm)pm.notSent=true;
+          moved++; said.push(outRefused(f,why)); if(S===s0)save(); continue;}
+        stop={f,k,e}; break;}
       s0.outbox.shift(); s0.marks=s0.marks.filter(m=>m.pid!==f.id); if(S===s0)save();
+      sent++; said.push(f.acc===0?outName(f)+': sent.'+outFar(f):'Committee boat sent.');
     }
-    if(S===s0){$('cbStatus').textContent='Committee boat sent.'; $('cbStatus').className='status ok';
-      await pull(true);}
+    if(S===s0){
+      if(stop){said.push(outWait(stop.f,stop.k,stop.e)+(s0.outbox.length>1?' '+(s0.outbox.length-1)+' more waiting behind it, in order.':''));}
+      $('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved?' err':stop?'':' ok');
+      if(moved)commit();
+      if(sent&&!stop)await pull(true);}
   }catch(e){
     if(S===s0){$('cbStatus').textContent='Committee boat fix saved on this phone – will send when there is signal.'; $('cbStatus').className='status';}
   }
   sending=false;
 }
+// the "Not sent" list (S.notSent): each fix the server refused, its reason, and what can be done with it
+function renderNotSent(){const box=$('notSent'), L=S.notSent||[];
+  box.hidden=!L.length; if(!L.length){box.innerHTML='';return;}
+  box.innerHTML='<p class="warnTxt"><b>Not sent ('+L.length+')</b>: refused by the server, so not saved there. Kept on this device only.</p><ul>'+
+    L.map((x,i)=>'<li>'+esc(outName(x.f))+': '+esc(x.why)+(x.at?' ('+hhmm(x.at)+')':'')+'<br><button type="button" data-ns="again" data-i="'+i+'">Send again</button>'+
+      '<button type="button" data-ns="remove" data-i="'+i+'">Remove from this device</button></li>').join('')+'</ul>';}
+$('notSent').onclick=e=>{const b=e.target.closest('button[data-ns]');if(!b)return;const i=+b.dataset.i, x=S.notSent[i];if(!x)return;
+  if(b.dataset.ns==='again'){S.notSent.splice(i,1);const pm=S.marks.find(m=>m.pid===x.f.id);if(pm)delete pm.notSent;
+    S.outbox.push(x.f);$('cbStatus').textContent=outName(x.f)+': sending again…';$('cbStatus').className='status';commit();sendOutbox();return;}
+  if(!confirm('Remove '+outName(x.f)+' from this device? It is not saved on the server, so it will be gone.'))return;
+  S.notSent.splice(i,1);S.marks=S.marks.filter(m=>m.pid!==x.f.id);
+  $('cbStatus').textContent=outName(x.f)+': removed from this device.';$('cbStatus').className='status';commit();};
 
 /* ---------- series name: send an unsent edit, then take the server's copy ---------- */
 function showSeries(msg,cls){
@@ -2478,9 +2645,14 @@ $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;st
 $('read').onclick=()=>{
   const t=$('paste').value;
   if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
-  const n=readPaste(t);
-  $('readStatus').textContent=n?n+' mark fix'+(n>1?'es':'')+' read.':'No positions found. Check the message was pasted whole.';
-  $('readStatus').className='status '+(n?'ok':'err');
+  const got=readPaste(t), n=got.length;
+  // "4 pasted positions read for Race 1: E4, No.10, No.3, No.12. They are kept on this device only: …" (STATUS A38)
+  const byRace=[...new Set(got.map(m=>m.race))].map(r=>{const l=got.filter(m=>m.race===r);
+    return nOf(l.length,'pasted position','pasted positions')+' read for Race '+r+': '+l.map(m=>m.name).join(', ');});
+  const far=got.map(m=>({m,d:farNm(m)})).filter(x=>x.d).map(x=>' ⚠ '+x.m.name+' (Race '+x.m.race+') is '+farText(x.d)+'.');
+  $('readStatus').textContent=n?byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join(''):
+    'No positions found. Check the message was pasted whole.';
+  $('readStatus').className='status '+(n&&!far.length?'ok':'err');
   if(n){$('paste').value='';const r=races();if(!r.includes(S.race))S.race=r[0];}
   commit();
 };
@@ -2498,7 +2670,11 @@ $('addManual').onclick=()=>{
   const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
   S.outbox.push({action:'add',id,date:$('day').value||todayISO(),race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:Date.now()});
   push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(Date.now()),pending:true,pid:id});
-  $('readStatus').textContent=nm+' added. Sending…';$('readStatus').className='status ok';commit();sendOutbox();
+  // far from the harbour: flagged as a possible error, never refused (STATUS A38)
+  const d=rhumb(HARBOUR_CENTRE,p).nm;
+  $('readStatus').textContent=nm+', typed position, Race '+S.race+': saved on this device. Sending…'+(d>FAR_NM?' ⚠ It is '+farText(d)+'.':'');
+  $('readStatus').className='status '+(d>FAR_NM?'err':'ok');
+  $('cbStatus').textContent=nm+', typed position, Race '+S.race+': sending…';$('cbStatus').className='status';commit();sendOutbox();
 };
 // course-row actions; the Race view alert strip uses the same buttons, so both go through here
 function courseAct(b){
@@ -2576,10 +2752,14 @@ function clearPageState(){
 // boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
 // saveCourses would send them; '' when there is none. The series name is not counted: a clear keeps it. An unsent change
 // of a race's picked chips counts as a course edit (it is saved in that race's _starts|race record).
+// Also counted (STATUS A38): fixes in the "Not sent" list, and pasted positions, which are on this device only.
 function unsentText(){const n=S.outbox.length, c=allKeys().filter(isDirty).length, count=(x,one,many)=>x+' '+(x===1?one:many);
-  return [n&&count(n,'fix','fixes'),c&&count(c,'course edit','course edits')].filter(Boolean).join(' and ');}
+  const ns=(S.notSent||[]).length, p=S.marks.filter(isPasted).length;
+  const l=[n&&count(n,'fix','fixes')+' waiting to send',ns&&count(ns,'fix','fixes')+' in "Not sent"',
+    p&&count(p,'pasted position','pasted positions')+' (on this device only)',c&&count(c,'course edit','course edits')+' not saved'].filter(Boolean);
+  return l.length>1?l.slice(0,-1).join(', ')+' and '+l[l.length-1]:l.join('');}
 let armed=false;
-$('clear').onclick=()=>{if(!armed){armed=true;const u=unsentText();$('clear').textContent=u?u+' not sent yet –\ntap again to clear anyway':'Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
+$('clear').onclick=()=>{if(!armed){armed=true;const u=unsentText();$('clear').textContent=u?'Not on the server: '+u+' –\ntap again to clear anyway':'Tap again to clear';setTimeout(()=>{armed=false;$('clear').textContent='Clear everything';},4000);return;}
   S=fresh();armed=false;$('clear').textContent='Clear everything';
   clearPageState();
   commit();
