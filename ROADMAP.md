@@ -244,7 +244,7 @@ Not this project's decision alone. See section 5.
 13. Never re-save the master workbook through a library; use `scripts/xlsx_edit.py`.
 14. Never rename `RW_Refinery_North` or `RW_West_of_Refinery` back, never conflate No.7/Corkbeg with Dosco/Corkbeg or EF1 with EF4, never restore the pre-v2.50 E4 coordinate, and never deduplicate repeated occurrences of a logical pair within a course.
 15. Do not upload `marks.php` or the RO page to the live paths within 12 hours of a race, and take the three dated backups first (README, "Live install: backup and rollback").
-16. The viewer stays dumb: it displays what the workbook says and never invents a route, substitutes a mark or infers an alias.
+16. The viewer stays dumb: it displays what the workbook says and never invents a route, substitutes a mark or infers an alias. Reversed routes come from the snapshot build, never from the page; with no route the page measures a straight leg and labels it, and never searches for or builds a route.
 17. Never edit or overwrite the recorded marks (source observations). The as-sailed course is built from them, using any recorded fix of the day, without changing any fix; every choice in a saved course is explicit and reproducible (section 1b; `STATUS.md` C8). **Not yet enforced by the code** (audit, 7 October 2026): delete and re-post paths exist for fixes, the current course is replaced on every save, and automatic line ends and the laid-mark choice are not saved with the course.
 
 ---

@@ -15,7 +15,9 @@ SailScoring `course-cards` issues #16 to #19.
 | Physical legs | 3,759, with 3,759 matching ORC geometry rows |
 | Directed physical chords | 186 |
 | Routing waypoints | 8, plus W2 used as a turning point in 9 passages |
-| Marks used | 38 |
+| Marks used | 38 (by the card's routes) |
+| Marks in the page's snapshot | 63, every mark with a position in the Marks sheet (`STATUS.md` A40) |
+| Routes in the page's snapshot | 262: the 177 authored, plus the exact reverse of each of the 85 authored one way only |
 | Evidence | every chord carries a numeric INFOMAR result; no chord on recovered evidence |
 | Audit | `scripts/audit_workbook.py` passes all 16 checks |
 
@@ -61,7 +63,15 @@ bathymetry only validates the resulting physical chords.
 
 - **The viewer stays dumb.** It displays what the workbook says. It must never
   invent a route, substitute a mark, infer an alias, expand a passage itself, or
-  compensate for missing data. When Course 27 Dosco/Dosco was absent it correctly
+  search for or build a route. Every route it uses comes from the snapshot: the
+  workbook's authored routes and, where the workbook authors a route one way only,
+  its exact reverse, added by `make_snapshot.py` and marked reversed, never worked
+  out by the page. Where the snapshot has no route between two points of a course,
+  the leg is measured straight and never refused; where it touches a Course Card
+  mark it is labelled "not depth-checked". A routing waypoint the RO chooses for a
+  course is the RO's choice: the legs either side are measured straight, say
+  "routed via <RW> (RO-chosen)", and are labelled "not depth-checked" unless the
+  workbook tested that exact chord. When Course 27 Dosco/Dosco was absent it correctly
   showed "No matching Numbered Legs rows found" instead of hiding the defect.
   **Two stated exceptions**, both of position only, both keeping the card's route
   and labelling the measured hop "not depth-checked": a recorded start or finish
@@ -217,8 +227,9 @@ footer "© 2026 Pat Tanner ORC Ireland".
   every fix loaded for the race selected, or for all races, for the RO or scorer to
   spot one out of place. It is one element shown in both views (at the bottom of Race
   view). Its closed line counts recorded fixes (RIB fixes and the committee boat
-  recorded with this page's button) and other marks (typed and pasted positions)
-  apart, e.g. "5 recorded fixes · 49 other marks"; "2 fixes and marks to check" is two
+  recorded with this page's button) and other marks (typed and pasted positions, and
+  the Course Card marks in a course of the race, shown hollow and dashed in the sea
+  colour and labelled "Course Card"; a card mark is never a recorded fix) apart, e.g. "5 recorded fixes · 49 other marks"; "2 fixes and marks to check" is two
   fixes or marks with at least one flag each ("1 fix or mark to check" for one), however
   many flags they have; a note about the race as a whole (no
   committee boat of its own) is counted apart as a race note. Shape and colour give the race;
@@ -372,7 +383,17 @@ footer "© 2026 Pat Tanner ORC Ireland".
   and the committee-boat button. The view never switches by itself.
 - *Legs*: between two card marks the card's own route is used, passages included,
   with distances and bearings from the workbook; the page never searches for a
-  route. With a recorded start line, the leg from it keeps the card's route from
+  route. A route the workbook authors one way only is used in reverse from the
+  snapshot ("card route reversed, via RW_…", or "card route reversed" when direct):
+  the same points in reverse order and the same distances, each bearing from the
+  positions with Vincenty. Where the snapshot has no route, the leg is measured
+  straight, labelled "not depth-checked" if it touches a Course Card mark. A routing
+  waypoint the RO places between two marks makes one leg of its physical legs
+  ("routed via RW_… (RO-chosen)"); a physical leg that is exactly a chord the
+  workbook tested takes the workbook's figures, any other is labelled "not
+  depth-checked". The leg table and the note above the SailScoring lines name the
+  Course Card marks of the course: "E4, No.10: position from the course card, not a
+  fix recorded today". With a recorded start line, the leg from it keeps the card's route from
   the card's start point, and only the first hop (line → first waypoint, or → the
   first mark on a direct leg) is measured from the line, labelled "from the
   recorded line, not depth-checked"; the finish leg to a recorded line likewise.
@@ -408,7 +429,36 @@ footer "© 2026 Pat Tanner ORC Ireland".
   the dumb-viewer rule above. Harp, Ringabella, Dosco and EF4 are permanently
   moored, not laid: they always use the workbook position, and only their published
   coordinates are in question. The Marks sheet Type says which is which.
-- *Outputs* (section 6): a WhatsApp message of the course, legs and positions; the
+- *Fixed marks* (section 3, folded, closed on every load): one button per mark with a
+  position in the Marks sheet, under its Type (`STATUS.md` A40). The Course Card
+  headings first, in sheet order, then "Club laid mark", then one "Routing waypoints"
+  heading for all eight. A tap adds the mark to the race being built, at its card
+  position, and a row with no side at the end of the course; the side button sets P
+  or S, and a second rounding is tapped from its chip. Only a tapped mark is added to
+  the device, never every mark at once (the magnetic variation is worked out from
+  the marks loaded). Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
+  rows (Grassy Mid keeps its card warning); Curlane, Dutchman and White Bay read
+  "laid mark" and follow the laid-mark rules below; a routing waypoint reads
+  "routing waypoint", has no side button, has ↓ as well as ↑ and ✕ to move it to its
+  place in the course, and is not shown or counted in Check recorded marks, where the
+  as-sailed course is drawn through it with a small dot. Marks of an imported card
+  course get the same labels. A saved row naming a card mark is rebuilt from the
+  card on every device; a name not in the card shows "Mark missing". "Read marks
+  from a WhatsApp message" is unchanged: a pasted line is a pasted position, whatever
+  its name (aliases and card marks from pasted lines are for `STATUS.md` A43).
+- *Far positions* (`STATUS.md` A45): a typed or pasted position more than 8 nm from
+  the map centre is left out of the zoom of both Check recorded marks views and not
+  drawn, with a line under the view ("1 position more than 8 nm away is not drawn:
+  FarT (614 nm), see the list below"); it stays in the list with its warning and
+  counts under "to check". In the course sketch and chart a leg to or from it is
+  drawn to the edge of the frame with an arrow and "FarT, 614 nm, off the plot". The
+  leg table, the WhatsApp text and Copy for Sail Scoring keep the real figures.
+  Recorded fixes are always drawn, however far away.
+- *Outputs* (section 6): a WhatsApp message, a clean course list for competitors
+  (the heading, the course line, the numbered marks, each leg with its bearing,
+  distance and TWA, the total and the positions; no line, squaring or wind
+  analysis, no route notes or labels, and no routing waypoints, a leg through one
+  reading mark to mark with its whole distance); the
   **leg table for SailScoring**; and **Copy for Sail Scoring**, both below.
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
@@ -490,7 +540,9 @@ ends, recorded times, fixes, recorders, devices and keys are not exported.
     scripts/geo.py            Vincenty, UTM 29N, GeoTIFF sampling. No GIS stack needed.
     scripts/audit_workbook.py Read-only pre-release audit. Exits non-zero on failure.
     scripts/test_chords.py    Chord bathymetry against the INFOMAR grids; writes evidence text.
-    scripts/make_snapshot.py  Builds the JSON the race officer page bundles.
+    scripts/make_snapshot.py  Builds the JSON the race officer page bundles; refuses a duplicate mark name, two names
+                              the same once capitals, spaces and punctuation are ignored, or a name read as a
+                              committee boat, pin or finish.
     scripts/rebuild_page.py   Embeds that snapshot in the race officer page and bumps PAGE_VERSION.
     scripts/xlsx_edit.py      Surgical workbook edits, and a cell-level diff of two workbooks.
     scripts/build_test.py     Builds the parallel TEST copy of the RO page and marks.php (see below).
@@ -580,6 +632,11 @@ added or dropped must update the test. Needs no PHP and no browser.
 Static guards also check that the "Copy for Sail Scoring" button appears once, that
 the leg table for SailScoring, its line format and its copy code are unchanged, and
 that the copy takes its legs from the leg table's function and changes nothing.
+For 2026-10-06.30 (`STATUS.md` A40, A45) they check that the snapshot has all 63
+marks, its authored routes and courses are exactly v3.19's plus 85 exact reverses,
+no Position Source, Source URL or Verification / Use text is in the page, Copy for
+Sail Scoring and the SailScoring lines are unchanged from .29, and the WhatsApp text
+carries no analysis, route notes or labels.
 
 ## Deploying the pages
 

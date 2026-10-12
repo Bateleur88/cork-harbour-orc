@@ -32,7 +32,7 @@ Guidance for Claude Code in this repository (`cork-harbour-orc`): a race-day wor
 
 - Never edit or overwrite the recorded marks (source observations). There is no separate original course: the recorded marks are the original (`STATUS.md` A2, A7). The as-sailed course is built from them, using any recorded fix of the day, without changing any fix; a saved course records every choice and must be reproducible from the recorded marks plus those choices (A27, C8). The intended saved-course workflow (Draft, Decisions, Accepted) is in `STATUS.md` A4. It is intended, not decided: do not build it unless Pat asks. Not yet enforced by the code; see `STATUS.md`.
 - The review decisions UI was taken out of the page (A1, C7 withdrawn); do not bring it back unless Pat asks. `marks.php` keeps the decisions endpoint, append-only and unused.
-- The viewer stays dumb: it shows what the workbook says and never invents a route, substitutes a mark or infers an alias.
+- The viewer stays dumb: it shows what the workbook says and never invents a route, substitutes a mark or infers an alias. It never searches for or builds a route: reversed routes come from the snapshot build, not the page; with no route in the snapshot a leg is measured straight and labelled (README).
 - Never re-save the master workbook through a library; use `scripts/xlsx_edit.py`.
 - Never rename `RW_Refinery_North` or `RW_West_of_Refinery` back; never conflate No.7/Corkbeg with Dosco/Corkbeg or EF1 with EF4; never restore the pre-v2.50 E4 coordinate; never deduplicate repeated occurrences of a logical pair within a course.
 - Do not rewrite proven behaviour (especially the RIB offline queue and service worker) merely to make the code more generic.
