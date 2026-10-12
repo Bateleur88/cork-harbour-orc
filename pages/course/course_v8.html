@@ -395,7 +395,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.31';
+const PAGE_VERSION='2026-10-06.32';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -536,9 +536,10 @@ function bank(){
   const here=S.marks.filter(m=>m.race===S.race);
   const names=new Set(here.map(m=>m.name.toLowerCase()));
   const carried={};
-  // a Course Card mark is not carried: in a later race the RO taps it from the Fixed marks list (Pat, 12 October 2026);
-  // recorded fixes, typed positions, laid marks and routing waypoints are carried as before
-  S.marks.filter(m=>m.race<S.race&&!isCourseCard(m)).forEach(m=>{const k=m.name.toLowerCase();if(names.has(k))return;
+  // a Course Card mark or a routing waypoint is not carried: in a later race the RO taps it from the Fixed marks list
+  // (Pat, 12 October 2026), so a row can never name another race's card mark; recorded fixes, typed positions and laid
+  // marks are carried as before
+  S.marks.filter(m=>m.race<S.race&&!isCourseCard(m)&&!isRwCard(m)).forEach(m=>{const k=m.name.toLowerCase();if(names.has(k))return;
     const c=carried[k]; if(!c||m.race>c.race||(m.race===c.race&&m.fix>c.fix))carried[k]=m;});
   return Object.values(carried).sort((a,b)=>a.race-b.race).concat(here);
 }
@@ -671,7 +672,9 @@ function isLaidCard(m){return !!(m&&m.card&&CARD.marks[m.card]&&CARD.marks[m.car
    (STATUS A43). The paste box and the typing box refuse such a name and store nothing: a card mark is tapped under Fixed
    marks (Pat, 12 October 2026). Returns the card's own name, or ''. */
 function cardNameOf(nm){const k=norm(nm);return k?Object.keys(CARD.marks).find(x=>!CARD.marks[x].laid&&norm(x)===k)||'':'';}
-function cardRefusal(c){return c+' is on the course card: tap it under Fixed marks. If the buoy has moved, give it a different name, such as '+c+' moved.';}
+function cardRefusal(c){const m=CARD.marks[c]||{}, point=m.rw||m.type==='Start/finish modelling point';
+  return c+' is on the course card: tap it under Fixed marks. '+(point?'If you need a different point, give it a different name.':
+    'If the buoy has moved, give it a different name, such as '+c+' moved.');}
 function isRwCard(m){return !!(m&&m.card&&!m.virtual&&CARD.marks[m.card]&&CARD.marks[m.card].rw);}
 function isCourseCard(m){const c=m&&m.card&&!m.virtual&&CARD.marks[m.card];return !!(c&&!c.laid&&!c.rw);}
 function cardKind(m){return isRwCard(m)?'routing waypoint':isLaidCard(m)&&!m.virtual?'laid mark':isCourseCard(m)?'Course Card':'';}
@@ -720,8 +723,17 @@ function fixSrc(m){if(!m||m.card)return '';
   return m.race!==S.race?' (R'+m.race+(m.time?' '+m.time:'')+')':m.fix>1?' (fix '+m.fix+')':'';}
 function laidTag(m){return m&&m.laidSt?(m.atFix?' (RIB fix '+m.laidSt.use.time+')':' (planning position)'):'';}
 function laidSrc(m){const u=m.laidSt.use;return u?'RIB fix '+fixLabel(u,m.race):'planning position until laid';}
+/* What a laid mark's position comes from, in words, for the laid-mark notice: a RIB fix with its time, race (when earlier)
+   and recorder (or phone) when known, a pasted position kept on this device only, a typed position, or the planning
+   position. (A typed position is never used for a laid mark today: ribFix leaves it out.) */
+function laidSrcText(u,race){
+  if(!u)return 'its planning position (the card position)';
+  if(isPasted(u))return 'a pasted position'+(u.time?' ('+u.time+')':'')+', kept on this device only';
+  if(isTypedPos(u))return 'a typed position'+(u.time?' ('+u.time+')':'');
+  const who=u.recorder||(u.device?'phone '+(phoneLetters()[u.device]||''):'');
+  return 'the RIB fix'+(u.time?' recorded at '+u.time:'')+(u.race<race?' in Race '+u.race:'')+(who?' by '+who:'')+(accOf(u)?' ('+accOf(u)+')':'');}
 function laidCur(m){const u=m.laidSt.use;
-  return {src:u?fkey(u):'card',lat:m.lat,lon:m.lon,label:u?'the RIB fix at '+fixLabel(u,m.race):'the card position'};}
+  return {src:u?fkey(u):'card',lat:m.lat,lon:m.lon,label:laidSrcText(u,m.race)};}
 function laidPicker(m){
   const st=m.laidSt, pool=st.fixes.concat(st.near.filter(x=>fkey(x)===st.sel));
   const opt=(v,t)=>'<option value="'+esc(v)+'"'+(st.sel===v?' selected':'')+'>'+esc(t)+'</option>';
@@ -804,9 +816,12 @@ function laidNotice(pts,total,legs){
     const oldPts=pts.map(p=>{const c=p.laidSt&&changed[p.laidSt.key];return c?Object.assign({},p,{lat:c.ack.lat,lon:c.ack.lon,atFix:c.ack.src!=='card'}):p;});
     let old=0; for(let i=0;i<oldPts.length-1;i++)if(!oldPts[i].missing&&!oldPts[i+1].missing){const g=(legs||[])[i];
       old+=(g&&g.ro?roLeg(oldPts[i],g.route,oldPts[i+1]):legGeom(oldPts[i],oldPts[i+1])).r.nm;}
-    keys.forEach(k=>{const c=changed[k];
-      bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was '+esc(c.ack.label)+'. It has moved '+Math.round(rhumb(c.ack,c.cur).m)+' m, so the legs to and from it have changed.</p>');});
-    bits.push('<p class="note flag">Course '+old.toFixed(2)+' → '+total.toFixed(2)+' nm. <button data-a="ack">OK</button></p>');
+    keys.forEach(k=>{const c=changed[k], d=Math.round(rhumb(c.ack,c.cur).m);
+      // the earlier source in today's words, from the fix it named where that fix is still loaded
+      const was=c.ack.src==='card'?laidSrcText(null):(()=>{const x=S.marks.find(y=>fkey(y)===c.ack.src);return x?laidSrcText(x,c.p.race):c.ack.label;})();
+      bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was at '+esc(was)+'. '+
+        (d?'It has moved '+d+' m, so the legs to and from it have changed.':'It has not moved, so no leg has changed.')+'</p>');});
+    bits.push('<p class="note flag">Course '+(old.toFixed(2)===total.toFixed(2)?total.toFixed(2)+' nm, unchanged.':old.toFixed(2)+' → '+total.toFixed(2)+' nm.')+' <button data-a="ack">OK</button></p>');
   }
   sugg.forEach(({p,x})=>bits.push('<p class="note">Possible '+esc(p.card)+' fix: "'+esc(x.name)+'" '+esc(fixLabel(x,p.race))+
     '. Not used, because the name is not exactly '+esc(p.card)+'.<br><button data-a="use" data-k="'+esc(p.laidSt.key)+'" data-f="'+esc(fkey(x))+'">Use this fix</button>'+
@@ -1299,7 +1314,9 @@ const BOAT_M=10;
 /* Magnetic variation (°W), worked out silently for Irish waters from the marks' position and today's date.
    Fitted to WMM values for 2026 (Dublin 1.55°W, Cork 1.88°W), easing about 0.2° a year. Good to about ±0.5°. */
 function varW(){
-  const ms=S.marks.length?S.marks:[{lat:51.8,lon:-8.3}];
+  // a typed or pasted position more than FAR_NM away (farNm, STATUS A45) is left out: a flagged position must never change
+  // anyone's °M figures (Pat, 12 October 2026)
+  const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];
   const lon=ms.reduce((a,m)=>a+m.lon,0)/ms.length;
   const now=new Date(), yr=now.getFullYear()+now.getMonth()/12;
   return Math.max(0,1.55+0.15*(-6.26-lon)-0.2*(yr-2026));
@@ -1655,15 +1672,16 @@ function buildLegs(){
   lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:cardEndMode('s')==='card'};
   plot(pts,plotLines);
   buildShift(cs);
-  const head=[series.name,S.date].filter(Boolean).join(' – ')||'Course';
+  // the date is the Race day in section 1, whether or not that day has fixes and whatever was loaded or pasted before
+  const head=[series.name,$('day').value?longDate($('day').value):''].filter(Boolean).join(' – ')||'Course';
   // the WhatsApp text: a clean course list for competitors (STATUS A40). Routing waypoints are left out of the course line,
   // the mark list and the positions; the line, squaring and wind analysis stay on the page only
   const wRows=L.rows.filter(e=>!isRwCard(markById(e.id)));
   setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(wRows)+'\n'+wRows.map((e,i)=>{const m=markById(e.id);
       if(!m)return (i+1)+'. mark missing'+(e.side?' ('+e.side+')':'');
-      return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+laidTag(m)+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
+      return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
     (ml?'\nTotal of measured legs '+total.toFixed(2)+' nm ('+ml+')':'\nTotal '+total.toFixed(2)+' nm')+'\n\n'+
-    [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+laidTag(m)+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
+    [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
 }
 /* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
    The note is shown above the block and is not part of what is copied. */
@@ -2389,6 +2407,8 @@ async function pull(quiet){
   }
 }
 $('day').value=todayISO();
+// the WhatsApp heading follows the Race day box at once (buildLegs), before the day is loaded
+$('day').addEventListener('change',()=>render());
 $('pull').onclick=()=>pull(false);
 setInterval(()=>{if(!document.hidden&&pullOk&&$('day').value===todayISO())pull(true);},30000);
 
@@ -2822,8 +2842,9 @@ $('read').onclick=()=>{
   const byRace=[...new Set(got.map(m=>m.race))].map(r=>{const l=got.filter(m=>m.race===r);
     return nOf(l.length,'pasted position','pasted positions')+' read for Race '+r+': '+l.map(m=>m.name).join(', ');});
   const far=got.map(m=>({m,d:farNm(m)})).filter(x=>x.d).map(x=>' ⚠ '+x.m.name+' (Race '+x.m.race+') is '+farText(x.d)+'.');
-  $('readStatus').textContent=(n?byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join(''):
-    refused.length?'':'No positions found. Check the message was pasted whole.')+(refused.length?(n?' ':'')+refused.map(cardRefusal).join(' '):'');
+  const said=(n?[byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join('')]:
+    refused.length?[]:['No positions found. Check the message was pasted whole.']).concat(refused.map(cardRefusal));
+  $('readStatus').innerHTML=said.map(esc).join('<br>');   // one line each: the positions read, then each refused name
   $('readStatus').className='status '+(n&&!far.length&&!refused.length?'ok':'err');
   // the message stays in the box while a line was refused, so it can be put right
   if(n){if(!refused.length)$('paste').value='';const r=races();if(!r.includes(S.race))S.race=r[0];}

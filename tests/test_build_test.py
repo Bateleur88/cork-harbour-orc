@@ -63,6 +63,12 @@ altered in ways it must refuse and checks that it writes nothing:
                 a routing waypoint with nothing on one side is warned on its row, belongs to no leg and makes Copy for
                 Sail Scoring INCOMPLETE (ccDoc changes by that one line only); the laid-mark notice's earlier total
                 takes a leg through RO-chosen waypoints with roLeg. Guards, not proof: no JavaScript is run
+  9  .32        static guards for the follow-ups after Pat's test of 2026-10-06.31-test (STATUS A40, A45): the WhatsApp
+                heading's date is the Race day box (never S.date) and follows it at once; routing waypoints are not
+                carried either; one line per refused name; the refusal's second sentence by kind (a buoy, or a point:
+                Grassy Mid and the routing waypoints); no "(planning position)" or "(RIB fix …)" in the WhatsApp text;
+                the laid-mark notice names each source in words and says when nothing moved; a far typed or pasted
+                position is left out of the magnetic variation. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -419,13 +425,14 @@ def t8_fixes31_guards():
     import build_test
     code = build_test.strip_comments(page)
     g = lambda name, ok: report('8 .31: ' + name, ok)
-    g('1 Course Card marks are not carried into later races', 'S.marks.filter(m=>m.race<S.race&&!isCourseCard(m))' in fn_body(code, 'function bank('))
+    g('1 Course Card marks are not carried into later races', 'S.marks.filter(m=>m.race<S.race&&!isCourseCard(m)' in fn_body(code, 'function bank('))
     rf = fn_body(code, 'function renderFix(')
     g('2 every race drawn gets its switch', 'all.map(m=>m.race).concat(cardsIn.map(m=>m.race),lastPlot&&lastPlot.pts.length>1?[r]:[])' in rf
       and rf.find('const cardsIn=') < rf.find('const days='))
     g('3 cardNameOf: own names only, laid marks excepted, compared as norm',
       "function cardNameOf(nm){const k=norm(nm);return k?Object.keys(CARD.marks).find(x=>!CARD.marks[x].laid&&norm(x)===k)||'':'';}" in code)
-    g('3 the refusal message', "c+' is on the course card: tap it under Fixed marks. If the buoy has moved, give it a different name, such as '+c+' moved.'" in code)
+    g('3 the refusal message', "c+' is on the course card: tap it under Fixed marks. '" in code and
+      "'If the buoy has moved, give it a different name, such as '+c+' moved.'" in code)
     rp = fn_body(code, 'function readPaste(')
     g('3 every pasted line goes through the refusal', 'const add=m=>{const c=cardNameOf(m.name);if(c){' in rp and rp.count('add({') == 3
       and 'push(m)' not in rp.replace('m.pasted=true;push(m);added.push(m);', ''))
@@ -444,6 +451,33 @@ def t8_fixes31_guards():
       'g&&g.ro?roLeg(oldPts[i],g.route,oldPts[i+1])' in ln and 'laidNotice(pts,total,L.legs);' in code)
 
 
+def t9_fixes32_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('9 .32: ' + name, ok)
+    bl = fn_body(code, 'function buildLegs(')
+    g('1 the WhatsApp date is the Race day box, never S.date',
+      "const head=[series.name,$('day').value?longDate($('day').value):''].filter(Boolean).join(' – ')||'Course';" in bl
+      and 'S.date' not in bl)
+    g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>render());" in code)
+    g('2 routing waypoints are not carried either', 'm.race<S.race&&!isCourseCard(m)&&!isRwCard(m)' in fn_body(code, 'function bank('))
+    g('4 one line per refused name', "concat(refused.map(cardRefusal));" in code and "$('readStatus').innerHTML=said.map(esc).join('<br>');" in code)
+    cr = fn_body(code, 'function cardRefusal(')
+    g('5 the refusal by kind: a buoy, or a point (routing waypoint, Grassy Mid)',
+      "point=m.rw||m.type==='Start/finish modelling point'" in cr and "'If you need a different point, give it a different name.'" in cr
+      and "'If the buoy has moved, give it a different name, such as '+c+' moved.'" in cr)
+    g('6, 7 no laid-mark tag in the WhatsApp text', 'laidTag(' not in bl)
+    g('8 the laid-mark notice names each source in words',
+      "label:laidSrcText(u,m.race)" in code and "'a pasted position'" in code and "', kept on this device only'" in code
+      and "'its planning position (the card position)'" in code and "'the RIB fix'" in code and "'the RIB fix at '" not in code)
+    ln = fn_body(code, 'function laidNotice(')
+    g('8 the notice says when nothing moved', "'It has not moved, so no leg has changed.'" in ln and "' nm, unchanged.'" in ln)
+    g('9 a far typed or pasted position is left out of the magnetic variation',
+      'const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];' in fn_body(code, 'function varW('))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -455,6 +489,7 @@ def main():
         t6_a38_guards()
         t7_a40_guards()
         t8_fixes31_guards()
+        t9_fixes32_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
