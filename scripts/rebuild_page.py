@@ -29,7 +29,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from make_snapshot import build, dumps  # noqa: E402
+from make_snapshot import SnapshotError, build, dumps  # noqa: E402
 
 CARD = 'const CARD='
 VERSION = re.compile(r"const PAGE_VERSION='(\d{4}-\d{2}-\d{2})\.(\d+)';")
@@ -91,7 +91,10 @@ def main():
     eol = '\r' if line.endswith('\r') else ''
     old = json.loads(line[len(CARD):].rstrip('\r').rstrip(';'))
 
-    snap = build(a.workbook)
+    try:
+        snap = build(a.workbook)
+    except SnapshotError as e:
+        sys.exit(f'refused: {e}; nothing written')
     diff = changes(old, snap)
     if [p for p, _, _ in diff] in ([], ['/meta/generated']):
         print(f'{a.page}: snapshot already current for {snap["meta"]["source"]}; page unchanged')

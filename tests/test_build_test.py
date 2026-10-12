@@ -47,6 +47,15 @@ altered in ways it must refuse and checks that it writes nothing:
                 removed), the line under Get latest marks splits recorded fixes and typed positions, and a pasted
                 position's detail says it is a chip of its race. 2026-10-06.29: so does a typed position's, and no
                 detail says "Not offered as a chip". Guards, not proof: no JavaScript is run
+  7  A40, A45   static guards for fixed marks and far positions (2026-10-06.30; STATUS A40, A45): the embedded snapshot
+                has all 63 marks of the Marks sheet, its authored routes and its courses are exactly v3.19's (frozen
+                hashes), plus exactly 85 reversed routes, each the reverse of a one-way authored route; no Position
+                Source, Source URL or Verification / Use text is in the page; Copy for Sail Scoring (ccDoc, setCC) and
+                the SailScoring lines (setSS) are unchanged from 2026-10-06.29; card marks are added only where a mark
+                is tapped, imported or named by a row (never every mark at once); the page never reverses a route itself;
+                the Fixed marks fold is there, closed; the WhatsApp text has no analysis, wind, route notes or labels;
+                the approved wording is present; far positions are named under Check recorded marks and drawn "off the
+                plot". Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -330,6 +339,68 @@ def t3_allowed(tmp):
         report('3 allowed: ' + name, r.returncode == 0, r.stdout.strip()[:200])
 
 
+# v3.19's routes and courses in the embedded snapshot, as json.dumps(..., sort_keys=True, separators=(',', ':')) hashes:
+# a later workbook may only add reversed routes (STATUS A40); anything else changing them must update these on purpose
+V319_PAIRS = '89f144a36d7ae872dc8e695ba690f5de18342cb9975094efb14271369dee056e'
+V319_COURSES = '28821f64e2df8de1f55bf2290dea6e28169421dc3c8ee55d6a634d76c80fe9cd'
+# ccDoc, setCC and setSS as in 2026-10-06.29 (comments stripped, as fn_body reads them)
+CODE_29 = {'function ccDoc(': '666634c21f5354bc85f15a22e3453aee1ce92b5dd45179a60070314a57c4a9ea',
+           'function setCC(': '14f562a2cf731e9dda272f7e6d6cd0dbb4bddec45c758a1b30900257d8a371d5',
+           'function setSS(': '9ab51a1f6b63f8803874377372b93245cb3fcfbe69470713d11b221f411d47ab'}
+
+
+def t7_a40_guards():
+    import hashlib
+    import json
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('7 A40: ' + name, ok, detail)
+    h = lambda x: hashlib.sha256(json.dumps(x, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    card = json.loads(re.search(r'^const CARD=(\{.*\});\s*$', page, re.M).group(1))
+    g('the snapshot has all 63 marks of the Marks sheet', len(card['marks']) == 63, str(len(card['marks'])))
+    auth = {k: v for k, v in card['pairs'].items() if not v.get('rev')}
+    rev = {k: v for k, v in card['pairs'].items() if v.get('rev')}
+    g("authored routes exactly v3.19's", h(auth) == V319_PAIRS)
+    g("courses exactly v3.19's", h(card['courses']) == V319_COURSES)
+    g('exactly 85 reversed routes', len(rev) == 85, str(len(rev)))
+
+    def mirror(k):
+        a, b = k.split('|')
+        f = auth.get(f'{b}|{a}')
+        if not f or f'{b}|{a}' in rev:
+            return False
+        fwd = [b] + [x['to'] for x in f['segs']]
+        back = [a] + [x['to'] for x in rev[k]['segs']]
+        return back == fwd[::-1] and [x['nm'] for x in rev[k]['segs']] == [x['nm'] for x in f['segs']][::-1]             and rev[k]['nm'] == f['nm'] and k not in auth
+    g('each reversed route is the exact mirror of a one-way authored route', all(mirror(k) for k in rev))
+    g('every one-way authored route has its reverse',
+      all('|'.join(k.split('|')[::-1]) in card['pairs'] for k in auth))
+    low = page.lower()
+    g('no Position Source, Source URL or Verification / Use text in the page',
+      not any(x in low for x in ('eoceanic', 'position source', 'source url', 'verification / use', 'reference mark only')))
+    for head, want in CODE_29.items():
+        got = hashlib.sha256(fn_body(code, head).encode()).hexdigest()
+        g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29', got == want)
+    g('card marks are added only by tap, import or a saved row (four callers)', code.count('pushCardMark(') == 5,
+      str(code.count('pushCardMark(')))
+    g('the page never reverses a route itself', not re.search(r"split\('\|'\)\.reverse\(\)|segs\.slice\(\)\.reverse", code))
+    g('the Fixed marks fold is there once, closed', page.count('id="fixedWrap"') == 1 and
+      '<details class="movefix" id="fixedWrap">' in page and code.count('fixedInit();') == 1)
+    bl = fn_body(code, 'function buildLegs(')
+    g('the WhatsApp text has no analysis, wind, route notes or labels',
+      "an.txt.join" not in bl and "'\nWind '" not in bl and "(via?' ('+via.trim()" not in bl and "(fixNote?' ['" not in bl
+      and "wRows=L.rows.filter(e=>!isRwCard(markById(e.id)))" in bl)
+    for w in ("position from the course card, not a fix recorded today.", "'not depth-checked'", "'card route reversed'",
+              "' (RO-chosen)'", "'routing waypoint'", "'laid mark'", "'Course Card'", "' nm, off the plot'"):
+        g('approved wording: ' + w, w in code)
+    g('a routing waypoint row has no side button and has ↓', "(rw?'':'<button data-a=\"side\"" in code and 'data-a="down"' in code
+      and "b.dataset.a==='down'" in code)
+    g('far positions are named under Check recorded marks', page.count('id="fxFar"') == 1
+      and "$('fxFar').textContent=" in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -339,6 +410,7 @@ def main():
         t4_save_guards()
         t5_copy_guards()
         t6_a38_guards()
+        t7_a40_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
