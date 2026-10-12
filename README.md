@@ -434,9 +434,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   headings first, in sheet order, then "Club laid mark", then one "Routing waypoints"
   heading for all eight. A tap adds the mark to the race being built, at its card
   position, and a row with no side at the end of the course; the side button sets P
-  or S, and a second rounding is tapped from its chip. A Course Card mark is not
-  carried into a later race's chips: there it is tapped from the list again (recorded
-  fixes, typed positions, laid marks and routing waypoints are carried as before).
+  or S, and a second rounding is tapped from its chip. A Course Card mark or a
+  routing waypoint is not carried into a later race's chips: there it is tapped from
+  the list again, so a row never names another race's card mark (recorded fixes,
+  typed positions and laid marks are carried as before).
   Only a tapped mark is added to
   the device, never every mark at once (the magnetic variation is worked out from
   the marks loaded). Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
@@ -457,8 +458,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
   mark's own name (a fixed mark, Grassy Mid or a routing waypoint; capitals, spaces
   and punctuation ignored, no other names) and store nothing: "E4 is on the course
   card: tap it under Fixed marks. If the buoy has moved, give it a different name,
-  such as E4 moved." The other lines of a pasted message are read as before, and
-  the message stays in the box. Laid marks are not refused (aliases are for
+  such as E4 moved." For Grassy Mid and the routing waypoints, which are not buoys,
+  the second sentence is "If you need a different point, give it a different name."
+  Each refused name gets a line of its own. The other lines of a pasted message are
+  read as before, and the message stays in the box. Laid marks are not refused (aliases are for
   `STATUS.md` A43). Under All races in Check recorded marks every race with anything
   drawn has its switch, Course Card marks included.
 - *Far positions* (`STATUS.md` A45): a typed or pasted position more than 8 nm from
@@ -468,12 +471,16 @@ footer "© 2026 Pat Tanner ORC Ireland".
   counts under "to check". In the course sketch and chart a leg to or from it is
   drawn to the edge of the frame with an arrow and "FarT, 614 nm, off the plot". The
   leg table, the WhatsApp text and Copy for Sail Scoring keep the real figures.
-  Recorded fixes are always drawn, however far away.
+  Recorded fixes are always drawn, however far away. Such a position is left out of
+  the magnetic variation, which the page works out from the marks loaded, so a
+  flagged position never changes anyone's °M figures.
 - *Outputs* (section 6): a WhatsApp message, a clean course list for competitors
-  (the heading, the course line, the numbered marks, each leg with its bearing,
+  (the heading, with the date of the Race day in section 1 whatever was loaded or
+  pasted before, the course line, the numbered marks, each leg with its bearing,
   distance and TWA, the total and the positions; no line, squaring or wind
-  analysis, no route notes or labels, and no routing waypoints, a leg through one
-  reading mark to mark with its whole distance); the
+  analysis, no route notes or labels, no routing waypoints, a leg through one
+  reading mark to mark with its whole distance, and a laid mark by its name only,
+  its planning-position or RIB-fix status staying on the page); the
   **leg table for SailScoring**; and **Copy for Sail Scoring**, both below.
 - *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
   leaves the page as a reload would; nothing is sent to the server, and marks and
