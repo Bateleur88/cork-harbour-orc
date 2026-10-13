@@ -325,6 +325,16 @@ footer "© 2026 Pat Tanner ORC Ireland".
   and, for a committee boat or Start Pin, "after this start" where it applies. The
   choice is saved in `lineSel` as before. *auto* keeps its own rule and never picks a
   later race's fix. The fix itself is never changed.
+- *Choices saved with the course* (`STATUS.md` A10; Pat, 13 October 2026): when a
+  course is saved, a line end on *auto* saves the fix auto picked then (`lineAuto` in
+  the start's record), and a laid mark's position box saves its choice, on *auto* the
+  fix auto picked then (`laid` in the race's `_starts|N` record, one per race as the
+  box is). So a saved course rebuilds the same on every device and every day. When a
+  newer fix arrives later, the course row says "A newer fix: White Bay at 13:45 – use
+  it?" (for a line end, "A newer fix: Committee boat R1 13:58 … – use it?") and nothing
+  changes until the RO taps "Use it". Auto that finds no fix yet saves nothing, so a
+  mark not yet laid follows its first fix until the course is next saved. Only fixes
+  saved on the server are saved as choices; `marks.php` stores the fields unchanged.
 - *Course chart*: the Chart draws what the Sketch draws, from the same data: the
   legs in order with arrowheads (a leg that follows a card passage goes through the
   card's waypoints, where the sketch draws it straight), the start and finish lines
@@ -392,8 +402,14 @@ footer "© 2026 Pat Tanner ORC Ireland".
   name and position is used instead, and the page says so (`STATUS.md` A47). A pasted
   line matching a position already saved for that race (same name and position) makes
   no device-only chip: the reader says "Curlane (Race 3) is already in the race record
-  with the same position". A race shows every start that has a saved course, even one
-  added with no classes ticked (such a start is not saved as a start group). A typed
+  with the same position". A pasted line with no time of its own asks for the time on
+  the water when it is saved to the race record, and that time is saved (Cancel saves
+  nothing); a line with its own time keeps it. A race shows every start that has a
+  saved course; from PAGE_VERSION 2026-10-06.35 a start added with no classes ticked is
+  saved as a start group too (a race with more than three starts is saved even with no
+  classes), and a race's first + Start adds a start after those shown. What earlier
+  actions said (sent, withdrawn, already in the race record, a card imported) is
+  cleared when a different day is loaded. A typed
   position can be withdrawn or corrected from its detail in Check recorded marks
   ("Withdraw…", "Correct position…", A46). On another device it matches a pasted position with the same race and
   name, if that device has one (decided by Pat 12 October 2026), and otherwise shows as
@@ -510,8 +526,9 @@ footer "© 2026 Pat Tanner ORC Ireland".
   first leg (the document's anchor) for the race date, so the two agree to about
   0.01°.
 - *Holding back a broken course* (section 6): while the course has a missing mark, a
-  leg not measured (a routing waypoint with nothing on one side) or a typed or pasted
-  position more than 8 nm from the map centre, or while the Race day box shows a day
+  leg not measured (a routing waypoint with nothing on one side), a leg shorter than
+  50 m (flagged "two marks at nearly the same position" in the leg table) or a typed or
+  pasted position more than 8 nm from the map centre, or while the Race day box shows a day
   that is not the one loaded, a red line above the Send buttons says so ("This course
   has a missing mark: fix it before sending to competitors."), and "Pick a chat in
   WhatsApp", Share and Copy text each ask "Send anyway?" first. A Race day changed but
@@ -756,6 +773,10 @@ other `record-` cache on the site, which would remove the live page's offline co
     python scripts/build_test.py        ->  build/test/   (ignored by git)
     build/test/course-test/index.html   ->  /course-test/index.html
     build/test/marks-test/marks.php     ->  /marks-test/marks.php   (unchanged copy)
+
+`BUILD.txt` names the source commit and, for each file, where it came from: the
+committed file and its commit only when it is tracked and unchanged, otherwise its
+path, "outside the repository", "not tracked" or "uncommitted changes" (`STATUS.md` A28).
 
 The test page differs from the live one only in its `key.js` tag and `MARKS_BASE`
 (`/marks-test/`), `STORE` (`test-`, so every browser storage key it writes is
