@@ -389,7 +389,11 @@ footer "© 2026 Pat Tanner ORC Ireland".
   says it is on this device only and not in the race record, with "Save to the race
   record", which saves it on the server as a typed position and moves every course row
   using it to the saved one; a typed position already saved for that race with the same
-  name and position is used instead, and the page says so (`STATUS.md` A47). A typed
+  name and position is used instead, and the page says so (`STATUS.md` A47). A pasted
+  line matching a position already saved for that race (same name and position) makes
+  no device-only chip: the reader says "Curlane (Race 3) is already in the race record
+  with the same position". A race shows every start that has a saved course, even one
+  added with no classes ticked (such a start is not saved as a start group). A typed
   position can be withdrawn or corrected from its detail in Check recorded marks
   ("Withdraw…", "Correct position…", A46). On another device it matches a pasted position with the same race and
   name, if that device has one (decided by Pat 12 October 2026), and otherwise shows as
@@ -462,8 +466,7 @@ footer "© 2026 Pat Tanner ORC Ireland".
   mistake has a × while no course row of that race uses it, which removes the chip
   (it is on the device only); fixes and typed positions never have it.
   Only a tapped mark is added to
-  the device, never every mark at once (the magnetic variation is worked out from
-  the marks loaded). Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
+  the device, never every mark at once. Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
   rows (Grassy Mid keeps its card warning); Curlane, Dutchman and White Bay read
   "laid mark" and follow the laid-mark rules below; a routing waypoint reads
   "routing waypoint", has no side button, has ↓ as well as ↑ and ✕ to move it to its
@@ -494,20 +497,30 @@ footer "© 2026 Pat Tanner ORC Ireland".
   counts under "to check". In the course sketch and chart a leg to or from it is
   drawn to the edge of the frame with an arrow and "FarT, 614 nm, off the plot". The
   leg table, the WhatsApp text and Copy for Sail Scoring keep the real figures.
-  Recorded fixes are always drawn, however far away. Such a position is left out of
-  the magnetic variation, which the page works out from the marks loaded, so a
-  flagged position never changes anyone's °M figures. The variation is for the Race
-  day selected in section 1, never today's date, so an old race opened later keeps the
-  °M figures of its day (`STATUS.md` A11).
-- *Holding back a broken course* (section 6): while the course has a missing mark or a
-  leg not measured (a routing waypoint with nothing on one side), a red line above the
-  Send buttons says so ("This course has a missing mark: fix it before sending to
-  competitors."), and "Pick a chat in WhatsApp", Share and Copy text each ask "Send
-  anyway?" first. With nothing at all to send, all three are greyed. Copy for Sail
+  Recorded fixes are always drawn, however far away. A course using such a position
+  is held back in Send, as one with a missing mark is (below).
+- *Magnetic variation* (`STATUS.md` A11): the World Magnetic Model (WMM2025, NOAA NCEI
+  and the British Geological Survey, the model Sail Scoring uses), embedded in the
+  page with its 90 official coefficient lines, worked out at one fixed point, the map
+  centre (51.82 N, 8.27 W), for the race date (the day loaded), never from the marks
+  loaded and never for today's date. So every device gives the same °M figures, and
+  an old race opened later keeps the figures of its day. At the map centre it gives
+  1.69° W for 27 September 2026 and 1.68° W for 13 October 2026, as NOAA's calculator
+  does. Sail Scoring converts an imported ORC constructed course at the start of its
+  first leg (the document's anchor) for the race date, so the two agree to about
+  0.01°.
+- *Holding back a broken course* (section 6): while the course has a missing mark, a
+  leg not measured (a routing waypoint with nothing on one side) or a typed or pasted
+  position more than 8 nm from the map centre, or while the Race day box shows a day
+  that is not the one loaded, a red line above the Send buttons says so ("This course
+  has a missing mark: fix it before sending to competitors."), and "Pick a chat in
+  WhatsApp", Share and Copy text each ask "Send anyway?" first. A Race day changed but
+  not loaded is also said in red under Get latest marks ("Race day changed to Sun 4
+  Oct 2026: tap Get latest marks"). With nothing at all to send, all three buttons
+  are greyed alike. Copy for Sail
   Scoring is unchanged: it already says INCOMPLETE.
 - *Outputs* (section 6): a WhatsApp message, a clean course list for competitors
-  (the heading, with the date of the Race day in section 1 whatever was loaded or
-  pasted before, the course line, the numbered marks, each leg with its bearing,
+  (the heading, with the date of the day loaded whatever was pasted, the course line, the numbered marks, each leg with its bearing,
   distance and TWA, the total and the positions; no line, squaring or wind
   analysis, no route notes or labels, no routing waypoints, a leg through one
   reading mark to mark with its whole distance, and a laid mark by its name only,
