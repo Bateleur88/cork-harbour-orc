@@ -360,6 +360,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 
   <h2>6 · Send</h2>
   <pre id="out" class="setupOnly"></pre>
+  <!-- a course with a missing mark or a leg not measured: held back from competitors, each button asks first (setSendWarn) -->
+  <p class="status err" id="sendWarn" role="status" hidden></p>
   <div class="row">
       <a class="btn wa" id="wa" target="_blank" rel="noopener">Pick a chat in WhatsApp</a>
     <button class="btn" id="share">Share…</button>
@@ -375,6 +377,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
        warnings beside the button are always shown, those in the document's name included -->
   <h3 class="ssHead">Course for Sail Scoring</h3>
   <div id="ccWarn" role="status" aria-live="polite"></div>
+  <!-- pasted positions the course uses: on this device only, with "Save to the race record" (pastedHtml, STATUS A47) -->
+  <div id="ccPasted"></div>
   <div class="row"><button class="btn" id="ccCopy" style="grid-column:1/-1">Copy for Sail Scoring</button></div>
   <div id="ccFallback" hidden><p class="cardnote flag">Could not copy to the clipboard: select the text below and copy it by hand.</p><textarea id="ccText" readonly aria-label="Course for Sail Scoring"></textarea></div>
 
@@ -395,7 +399,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.32';
+const PAGE_VERSION='2026-10-06.33';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -564,6 +568,72 @@ function startsUsing(r,id){return Object.keys(S.courses||{}).filter(k=>/^\d+\|\d
 // phones lettered A, B, C… in the order of their first fix of the day: the id itself is a long random string
 function phoneLetters(){const ph={};S.marks.filter(m=>!m.card&&!m.virtual).sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0))
   .forEach(m=>{if(m.device&&!ph[m.device])ph[m.device]=String.fromCharCode(65+Object.keys(ph).length);});return ph;}
+/* A46, brought forward by Pat on 13 October 2026: a typed position (on the server, accuracy 0, no phone) withdrawn or
+   corrected, from any RO device with the race key, never deleted. A confirmation first names it, its race, its time and its
+   distance from the map centre. Withdraw needs a reason and is refused while a course row or a line end uses it (here, then
+   by the server, naming each race and start). Correct keeps the name (the card-name refusal applies), asks for the
+   corrected position, and the server adds it as a new typed position and withdraws the wrong one ("replaced by
+   correction"); every course row and line end using the wrong one follows to the corrected one (sidNow), and is saved. */
+function usesOf(m){const out=[], k='s:'+m.sid;
+  Object.keys(S.courses||{}).forEach(c=>{if(!/^\d+\|\d+$/.test(c))return;const[r,st]=c.split('|').map(Number);
+    if((S.courses[c]||[]).some(e=>(typeof e==='string'?e:e.id)===m.id)||Object.values((S.lineSel||{})[c]||{}).includes(k))out.push('Race '+r+' Start '+(st+1));});
+  return [...new Set(out)];}
+function typedSays(t,ok){$('fxStatus').className='status'+(ok?' ok':' err');$('fxStatus').textContent=t;}
+async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S.pulledDay;
+  if(!m||!isTypedPos(m)||!m.sid||m.pending)return;
+  if(!day){typedSays('Load the day first.',false);return;}
+  const who=m.name+', Race '+m.race+', typed at '+(m.time||'an unknown time')+', '+rhumb(HARBOUR_CENTRE,m).nm.toFixed(1)+' nm from the map centre (51.82 N, 8.27 W)';
+  if(act==='withdraw'){
+    const u=usesOf(m);
+    if(u.length){typedSays(m.name+' cannot be withdrawn: it is used in '+u.join(', ')+'. Remove it from '+(u.length>1?'those courses':'that course')+' first.',false);return;}
+    if(!confirm('Withdraw the typed position '+who+'?\n\nIt stays in the record, marked withdrawn, and is no longer used on any device.'))return;
+    const why=String(prompt('Why is it withdrawn?')||'').trim();
+    if(!why){typedSays('Not withdrawn: a reason is needed.',false);return;}
+    try{await postFix({action:'withdraw',date:day,id:m.sid,reason:why},OUTBOX_TIMEOUT_MS);}
+    catch(e){typedSays(m.name+' not withdrawn: '+((e&&e.text)||(e&&e.message)||'no reply')+'.',false);return;}
+    fxSel='';await pull(true);typedSays(m.name+' (Race '+m.race+') withdrawn: '+why+'.',true);return;}
+  if(cardNameOf(m.name)){typedSays(cardRefusal(cardNameOf(m.name)),false);return;}
+  if(!confirm('Correct the typed position '+who+'?\n\nThe wrong one stays in the record, withdrawn as "replaced by correction", and every course row using it moves to the corrected one.'))return;
+  const txt=prompt('Corrected position for '+m.name+' (the name is kept) — e.g. 51 49.123 N 008 17.456 W',ddm(m.lat,true)+' '+ddm(m.lon,false));
+  if(!txt)return;
+  const p=parsePos(txt);
+  if(!p){typedSays('Could not read that position: nothing changed.',false);return;}
+  const nid=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  try{await postFix({action:'correct',date:day,id:m.sid,new_id:nid,lat:p.lat,lon:p.lon},OUTBOX_TIMEOUT_MS);}
+  catch(e){typedSays(m.name+' not corrected: '+((e&&e.text)||(e&&e.message)||'no reply')+'.',false);return;}
+  fxSel='';await pull(true);
+  // the rows keep their place: each now names the corrected position, and the changed courses are saved
+  Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{if(ls[w]==='s:'+m.sid)ls[w]='s:'+nid;});});
+  Object.keys(S.courses||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k)&&isDirty(k))stamp(k);});commit();
+  typedSays(m.name+' (Race '+m.race+') corrected to '+ddm(p.lat,true)+' '+ddm(p.lon,false)+'; the course rows that used it now use the corrected position.',true);}
+/* Pasted positions, Option B (STATUS A47, Pat 13 October 2026): a pasted position the course uses is on this device only
+   and not in the race record, said in red wherever it is used, with "Save to the race record": it is saved on the server as
+   a typed position (the card-name refusal applies; laid-mark names are allowed) and every course row using it moves to the
+   saved one. A typed position already on the server with the same race, name and position is used instead of a duplicate. */
+const PASTE_WARN='pasted position: on this device only, not in the race record';
+function pastedOf(L){const out=[];(L&&L.cs||[]).forEach(m=>{const p=isPasted(m)?m:(m.laidSt&&m.laidSt.use&&isPasted(m.laidSt.use)?m.laidSt.use:null);
+  if(p&&!out.includes(p))out.push(p);});return out;}
+function pastedHtml(L){return pastedOf(L).map(p=>'<p class="note flag">⚠ '+esc(p.name)+' (Race '+p.race+'): '+PASTE_WARN+'. '+
+  '<button type="button" class="ghost" data-savepaste="'+esc(p.id)+'">Save to the race record</button></p>').join('');}
+function savePasted(id){const m=S.marks.find(x=>x.id===id), st=$('readStatus');
+  if(!m||!isPasted(m))return;
+  const c=cardNameOf(m.name);
+  if(c){alert(cardRefusal(c));return;}
+  const same=S.marks.find(x=>isTypedPos(x)&&x.race===m.race&&x.name.toLowerCase()===m.name.toLowerCase()&&Math.abs(x.lat-m.lat)<1e-7&&Math.abs(x.lon-m.lon)<1e-7);
+  let to, msg;
+  if(same){to=same.id;msg=m.name+' (Race '+m.race+') is already in the race record with the same position: that one is used, not saved twice.';}
+  else{const pid=Date.now().toString(36)+Math.random().toString(36).slice(2,8), d=S.pulledDay||$('day').value||todayISO();
+    const hm=String(m.time||'').match(/^(\d{1,2}):(\d{2})$/), t=hm?new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10),+hm[1],+hm[2]).getTime():Date.now();
+    const fix=1+S.marks.filter(x=>x!==m&&x.race===m.race&&x.name.toLowerCase()===m.name.toLowerCase()).length;
+    S.outbox.push({action:'add',id:pid,date:d,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:0,time:t});
+    push({race:m.race,name:m.name,fix,lat:m.lat,lon:m.lon,acc:0,time:hhmm(t),pending:true,pid});
+    to=m.race+'|'+m.name.toLowerCase()+'|'+fix;
+    msg=m.name+' (Race '+m.race+') saved to the race record as a typed position: sending…';}
+  Object.keys(S.courses||{}).forEach(k=>{let ch=false;
+    S.courses[k]=(S.courses[k]||[]).map(e=>{const eid=typeof e==='string'?e:e.id;if(eid!==m.id)return e;ch=true;return {id:to,side:typeof e==='string'?'':(e.side||'')};});
+    if(ch)stamp(k);});
+  S.marks=S.marks.filter(x=>x.id!==m.id);
+  st.className='status ok';st.textContent=msg;commit();sendOutbox();}
 // "Add to Race N chips": a fix already a chip of the race (its own, carried, or picked) changes nothing and says so
 function pickFix(k){const m=S.marks.find(x=>refFor(x)===k), r=S.race, st=$('fxStatus');
   if(!pickable(m))return;
@@ -577,6 +647,9 @@ function pickHtml(m){const r=S.race, k=refFor(m);
   if(isLineMark(m.name))return '<p class="cardnote fxDetAct">A line end: choose it in the Start line or Finish line list of the course, which offers this fix for any race.</p>';
   if(isPasted(m))return '<p class="cardnote fxDetAct">A chip of Race '+m.race+', as a pasted position on this device only. Being on this device only, it cannot be added to another race\'s chips.</p>';
   // a typed position is a chip of its own race, but only a recorded fix can be added to another race's chips (pickable)
+  if(isTypedPos(m)&&m.sid&&!m.pending)return '<p class="cardnote fxDetAct">A chip of Race '+m.race+', as a typed position. Being typed in by hand, not recorded by GPS, it cannot be added to another race\'s chips.</p>'+
+    '<div class="fxDetAct"><button type="button" class="fxBtn" data-fx="withdraw" data-ref="'+esc(k)+'">Withdraw…</button>'+
+    '<button type="button" class="fxBtn" data-fx="correct" data-ref="'+esc(k)+'">Correct position…</button></div>';
   if(!pickable(m))return '<p class="cardnote fxDetAct">'+(m.acc===0?'A chip of Race '+m.race+', as a typed position'+(m.notSent?' (not sent: refused)':m.pending?' (waiting to send)':'')+
     '. Being typed in by hand, not recorded by GPS, it cannot be added to another race\'s chips.':
     'A chip of Race '+m.race+', waiting to send from this device. Once it is on the server, it can be added to another race\'s chips.')+'</p>';
@@ -672,7 +745,7 @@ function isLaidCard(m){return !!(m&&m.card&&CARD.marks[m.card]&&CARD.marks[m.car
    (STATUS A43). The paste box and the typing box refuse such a name and store nothing: a card mark is tapped under Fixed
    marks (Pat, 12 October 2026). Returns the card's own name, or ''. */
 function cardNameOf(nm){const k=norm(nm);return k?Object.keys(CARD.marks).find(x=>!CARD.marks[x].laid&&norm(x)===k)||'':'';}
-function cardRefusal(c){const m=CARD.marks[c]||{}, point=m.rw||m.type==='Start/finish modelling point';
+function cardRefusal(c){const m=CARD.marks[c]||{}, point=m.rw||m.type==='Start/finish modelling point'||m.type==='Fixed light';
   return c+' is on the course card: tap it under Fixed marks. '+(point?'If you need a different point, give it a different name.':
     'If the buoy has moved, give it a different name, such as '+c+' moved.');}
 function isRwCard(m){return !!(m&&m.card&&!m.virtual&&CARD.marks[m.card]&&CARD.marks[m.card].rw);}
@@ -702,7 +775,9 @@ function nearName(n,k){return !!n&&n!==k&&((n.length>=4&&(n.includes(k)||k.inclu
 function laidState(cm){
   const race=cm.race, k=norm(cm.card), key=race+'|'+k, sel=S.laidSel[key]||'auto';
   const others=laidNames().map(norm).filter(x=>x!==k);
-  const cand=S.marks.filter(x=>ribFix(x)&&x.race<=race).sort((a,b)=>laterFix(a,b)?1:-1);
+  // a typed position saved on the server counts as a fix of the laid mark of its name, as a RIB fix does (STATUS A47); a
+  // withdrawn one is never loaded
+  const cand=S.marks.filter(x=>(ribFix(x)||(isTypedPos(x)&&!!x.sid))&&x.race<=race).sort((a,b)=>laterFix(a,b)?1:-1);
   const fixes=cand.filter(x=>norm(x.name)===k);
   const near=cand.filter(x=>nearName(norm(x.name),k)&&!others.includes(norm(x.name)));
   const latest=fixes[fixes.length-1]||null;
@@ -715,14 +790,20 @@ function laidState(cm){
   return {key,sel,mode,use,latest,fixes,near,suggest,newer,phones};
 }
 function resolveLaid(cm){const st=laidState(cm),u=st.use;
-  return Object.assign({},cm,{lat:u?u.lat:cm.lat,lon:u?u.lon:cm.lon,acc:u?u.acc:null,atFix:!!u,laidSt:st});}
+  // the leg note names where the position came from: a typed or a pasted position, otherwise a RIB fix (legGeom)
+  const mv=u&&(isPasted(u)||isTypedPos(u))?'to '+(isPasted(u)?'pasted':'typed')+' position, not depth-checked':undefined;
+  return Object.assign({},cm,{lat:u?u.lat:cm.lat,lon:u?u.lon:cm.lon,acc:u?u.acc:null,atFix:!!u,laidSt:st,moveNote:mv});}
 function fixLabel(x,race){return [x.time,accOf(x),whoOf(x)].filter(Boolean).join(' · ')+(x.race<race?' (Race '+x.race+')':'');}
 // a course row's fix: one from another race (earlier, carried as the page does by default, or later) says which race and
 // when it was recorded, e.g. "Leeward (R3 14:39)"; a second fix of the same race keeps "(fix 2)"; card marks say nothing
 function fixSrc(m){if(!m||m.card)return '';
   return m.race!==S.race?' (R'+m.race+(m.time?' '+m.time:'')+')':m.fix>1?' (fix '+m.fix+')':'';}
 function laidTag(m){return m&&m.laidSt?(m.atFix?' (RIB fix '+m.laidSt.use.time+')':' (planning position)'):'';}
-function laidSrc(m){const u=m.laidSt.use;return u?'RIB fix '+fixLabel(u,m.race):'planning position until laid';}
+// a laid mark's fix as its chip and position box name it: a pasted position as on this device only, a typed position as
+// typed, a RIB fix by its time, accuracy and recorder (Pat, 13 October 2026)
+function fixWords(x,race){return isPasted(x)?'pasted position, this device only'+(x.time?' '+x.time:''):
+  isTypedPos(x)?'typed position'+(x.time?' '+x.time:'')+(x.race<race?' (Race '+x.race+')':''):fixLabel(x,race);}
+function laidSrc(m){const u=m.laidSt.use;return u?(isPasted(u)||isTypedPos(u)?fixWords(u,m.race):'RIB fix '+fixLabel(u,m.race)):'planning position until laid';}
 /* What a laid mark's position comes from, in words, for the laid-mark notice: a RIB fix with its time, race (when earlier)
    and recorder (or phone) when known, a pasted position kept on this device only, a typed position, or the planning
    position. (A typed position is never used for a laid mark today: ribFix leaves it out.) */
@@ -738,8 +819,8 @@ function laidPicker(m){
   const st=m.laidSt, pool=st.fixes.concat(st.near.filter(x=>fkey(x)===st.sel));
   const opt=(v,t)=>'<option value="'+esc(v)+'"'+(st.sel===v?' selected':'')+'>'+esc(t)+'</option>';
   return 'Position <select class="laidSel" data-k="'+esc(st.key)+'" aria-label="'+esc(m.name)+' position">'+
-    opt('auto',st.latest?'auto (latest: '+fixLabel(st.latest,m.race)+')':'auto (no RIB fix yet)')+
-    pool.map(x=>opt(fkey(x),(norm(x.name)!==norm(m.card)?'"'+x.name+'" ':'')+fixLabel(x,m.race))).join('')+
+    opt('auto',st.latest?'auto (latest: '+fixWords(st.latest,m.race)+')':'auto (no RIB fix yet)')+
+    pool.map(x=>opt(fkey(x),(norm(x.name)!==norm(m.card)?'"'+x.name+'" ':'')+fixWords(x,m.race))).join('')+
     opt('card','card position (planning only)')+'</select>';
 }
 /* one leg's geometry. Between two card marks the card's route is used; if either end is a laid mark at a RIB fix,
@@ -1124,8 +1205,15 @@ function render(){
       (used?'<span class="used" aria-hidden="true">×'+used+'</span>':'')+'<small>'+info.filter(Boolean).map(esc).join(' · ')+'</small>'+
       (phones>1?'<small class="warnTxt">⚠ fixes from '+phones+' phones</small>':'')+
       (far?'<small class="warnTxt">⚠ '+esc(farText(far))+'</small>':'')+
+      (isPasted(m)?'<small class="warnTxt">⚠ '+PASTE_WARN+'</small>':'')+
       (lm&&lm.laidSt.suggest.length?'<small class="warnTxt">Possible fix: '+lm.laidSt.suggest.map(x=>'"'+esc(x.name)+'" '+esc(x.time)).join(', ')+'</small>':'');
-    b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};bk.appendChild(b);});
+    b.onclick=()=>{course().push({id:m.id,side:''});stamp();commit();};
+    // a card mark added to this race (from the Fixed marks list, say) by mistake: removable while no row of any start of the
+    // race uses it; it is on this device only, so nothing is sent. Fixes and typed positions never have this ×
+    if(m.card&&m.race===S.race&&!startsUsing(S.race,m.id).length){const w=document.createElement('span');w.className='pchip';w.appendChild(b);
+      const x=document.createElement('button');x.type='button';x.className='pickX';x.textContent='×';x.setAttribute('aria-label','Remove the '+m.name+' chip from Race '+S.race);
+      x.onclick=()=>{S.marks=S.marks.filter(y=>y.id!==m.id);commit();};w.appendChild(x);bk.appendChild(w);}
+    else bk.appendChild(b);});
   renderPicked(bm);
   renderMover();
   const ol=$('course');ol.innerHTML='';const cs=course();
@@ -1169,12 +1257,15 @@ function render(){
     let laid='';
     if(m.laidSt){const st=m.laidSt;
       laid='<div class="meta">'+laidPicker(m)+'</div>'+
+        // a laid mark at a pasted position: on this device only, with Save to the race record (STATUS A47)
+        (st.use&&isPasted(st.use)?'<div class="meta warnTxt">⚠ '+PASTE_WARN+' <button type="button" class="ghost" data-savepaste="'+esc(st.use.id)+'">Save to the race record</button></div>':'')+
         (st.use?(st.phones>1?'<div class="meta warnTxt">⚠ fixes from '+st.phones+' phones; '+(st.mode==='auto'?'the latest is used':'your choice is used')+'</div>':'')
                :'<div class="meta warnTxt">Planning position until laid</div>')+
         (st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
           ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></div>':'')+
         (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
-    const far=farNm(m), other=isPasted(m)?'pasted position · this device only':isTypedPos(m)?'typed position':'';
+    const far=farNm(m), other=isPasted(m)?'<span class="warnTxt">⚠ '+PASTE_WARN+'</span> <button type="button" class="ghost" data-a="savepaste" data-i="'+i+'">Save to the race record</button>':
+      isTypedPos(m)?'typed position':'';
     // a routing waypoint is not rounded: no side; ↓ as well as ↑, to move it to its place in the course (STATUS A40)
     const kind=cardKind(m), rw=isRwCard(m), orph=(Lr.orphan||[]).find(o=>o.i===i);
     li.innerHTML='<div class="disc num">'+(i+1)+'</div><div><b>'+esc(m.name)+fixSrc(m)+'</b>'+(kind?' · '+kind:'')+flag+laid+
@@ -1318,7 +1409,9 @@ function varW(){
   // anyone's °M figures (Pat, 12 October 2026)
   const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];
   const lon=ms.reduce((a,m)=>a+m.lon,0)/ms.length;
-  const now=new Date(), yr=now.getFullYear()+now.getMonth()/12;
+  // the race date, the Race day in section 1, never today's, so an old race keeps the °M figures of its day (STATUS A11)
+  const rd=String($('day').value||'').match(/^(\d{4})-(\d{2})-\d{2}$/), now=new Date();
+  const yr=rd?+rd[1]+(+rd[2]-1)/12:now.getFullYear()+now.getMonth()/12;
   return Math.max(0,1.55+0.15*(-6.26-lon)-0.2*(yr-2026));
 }
 function magOf(brgT){return Math.round(brgT+varW()+360)%360;}
@@ -1361,7 +1454,7 @@ function refFor(m){return m.sid?'s:'+m.sid:'l:'+m.id;}
 // the fix an end's saved choice names, from any race of the day (as the list offers them); null if it is gone or is not of
 // the end's type
 function refFix(ref,w){if(typeof ref!=='string'||!/^[sl]:/.test(ref))return null;
-  const m=ref[0]==='s'?S.marks.find(x=>x.sid===ref.slice(2)):S.marks.find(x=>x.id===ref.slice(2));
+  const m=ref[0]==='s'?S.marks.find(x=>x.sid===sidNow(ref.slice(2))):S.marks.find(x=>x.id===ref.slice(2));
   return m&&!m.card&&END_TEST[w](m.name)?m:null;}
 /* The fix used for end w of race r, start st, and how it was decided: how = 'chosen' or 'none' (by the RO),
    'inherited' (an earlier start's choice), 'auto', or 'unset' (auto found nothing); reason is shown with it, and warn
@@ -1602,6 +1695,7 @@ function missLegsText(L){const n=L.legs.filter(g=>g.missing).length;
 function buildLegs(){
   course();   // as before: the selected start's course entry is created and tidied here; legPts itself never writes
   const L=legPts(), {ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts}=L;
+  setSendWarn(L); $('ccPasted').innerHTML=pastedHtml(L);
   const vr=varW();
   const twdM=S.twd===''?null:+S.twd;
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
@@ -1663,7 +1757,7 @@ function buildLegs(){
     (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   setCC();
   const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(orphanText(L)?[orphanText(L)+'. Move it between two marks.']:[],farLine,checks(ents,cs));
-  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
+  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+pastedHtml(L)+an.html+(cardEnds?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>'+(ml?'Total of measured legs':'Total')+'</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
@@ -1777,11 +1871,21 @@ function setCC(){const d=ccDoc(), b=$('ccCopy');
 // none (optional): what to say instead of "Build a course…" when there is no text, e.g. every mark of the course missing
 function setOut(t,none){
   text=t;$('out').textContent=t||none||'Build a course to get the summary.';
+  $('share').disabled=!t; $('copy').disabled=!t;   // greyed with WhatsApp when there is nothing to send
   const wa=$('wa');
   if(t){wa.href='https://wa.me/?text='+encodeURIComponent(t);wa.removeAttribute('aria-disabled');}
   else{wa.removeAttribute('href');wa.setAttribute('aria-disabled','true');}
   $('share').style.display=navigator.share?'':'none';$('copy').style.gridColumn=navigator.share?'':'1/-1';
 }
+/* A course with a missing mark, or a routing waypoint with no leg (so a leg not measured), is held back from competitors
+   (Pat, 13 October 2026): a red line above the Send buttons says so, and WhatsApp, Share and Copy text each ask "Send
+   anyway?" first. With nothing to send, all three are greyed alike. The detail stays on the page. */
+let sendBad='';
+function setSendWarn(L){const w=[];
+  if(L&&L.miss.length)w.push('This course has a missing mark: fix it before sending to competitors.');
+  if(L&&orphanNames(L).length)w.push('This course has a leg that is not measured (routing waypoint '+orphanNames(L).join(', ')+' not between two marks): fix it before sending to competitors.');
+  sendBad=w.join(' ');$('sendWarn').hidden=!sendBad;$('sendWarn').textContent=sendBad;}
+function sendOk(){return !sendBad||confirm(sendBad+'\n\nSend anyway?');}
 // the marks a course plot names, each once, in drawing order, with its label (a name two different fixes share gets the
 // fix's time): the course's marks (not the start and finish points), then the line ends. Shared by the sketch (plot) and
 // the chart (drawChartInner), so both name the same marks the same way
@@ -2288,6 +2392,7 @@ $('fixCheck').addEventListener('click',async e=>{const b=e.target.closest('[data
       const sl=getSelection();sl.removeAllRanges();sl.addRange(rg);}return;}
   // "Add to Race N chips" in the tapped fix's detail
   if(b&&b.dataset.fx==='addchip'){pickFix(b.dataset.ref);return;}
+  if(b&&(b.dataset.fx==='withdraw'||b.dataset.fx==='correct')){typedAct(b.dataset.fx,b.dataset.ref);return;}
   // a tap on a fix, in the sketch or the list, brings its detail (directly under the sketch) into view
   if(pt){fxSel=fxSel===pt.dataset.k?'':pt.dataset.k;$('fxStatus').textContent='';renderFix();if(fxSel)$('fxDet').scrollIntoView({block:'nearest'});}});
 $('fxAll').onchange=e=>{fxAll=e.target.checked;fxFit='';renderFix();};
@@ -2317,7 +2422,9 @@ async function pull(quiet){
     const j=await r.json();
     if(stale())return;
     if(!r.ok||!j.ok)throw new Error(j.error||('server '+r.status));
-    const list=j.marks.slice().sort((a,b)=>a.time-b.time);
+    // a withdrawn typed position stays in the record but is never loaded; a corrected one names its replacement (A46)
+    const rpl={}; j.marks.forEach(m=>{if(m&&m.withdrawn&&typeof m.replaced_by==='string')rpl[m.id]=m.replaced_by;});
+    const list=j.marks.filter(m=>!m.withdrawn).sort((a,b)=>a.time-b.time);
     if(day!==S.pulledDay){
       /* A different day is being loaded. Clear only what belongs to another day: a course built for this day before it
          could be loaded (imported at the dock, before signal) is kept, on a new phone or one last used on another day.
@@ -2372,7 +2479,7 @@ async function pull(quiet){
       ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
       if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;
     }
-    S.marks=S.marks.filter(m=>!m.server);
+    S.marks=S.marks.filter(m=>!m.server); S.replaced=rpl;
     const n={};
     list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
       push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,rcv:typeof m.received==='number'?m.received:null,server:true,sid:m.id,
@@ -2471,7 +2578,9 @@ if(!S.synced||typeof S.synced!=='object')S.synced={};
    shown as "mark missing", saved back unchanged, and found again by the next load if the fix comes back (STATUS A38).
    Before 2026-10-06.27 such a row was dropped from this device's copy of the course. */
 function refOf(id){const m=markById(id);if(!m&&/^s:/.test(id))return id;return m&&m.sid?'s:'+m.sid:'l:'+id;}
-function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===r.slice(2));return m?m.id:r;}return r.slice(2);}
+function resolveRef(r){if(!r)return null;if(r.indexOf('s:')===0){const m=S.marks.find(x=>x.sid===sidNow(r.slice(2)));return m?m.id:r;}return r.slice(2);}
+// a corrected typed position's server id, following replaced_by from the wrong one (S.replaced, from the last load; A46)
+function sidNow(sid){let k=0;while(S.replaced&&S.replaced[sid]&&k++<20)sid=S.replaced[sid];return sid;}
 // what is known about a course row whose mark cannot be found, from the row's own reference
 function missingText(id){const p=String(id).split('|'), nm='"'+missName(id)+'"';
   if(/^s:/.test(id))return 'A recorded fix that is no longer among the day\'s fixes on the server';
@@ -2900,10 +3009,12 @@ function courseAct(b){
     // during the race: only this rounding and the ones after it; earlier roundings keep the old position.
     cs.forEach((e,j)=>{if(e.id===old&&(!during||j>=i))e.id=nw.id;});}}
   if(b.dataset.a==='laidnewest')S.laidSel[b.dataset.k]='auto';
+  if(b.dataset.a==='savepaste'){savePasted(cs[i].id);return;}
   if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
   if(b.dataset.a==='del')cs.splice(i,1);
   stamp();commit();}
-$('course').onclick=e=>{const b=e.target.closest('button[data-a]');if(b)courseAct(b);};
+$('course').onclick=e=>{const p=e.target.closest('[data-savepaste]');if(p){savePasted(p.dataset.savepaste);return;}
+  const b=e.target.closest('button[data-a]');if(b)courseAct(b);};
 // picked chips: the chip adds an ordinary row to the selected start, as any chip does; the × removes the chip only
 $('pickBank').onclick=e=>{const b=e.target.closest('button[data-pick],button[data-unpick]');if(!b||b.disabled)return;const r=S.race;
   if(b.dataset.pick){const m=S.marks.find(x=>refFor(x)===b.dataset.pick);if(pickable(m)){course().push({id:m.id,side:''});stamp();commit();}return;}
@@ -2925,7 +3036,10 @@ $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
 function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
 $('shiftCopy').onclick=async()=>{if(!shiftText)return;try{await navigator.clipboard.writeText(shiftText);$('shiftCopy').textContent='Copied';setTimeout(()=>$('shiftCopy').textContent='Copy move',1500);}catch(e){}};
-$('share').onclick=async()=>{if(!text)return;try{await navigator.share({text});}catch(e){}};
+$('wa').addEventListener('click',e=>{if(!text||!sendOk())e.preventDefault();});
+$('share').onclick=async()=>{if(!text||!sendOk())return;try{await navigator.share({text});}catch(e){}};
+$('legs').addEventListener('click',e=>{const b=e.target.closest('[data-savepaste]');if(b)savePasted(b.dataset.savepaste);});
+$('ccPasted').addEventListener('click',e=>{const b=e.target.closest('[data-savepaste]');if(b)savePasted(b.dataset.savepaste);});
 $('legs').addEventListener('click',e=>{const b=e.target.closest('.segToggle');if(!b)return;
   const i=b.dataset.leg, k=ckey(S.race,S.start)+'|'+i, open=!openLegs.has(k);
   if(open)openLegs.add(k);else openLegs.delete(k);
@@ -2937,7 +3051,7 @@ $('ssCopy').onclick=async()=>{if(!ssText)return;
 $('ccCopy').onclick=async()=>{if(!ccText)return;
   try{await navigator.clipboard.writeText(ccText);$('ccFallback').hidden=true;$('ccCopy').textContent='Copied';setTimeout(()=>$('ccCopy').textContent='Copy for Sail Scoring',1500);}
   catch(e){$('ccText').value=ccText;$('ccFallback').hidden=false;$('ccText').focus();$('ccText').select();}};
-$('copy').onclick=async()=>{if(!text)return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
+$('copy').onclick=async()=>{if(!text||!sendOk())return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 /* ---------- Clear everything ----------
    S=fresh() resets what is saved on this phone; clearPageState() resets what a fresh load starts with that is NOT in S
    (module variables, inputs and panels render() does not set, work under way). Together they must leave the page as a

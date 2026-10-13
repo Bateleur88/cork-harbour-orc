@@ -69,6 +69,15 @@ altered in ways it must refuse and checks that it writes nothing:
                 Grassy Mid and the routing waypoints); no "(planning position)" or "(RIB fix …)" in the WhatsApp text;
                 the laid-mark notice names each source in words and says when nothing moved; a far typed or pasted
                 position is left out of the magnetic variation. Guards, not proof: no JavaScript is run
+ 10  .33        static guards for the changes of 13 October 2026 (STATUS A40, A46, A47, A11): a course with a missing
+                mark or a leg not measured is held back from competitors (#sendWarn; WhatsApp, Share and Copy text each
+                ask "Send anyway?"; all three greyed when there is nothing to send); Spit Bank Lighthouse (a fixed light)
+                is a point in the refusal; a laid mark's pasted or typed fix named as such in its chip, position box and
+                leg note; a × on a card-mark chip only while unused; Withdraw and Correct of a typed position (A46: the
+                server actions, the confirmation, the in-use refusal, withdrawn fixes never loaded, rows following a
+                correction); pasted positions in red where used with "Save to the race record", no duplicate saved, the
+                card-name refusal applied (A47); a saved typed position counts for its laid mark; the magnetic variation
+                for the Race day, not today (A11). Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -478,6 +487,55 @@ def t9_fixes32_guards():
       'const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];' in fn_body(code, 'function varW('))
 
 
+def t10_changes33_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('10 .33: ' + name, ok)
+    g('1 the Send warning is there once, above the buttons', page.count('id="sendWarn"') == 1
+      and page.find('id="sendWarn"') < page.find('id="wa"'))
+    g('1 its wording', "'This course has a missing mark: fix it before sending to competitors.'" in code
+      and "'This course has a leg that is not measured (routing waypoint '" in code)
+    g('1 WhatsApp, Share and Copy text each ask "Send anyway?"', "confirm(sendBad+'\\n\\nSend anyway?')" in code
+      and "$('wa').addEventListener('click',e=>{if(!text||!sendOk())e.preventDefault();});" in code
+      and "$('share').onclick=async()=>{if(!text||!sendOk())return;" in code and "$('copy').onclick=async()=>{if(!text||!sendOk())return;" in code)
+    g('1 all three greyed when there is nothing to send', "$('share').disabled=!t; $('copy').disabled=!t;" in fn_body(code, 'function setOut('))
+    g('1 buildLegs sets the warning for every course', 'setSendWarn(L);' in fn_body(code, 'function buildLegs('))
+    g('2 Spit Bank Lighthouse is a point in the refusal', "m.type==='Fixed light'" in fn_body(code, 'function cardRefusal('))
+    g('3 a pasted or typed fix named as such', "'pasted position, this device only'" in code and "isTypedPos(x)?'typed position'" in code
+      and "'auto (latest: '+fixWords(st.latest,m.race)+')'" in code and 'fixWords(x,m.race)' in fn_body(code, 'function laidPicker('))
+    g('3 the leg note too', "'to '+(isPasted(u)?'pasted':'typed')+' position, not depth-checked'" in fn_body(code, 'function resolveLaid('))
+    bank_render = code[code.find("const bm=bank().filter(m=>!isLineMark(m.name));"):code.find('renderPicked(bm);')]
+    g('4 a × on a card-mark chip only while no row of the race uses it',
+      'if(m.card&&m.race===S.race&&!startsUsing(S.race,m.id).length)' in bank_render and "x.className='pickX'" in bank_render)
+    ta = fn_body(code, 'async function typedAct(')
+    g('5 withdraw and correct: typed positions on the server only', 'if(!m||!isTypedPos(m)||!m.sid||m.pending)return;' in ta)
+    g('5 the confirmation names the position, race, time and distance from the map centre',
+      "' nm from the map centre (51.82 N, 8.27 W)'" in ta and "'Withdraw the typed position '+who" in ta and "'Correct the typed position '+who" in ta)
+    g('5 withdraw is refused while a course uses it, naming each race and start', 'const u=usesOf(m);' in ta and "' cannot be withdrawn: it is used in '" in ta)
+    g('5 the server actions', "action:'withdraw',date:day,id:m.sid,reason:why" in ta and "action:'correct',date:day,id:m.sid,new_id:nid,lat:p.lat,lon:p.lon" in ta)
+    g('5 the card-name refusal applies to a correction', 'if(cardNameOf(m.name)){typedSays(cardRefusal(cardNameOf(m.name)),false);return;}' in ta)
+    g('5 a withdrawn fix is never loaded', 'const list=j.marks.filter(m=>!m.withdrawn).sort(' in code)
+    g('5 rows and line ends follow a correction', 'sid===sidNow(r.slice(2))' in fn_body(code, 'function resolveRef(')
+      and 'sid===sidNow(ref.slice(2))' in fn_body(code, 'function refFix(') and "if(ls[w]==='s:'+m.sid)ls[w]='s:'+nid;" in ta)
+    marks = read(MARKS)
+    g('5 marks.php: withdraw and correct for typed positions only, never deleted',
+      "if ($action === 'withdraw' || $action === 'correct') {" in marks
+      and "(float)arg($old, 'acc', -1) != 0 || isset($old['device'])" in marks
+      and "'withdrawn_reason'] = 'replaced by correction'" in marks
+      and 'unset(' not in marks.split("if ($action === 'withdraw' || $action === 'correct') {")[-1].split('$rec = null;')[0])
+    sp = fn_body(code, 'function savePasted(')
+    g('6 pasted positions in red where used, with Save to the race record',
+      "const PASTE_WARN='pasted position: on this device only, not in the race record';" in code and page.count('id="ccPasted"') == 1
+      and "data-a=\"savepaste\"" in code and 'data-savepaste' in fn_body(code, 'function pastedHtml('))
+    g('6 save: the card-name refusal, no duplicate, rows moved', 'const c=cardNameOf(m.name);' in sp and 'is already in the race record with the same position' in sp
+      and "S.outbox.push({action:'add',id:pid,date:d,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:0,time:t});" in sp and 'if(ch)stamp(k);' in sp)
+    g('7 a saved typed position counts for its laid mark', 'const cand=S.marks.filter(x=>(ribFix(x)||(isTypedPos(x)&&!!x.sid))&&x.race<=race)' in fn_body(code, 'function laidState('))
+    vw = fn_body(code, 'function varW(')
+    g('8 the magnetic variation for the Race day, not today', "String($('day').value||'').match(" in vw and 'const yr=rd?+rd[1]+(+rd[2]-1)/12:' in vw)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -490,6 +548,7 @@ def main():
         t7_a40_guards()
         t8_fixes31_guards()
         t9_fixes32_guards()
+        t10_changes33_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

@@ -59,6 +59,13 @@ still present and unchanged:
                 back; the replaced version goes into the history; an identical save writes nothing; an older page's
                 save without "picked" replaces the record (the picks version stays in the history); a record over
                 50000 bytes is refused 400 and writes nothing; the courses and fixes are untouched
+ 18  withdraw   a typed position (acc 0, no device) withdrawn: refused 400 for a RIB fix and a committee boat fix, 404
+                for an unknown id, 400 for a missing reason, 409 while a saved course row or line end uses it (naming
+                each race and start); once unused, kept in the day file with "withdrawn" and "withdrawn_reason"; a retry
+                writes nothing, another reason is 409; a correction adds the corrected typed position (same race, name
+                and time, "corrected_from") and withdraws the old one ("replaced by correction", "replaced_by") in one
+                write; a retry writes nothing; a bad position, a used new id, a withdrawn fix or a RIB fix is refused and
+                writes nothing; a re-post of a withdrawn fix keeps it withdrawn; GET returns both; the fixture is untouched
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -724,6 +731,71 @@ def t17_picked():
            f'{len(json.dumps(big))} bytes refused {s_big}, files unchanged {big_refused}; courses kept {courses_kept}; {detail}')
 
 
+def t18_withdraw():
+    """A46: withdraw and correct, typed positions only, never deleted."""
+    d = setup('t18')
+    t = 1791200000000
+
+    def typed(mid, lon=8.263):
+        return {'action': 'add', 'id': mid, 'date': DAY, 'race': 1, 'name': 'FarT', 'lat': 51.81, 'lon': lon, 'acc': 0,
+                'time': t}
+
+    def wd(mid, why='typed with the wrong sign'):
+        return req(d, body={'action': 'withdraw', 'date': DAY, 'id': mid, 'reason': why})
+
+    def cor(mid, nid, lat=51.81, lon=-8.263):
+        return req(d, body={'action': 'correct', 'date': DAY, 'id': mid, 'new_id': nid, 'lat': lat, 'lon': lon})
+
+    st = {'add typed': req(d, body=typed('typed00001'))[0],
+          'add cb': req(d, body={'action': 'add', 'id': 'cbfix00001', 'date': DAY, 'race': 1, 'name': 'Committee boat',
+                                 'lat': 51.81, 'lon': -8.3, 'acc': 6.5, 'time': t})[0]}
+    before = sha(day_file(d))
+    refusals = {'RIB fix': wd('fixr1n2')[0], 'committee boat': wd('cbfix00001')[0], 'unknown id': wd('nosuch0001')[0],
+                'no reason': req(d, body={'action': 'withdraw', 'date': DAY, 'id': 'typed00001'})[0]}
+    refused_ok = (refusals == {'RIB fix': 400, 'committee boat': 400, 'unknown id': 404, 'no reason': 400}
+                  and sha(day_file(d)) == before)
+    # in use by saved courses: a row in Race 1 Start 2 (key 1|1) and a line end in Race 2 Start 1 (key 2|0)
+    req(d, body=course('1|1', {'entries': [{'ref': 's:typed00001', 'side': ''}], 'lineSel': {}}))
+    req(d, body=course('2|0', {'entries': [], 'lineSel': {'cb': 's:typed00001'}}))
+    s_used, j_used = wd('typed00001')
+    used_ok = s_used == 409 and j_used.get('used') == ['Race 1 Start 2', 'Race 2 Start 1'] and sha(day_file(d)) == before
+    req(d, body=course('1|1', {'entries': [], 'lineSel': {}}))
+    req(d, body=course('2|0', {'entries': [], 'lineSel': {'cb': 'auto'}}))
+    s_wd, _ = wd('typed00001')
+    rec = load(day_file(d)).get('typed00001', {})
+    kept = (rec.get('lat') == 51.81 and rec.get('name') == 'FarT' and isinstance(rec.get('withdrawn'), int)
+            and rec.get('withdrawn_reason') == 'typed with the wrong sign')
+    h = sha(day_file(d))
+    s_retry, j_retry = wd('typed00001')
+    s_other, _ = wd('typed00001', 'another reason')
+    retry_ok = s_retry == 200 and j_retry.get('unchanged') is True and s_other == 409 and sha(day_file(d)) == h
+    req(d, body=typed('typed00001'))                     # a retried add of the withdrawn fix
+    still = load(day_file(d)).get('typed00001', {}).get('withdrawn_reason') == 'typed with the wrong sign'
+    req(d, body=typed('typed00002'))
+    h = sha(day_file(d))
+    bad = {'bad position': cor('typed00002', 'typed00003', lon='x')[0], 'new id used': cor('typed00002', 'fixr1n1')[0],
+           'withdrawn': cor('typed00001', 'typed00009')[0], 'RIB fix': cor('fixr1n2', 'typed00009')[0]}
+    bad_ok = bad == {'bad position': 400, 'new id used': 409, 'withdrawn': 409, 'RIB fix': 400} and sha(day_file(d)) == h
+    s_cor, _ = cor('typed00002', 'typed00003')
+    have = load(day_file(d))
+    n, o = have.get('typed00003', {}), have.get('typed00002', {})
+    cor_ok = (n.get('lon') == -8.263 and n.get('lat') == 51.81 and n.get('name') == 'FarT' and n.get('race') == 1
+              and n.get('acc') == 0 and n.get('time') == t and n.get('corrected_from') == 'typed00002'
+              and 'withdrawn' not in n and o.get('lon') == 8.263 and o.get('withdrawn_reason') == 'replaced by correction'
+              and o.get('replaced_by') == 'typed00003')
+    h = sha(day_file(d))
+    s_cretry, j_cretry = cor('typed00002', 'typed00003')
+    cretry_ok = s_cretry == 200 and j_cretry.get('unchanged') is True and sha(day_file(d)) == h
+    got = {m['id']: m for m in req(d, 'GET', query=f'date={DAY}')[1].get('marks', [])}
+    get_ok = 'withdrawn' in got.get('typed00002', {}) and got.get('typed00003', {}).get('corrected_from') == 'typed00002'
+    ok, detail = intact(d)
+    report('18 withdraw and correct', ok and st == {'add typed': 200, 'add cb': 200} and refused_ok and used_ok
+           and s_wd == 200 and kept and retry_ok and still and bad_ok and s_cor == 200 and cor_ok and cretry_ok and get_ok,
+           f'refusals {refusals} unchanged {refused_ok}; in use {s_used} {j_used.get("used")}; withdrawn {s_wd} kept {kept}; '
+           f'retry and other reason {retry_ok}; re-post stays withdrawn {still}; bad corrections {bad} {bad_ok}; '
+           f'correct {s_cor} {cor_ok}; retry {cretry_ok}; GET {get_ok}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
@@ -732,7 +804,7 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages, t17_picked):
+                  t16_old_pages, t17_picked, t18_withdraw):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

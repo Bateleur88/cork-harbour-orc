@@ -26,6 +26,10 @@
  * A course save may carry "by", an optional name (text, cut to 40 characters), stored with that version; old pages send
  * none and an older marks.php ignores it. Read with GET ?type=coursehistory&date= and the race key.
  *
+ * Typed positions (acc 0, no device) can be withdrawn or corrected (actions "withdraw" and "correct", STATUS A46): never
+ * deleted, the record is kept with "withdrawn", "withdrawn_reason" and, for a correction, "replaced_by" added; the
+ * corrected position is a new typed position with "corrected_from".
+ *
  * Review decisions (the scoring record: use-as, do-not-use, accept, revoke) go in data/decisions-YYYY-MM-DD.json,
  * append-only, keyed by the record id the page makes, at most MAX_DECISIONS a day. They are WRITTEN only with the RO key,
  * sent in the X-RO-Key header and read as text from data/ro-key.php (never run, never taken from the URL), and READ with
@@ -345,6 +349,72 @@ if ($action === 'decision') {
 
 if (!is_string($id) || !preg_match('/^[a-z0-9]{4,40}$/i', $id)) out(400, array('ok' => false, 'error' => 'bad id'));
 
+/* ---------- POST actions "withdraw" and "correct": a typed position taken out of use, never deleted (STATUS A46) ----------
+   Only a typed position (acc 0 and no device: typed on the RO page, never a RIB fix or a committee boat fix) can be
+   withdrawn or corrected. The record stays in the day file with "withdrawn" (the server's time) and "withdrawn_reason"
+   added, and pages leave it out.
+     withdraw  {action, date, id, reason}: refused 409 while a saved course uses it (a course row or a line end), naming
+               each race and start; a retry of the same withdrawal writes nothing.
+     correct   {action, date, id, new_id, lat, lon}: the corrected position is added as a new typed position (new_id) with
+               the old one's race, name and time and "corrected_from"; the old one is withdrawn with the reason "replaced by
+               correction" and "replaced_by", in the same write. The page moves the course rows; pages also follow
+               replaced_by. A retry of the same correction writes nothing. */
+if ($action === 'withdraw' || $action === 'correct') {
+  $f     = $dir . '/marks-' . $d . '.json';
+  $lh    = lock_data($dir);
+  $marks = load_json($f);
+  $old   = (isset($marks[$id]) && is_array($marks[$id])) ? $marks[$id] : null;
+  if ($old === null) out(404, array('ok' => false, 'error' => 'no such fix on this day'));
+  if ((float)arg($old, 'acc', -1) != 0 || isset($old['device']))
+    out(400, array('ok' => false, 'error' => 'only a typed position can be withdrawn or corrected'));
+  if ($action === 'withdraw') {
+    $why = name_text(arg($in, 'reason', null), 120);
+    if ($why === null || $why === '') out(400, array('ok' => false, 'error' => 'bad reason'));
+    if (isset($old['withdrawn'])) {
+      if (arg($old, 'withdrawn_reason', '') === $why && !isset($old['replaced_by'])) out(200, array('ok' => true, 'unchanged' => true));
+      out(409, array('ok' => false, 'error' => 'already withdrawn'));
+    }
+    $used = array();
+    foreach (load_json($dir . '/courses-' . $d . '.json') as $k => $v) {
+      if (!preg_match('/^(\d{1,2})\|(\d{1,2})$/D', (string)$k, $mk) || !is_array($v)) continue;
+      $data = arg($v, 'data', array());
+      $refs = array();
+      foreach ((array)arg($data, 'entries', array()) as $e) if (is_array($e)) $refs[] = arg($e, 'ref', '');
+      foreach ((array)arg($data, 'lineSel', array()) as $x) $refs[] = $x;
+      if (in_array('s:' . $id, $refs, true)) $used[] = 'Race ' . (int)$mk[1] . ' Start ' . ((int)$mk[2] + 1);
+    }
+    if (count($used)) out(409, array('ok' => false, 'error' => 'in use: ' . implode(', ', $used), 'used' => $used));
+    $old['withdrawn'] = time();
+    $old['withdrawn_reason'] = $why;
+    $marks[$id] = $old;
+    save_json($f, $marks);
+    flock($lh, LOCK_UN); fclose($lh);
+    out(200, array('ok' => true));
+  }
+  $nid = arg($in, 'new_id', '');
+  $lat = arg($in, 'lat', null);
+  $lon = arg($in, 'lon', null);
+  if (!is_string($nid) || !preg_match('/^[a-z0-9]{4,40}$/i', $nid) || $nid === $id) out(400, array('ok' => false, 'error' => 'bad new id'));
+  if (!(is_int($lat) || is_float($lat)) || !(is_int($lon) || is_float($lon)) || $lat < -90 || $lat > 90 || $lon < -180 || $lon > 180)
+    out(400, array('ok' => false, 'error' => 'bad position'));
+  if (isset($old['withdrawn'])) {
+    if (arg($old, 'replaced_by', '') === $nid && isset($marks[$nid])) out(200, array('ok' => true, 'unchanged' => true));
+    out(409, array('ok' => false, 'error' => 'already withdrawn'));
+  }
+  if (isset($marks[$nid])) out(409, array('ok' => false, 'error' => 'new id already used'));
+  if (count($marks) >= MAX_FIXES) out(429, array('ok' => false, 'error' => 'day full'));
+  $marks[$nid] = array('id' => $nid, 'date' => $d, 'race' => (int)arg($old, 'race', 0), 'name' => (string)arg($old, 'name', ''),
+                       'lat' => round((float)$lat, 7), 'lon' => round((float)$lon, 7), 'acc' => round(0.0, 1),
+                       'time' => arg($old, 'time', 0), 'received' => time(), 'corrected_from' => $id);
+  $old['withdrawn'] = time();
+  $old['withdrawn_reason'] = 'replaced by correction';
+  $old['replaced_by'] = $nid;
+  $marks[$id] = $old;
+  save_json($f, $marks);
+  flock($lh, LOCK_UN); fclose($lh);
+  out(200, array('ok' => true));
+}
+
 $rec = null;
 if ($action === 'add') {
   $race = (int)arg($in, 'race', 0);
@@ -381,7 +451,8 @@ $marks = load_json($f);
 if ($action === 'add') {
   if (!isset($marks[$id]) && count($marks) >= MAX_FIXES) out(429, array('ok' => false, 'error' => 'day full'));
   if (isset($marks[$id]) && is_array($marks[$id])) {   // a re-post (the RO page moving a fix to another race) keeps who recorded it, and when
-    foreach (array('device', 'recorder', 'tap') as $k)
+    // and a withdrawn typed position stays withdrawn, and a correction keeps its link (A46)
+    foreach (array('device', 'recorder', 'tap', 'withdrawn', 'withdrawn_reason', 'replaced_by', 'corrected_from') as $k)
       if (!isset($rec[$k]) && isset($marks[$id][$k])) $rec[$k] = $marks[$id][$k];
   }
   $marks[$id] = $rec;                 // same id twice (a retry) just overwrites
