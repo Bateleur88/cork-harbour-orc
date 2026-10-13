@@ -352,9 +352,11 @@ footer "© 2026 Pat Tanner ORC Ireland".
   start time is set, so auto finds no committee boat or Start Pin".
 - *Wind direction* (`STATUS.md` A56): used only from 0 to 360; anything else is said in
   red under the box ("Wind direction must be 0 to 360 °M: "1141" is not used or
-  saved.") and the course keeps its last good direction. The legs follow the box as it
-  is typed; the direction is saved with the course only when the RO leaves the box (or
-  presses Enter), so a half-typed one is never saved.
+  saved."); while the box holds it the page uses no direction (TWA "–", no off-square or
+  favoured end, in sections 3 and 4) and saves nothing; opening another course drops it.
+  The legs follow the box as it is typed; the direction is saved with the course only
+  when the RO leaves the box (or presses Enter), so a half-typed one is never saved. The
+  start line note under the Start line lists always matches section 4's.
 - *Choices kept on a device by an older page* (A10): a laid-mark choice made on a page
   before .35 was kept on that device only. It stays in use there, but is saved with the
   course only when the RO changes it, sends the course, or shows it on the race day,
@@ -631,7 +633,7 @@ Scoring's ORC constructed course format (`"format": "orc-constructed-course"`,
 version 1), copied to the clipboard for Sail Scoring's Add start dialog. It is not
 the Course Record (`STATUS.md` C2, A37). The legs are those of the leg table above:
 one per physical leg, from the same function, the distance to 0.01 nm and the
-bearing in whole degrees magnetic (`"north": "magnetic"`), each named "From - To" as
+bearing in degrees magnetic to one decimal (`"north": "magnetic"`; from PAGE_VERSION 2026-10-06.36, as agreed with Mark McLoughlin on 10 October 2026), each named "From - To" as
 the legs table names its ends ("Start - Windward"). The name is the series, race
 date, race and start ("Autumn League, Sun 27 Sept 2026, Race 1, Start 1"); the
 series is also given as `"x-series"` (from PAGE_VERSION 2026-10-06.36; extra fields start
