@@ -766,6 +766,8 @@ Rollback: upload `marks.php.live-2026-10-16` as `/marks/marks.php` and `index.ht
 
 **Confirmed by Pat (13 October 2026).** Sunday 18 October's first warning is 10:55, so the 12-hour cut-off is Saturday 17 October, 22:55; the release stays planned for Friday 16 October, starting no later than Saturday 18:00. A14 is closed: the 39 m between the workbook's Cage (eOceanic's C1) and `course-cards'` (the club's correspondence) is within the watch circle of a moored mark; both stay as they are, and the workbook is not changed.
 
+**Pat's retest of the rebuilt .36 and approval (13 October 2026).** On `/course-test/` (the 398,778-byte test build) all 23 steps passed: section 3's start line note matches section 4's, also after the wind direction is cleared (A54); an out-of-range wind direction shows "–" for TWA and no off-square or favoured-end figures anywhere, and is not saved (A56); Copy for Sail Scoring gives "course" to one decimal (113.8, 291.7, 324.6, 157.4) with "x-series"; and the 4 October Race 1 Start 1 regression (233°M, 231°T, 0.66 nm, 1217 m; 042°M, 1560 m; total 5.10; windward squaring 51 m). Pat approved .36 for the live release on Friday 16 October 2026, starting no later than Saturday 17 October 18:00 (the 12-hour cut-off before the 10:55 first warning is 22:55), following the release steps above, with `pages/course/course_v8.html` at 398,432 bytes (SHA-256 9572118884a5ae9e16578b5025cc5f1c3b5a98b7a44740e042076086e31ccc4d) and `marks.php` 5c86088c36ca191765be45db441d0af62a5f939fa06ea79f78d194ae8c69e176. Nothing is to change in the repository before the release unless Pat asks.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
