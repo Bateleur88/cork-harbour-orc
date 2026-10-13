@@ -764,6 +764,8 @@ Rollback: upload `marks.php.live-2026-10-16` as `/marks/marks.php` and `index.ht
 
 **Release plan after the fixes.** Only the page's figures change: `pages/course/course_v8.html` is now 398,432 bytes, SHA-256 9572118884a5ae9e16578b5025cc5f1c3b5a98b7a44740e042076086e31ccc4d (at `a2b2888`); step 6 and step 8 check against that. `marks.php`, the backups, the order, the checks, the rollback and the latest safe time are unchanged. The live-data check stands: the fixes add no save (the wind direction is saved only when the RO leaves the box, as before) and change only Copy for Sail Scoring's "course" values on the live courses.
 
+**Confirmed by Pat (13 October 2026).** Sunday 18 October's first warning is 10:55, so the 12-hour cut-off is Saturday 17 October, 22:55; the release stays planned for Friday 16 October, starting no later than Saturday 18:00. A14 is closed: the 39 m between the workbook's Cage (eOceanic's C1) and `course-cards'` (the club's correspondence) is within the watch circle of a moored mark; both stay as they are, and the workbook is not changed.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
