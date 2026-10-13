@@ -197,6 +197,18 @@ RO page in PAGE_VERSION 2026-10-06.20 (see `docs/experimental/decisions-and-revi
 Names and notes in decisions would be readable by anyone with the race key, which is
 public (`key.js`), so they must not contain personal details.
 
+*Withdrawing and correcting a typed position* (`STATUS.md` A46). Action "withdraw"
+(`{action, date, id, reason}`) and action "correct" (`{action, date, id, new_id, lat,
+lon}`) work on typed positions only (accuracy 0 and no phone: never a RIB fix or a
+committee boat fix) and never delete anything. Withdraw adds "withdrawn" (the server's
+time) and "withdrawn_reason" to the record, and is refused (409) while a saved course
+row or line end uses it, naming each race and start. Correct adds the corrected
+position as a new typed position (same race, name and time, with "corrected_from") and
+withdraws the wrong one with the reason "replaced by correction" and "replaced_by", in
+one write. A retry of either writes nothing; a fix re-posted with the same id keeps
+these fields. The RO page leaves withdrawn fixes out, and a course row or line end
+naming a corrected fix follows "replaced_by" to the corrected one.
+
 *RO key.* `pages/marks/ro-key.example.php`, copied on the server to
 `/marks/data/ro-key.php` with `CHANGE_ME` replaced: 16 to 64 letters, digits, `-` or
 `_`. `marks.php` reads it as text, never runs it, and takes the RO key only from the
@@ -371,8 +383,15 @@ footer "© 2026 Pat Tanner ORC Ireland".
   fix of the same race reads "(fix 2)". The line under Get latest marks counts the
   day's fixes on the server as Check recorded marks does: "5 recorded fixes · 8 typed
   positions for Sun 11 Oct 2026". A position pasted into the WhatsApp reader stays on
-  this device only and is never sent; a course row saved from one never matches a fix
-  on the server. On another device it matches a pasted position with the same race and
+  this device only and is never sent by itself; a course row saved from one never
+  matches a fix on the server. Wherever a pasted position is used (its chip, the course
+  row, the leg table, and below the warnings beside Copy for Sail Scoring) a red line
+  says it is on this device only and not in the race record, with "Save to the race
+  record", which saves it on the server as a typed position and moves every course row
+  using it to the saved one; a typed position already saved for that race with the same
+  name and position is used instead, and the page says so (`STATUS.md` A47). A typed
+  position can be withdrawn or corrected from its detail in Check recorded marks
+  ("Withdraw…", "Correct position…", A46). On another device it matches a pasted position with the same race and
   name, if that device has one (decided by Pat 12 October 2026), and otherwise shows as
   "Mark missing". Any course row whose mark cannot be found is shown as "Mark missing",
   never hidden, and the legs to and from it are not measured (`STATUS.md` A38).
@@ -420,8 +439,10 @@ footer "© 2026 Pat Tanner ORC Ireland".
     at the last mark) is for hand-built courses only; for a card course it is
     replaced by a statement of the card's finish.
 - *Laid marks* (Curlane, Dutchman, White Bay, from the Marks sheet Type): the
-  latest RIB fix of that race or an earlier one whose name matches the mark's,
-  ignoring case, spaces and punctuation, is used; with none, the card position,
+  latest RIB fix, pasted position or saved typed position (A47) of that race or an
+  earlier one whose name matches the mark's, ignoring case, spaces and punctuation, is
+  used; a pasted or typed one is named as such in the chip, the position box, the leg
+  note and the laid-mark notice; with none, the card position,
   flagged as a planning position until laid. A near miss such as "Curlane Bank" is
   suggested, never applied (Curlane Bank is also a name of No.8 and No.10). The RO
   can pin any fix, or the card position. That choice is kept on this phone only, not
@@ -437,7 +458,9 @@ footer "© 2026 Pat Tanner ORC Ireland".
   or S, and a second rounding is tapped from its chip. A Course Card mark or a
   routing waypoint is not carried into a later race's chips: there it is tapped from
   the list again, so a row never names another race's card mark (recorded fixes,
-  typed positions and laid marks are carried as before).
+  typed positions and laid marks are carried as before). A card-mark chip added by
+  mistake has a × while no course row of that race uses it, which removes the chip
+  (it is on the device only); fixes and typed positions never have it.
   Only a tapped mark is added to
   the device, never every mark at once (the magnetic variation is worked out from
   the marks loaded). Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
@@ -473,7 +496,15 @@ footer "© 2026 Pat Tanner ORC Ireland".
   leg table, the WhatsApp text and Copy for Sail Scoring keep the real figures.
   Recorded fixes are always drawn, however far away. Such a position is left out of
   the magnetic variation, which the page works out from the marks loaded, so a
-  flagged position never changes anyone's °M figures.
+  flagged position never changes anyone's °M figures. The variation is for the Race
+  day selected in section 1, never today's date, so an old race opened later keeps the
+  °M figures of its day (`STATUS.md` A11).
+- *Holding back a broken course* (section 6): while the course has a missing mark or a
+  leg not measured (a routing waypoint with nothing on one side), a red line above the
+  Send buttons says so ("This course has a missing mark: fix it before sending to
+  competitors."), and "Pick a chat in WhatsApp", Share and Copy text each ask "Send
+  anyway?" first. With nothing at all to send, all three are greyed. Copy for Sail
+  Scoring is unchanged: it already says INCOMPLETE.
 - *Outputs* (section 6): a WhatsApp message, a clean course list for competitors
   (the heading, with the date of the Race day in section 1 whatever was loaded or
   pasted before, the course line, the numbered marks, each leg with its bearing,
@@ -629,7 +660,9 @@ history (first plus last 5, the 5 MB cap, an identical save writing nothing, a f
 history write refusing the save, saves arriving at once), the decisions endpoint,
 unused by the pages (every field validated, a malformed record writing nothing, a
 retry writing nothing, the daily cap, revoke), a race's picked list (kept and read
-back, moved into the history, dropped by an older page's save, the 50 KB limit) and
+back, moved into the history, dropped by an older page's save, the 50 KB limit),
+withdrawing and correcting a typed position (refused for a RIB or committee boat fix,
+refused while a course uses it, never deleted, a retry writing nothing) and
 that every request the current RIB and RO pages send is accepted
 as before. The race key and RO key in its throwaway folders are made at run time.
 Run it, on PHP 8.4 and on PHP 5.5 like the live host, before uploading any change to
