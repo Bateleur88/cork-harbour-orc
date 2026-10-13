@@ -417,6 +417,8 @@ def t7_a40_guards():
             body = chr(10).join(x for x in body.split(chr(10)) if 'orphanText(L)' not in x)
             # .36 converts at the course's own variation (A11, Pat 13 October 2026): the only other change
             body = body.replace('const legs=[], vc=varOf(L);', 'const legs=[];').replace('magOf(pt.brg,vc)', 'magOf(pt.brg)')
+            # .36 rebuilt: the series field is "x-series", an extra field in Mark McLoughlin's convention (Pat, 13 October 2026)
+            body = body.replace('\'  "x-series": \'', '\'  "series": \'')
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -630,7 +632,14 @@ def t13_changes36_guards():
       and '!isPasted(m)&&laidK.has(norm(m.name))' in code)
     g('A54: the start line under the Start line lists', "sMiss+lineInfo()+" in code and 'No start line yet: no start time is set, so auto finds no committee boat or Start Pin.' in code)
     g('A55: the scale bar in metres below 0.1 nm', "barNm<0.1?Math.round(barNm*1852)+' m'" in code)
-    g('A56: a wind direction saved only from 0 to 360', 'if(!ok)return;' in code and 'function twdOk(v)' in code and page.count('id="twdWarn"') == 1)
+    g('A56: a wind direction used only from 0 to 360, saved when the box is left', 'function twdOk(v)' in code and page.count('id="twdWarn"') == 1
+      and "$('twd').oninput=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;buildLegs();};" in code
+      and "$('twd').onchange=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;saveWind();};" in code)
+    g('A49: no date label in the WhatsApp text', r".replace(/ on \S+ \d{1,2} \S+$/,'')" in code)
+    g('A10: opening an old race never writes a choice: device-only laid choices from before .35 are not saved by a load, and a load-led save adds no auto choice',
+      'S.laidLegacy[key])return;' in fn_body(code, 'function laidRec(') and "if(S.laidShape!==35)" in code
+      and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 2 and 'if(!noFreeze)freezeFor(k);' in code)
+    g('C: Copy for Sail Scoring names the series "x-series"', '\'  "x-series": \'' in code and '\'  "series": \'' not in code)
 
 
 def main():

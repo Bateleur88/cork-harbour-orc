@@ -440,7 +440,7 @@ async function keyFetch(url,opts){
 const K=STORE+'course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],notSent:[],laidSel:{},laidNo:{},laidAck:{},laidFrz:{},lineAuto:{},lineFlags:{},picked:{},mode:'setup'};}
+function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],notSent:[],laidSel:{},laidNo:{},laidAck:{},laidFrz:{},lineAuto:{},laidLegacy:{},laidShape:35,lineFlags:{},picked:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -764,7 +764,14 @@ Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).filter(e=
     return id===m.id?{id:nid,side:typeof e==='string'?'':(e.side||'')}:e;});});
   m.id=nid;moved=true;});
  if(moved)save();}
-['laidSel','laidNo','laidAck','laidFrz','lineAuto'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+['laidSel','laidNo','laidAck','laidFrz','lineAuto','laidLegacy'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+/* Laid-mark choices made on a page before 2026-10-06.35 were kept on this device only. They stay in use here, but are not
+   saved with a course just because a day is opened (opening an old race never writes to it, A10): only once the RO
+   changes that choice, or the course is sent, or shown on the race day (freezeNow) */
+if(S.laidShape!==35){Object.keys(S.laidSel).forEach(k=>{if(!S.laidSel[k]||S.laidSel[k]==='auto')return;const i=k.indexOf('|');
+  // a choice already in the race's saved record (from a .35 test page) is not device-only
+  let rec=null;try{rec=JSON.parse((S.synced||{})['_starts|'+k.slice(0,i)]||'null');}catch(e){}
+  if(!(rec&&rec.laid&&rec.laid[k.slice(i+1)]))S.laidLegacy[k]=1;});S.laidShape=35;}
 function startTime(){return S.startTimes[ckey(S.race,S.start)]||'';}
 function mins(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;}
 function newerFix(m){
@@ -874,6 +881,7 @@ function freezeLines(k,r,st){const v=S.lineSel[k]||{}, fz=Object.assign({},S.lin
    not saved yet; with no signal the choice waits on this device as any course edit does. Returns true if anything changed. */
 function freezeNow(k){k=k||ckey(S.race,S.start);const day=S.pulledDay;if(!day||!/^\d+\|\d+$/.test(k))return false;
   const r=+k.split('|')[0], before=JSON.stringify([laidRec(r),S.lineAuto[k]||{}]);
+  Object.keys(S.laidLegacy).forEach(x=>{if(+x.split('|')[0]===r)delete S.laidLegacy[x];});
   S.courseDay=S.courseDay||{};const was=S.courseDay[k], wasS=S.courseDay['_starts|'+r];
   S.courseDay[k]=day; if(freezeLaid(r))S.courseDay['_starts|'+r]=day; freezeLines(k,r,+k.split('|')[1]);
   if(JSON.stringify([laidRec(r),S.lineAuto[k]||{}])===before){
@@ -888,7 +896,7 @@ function freezeFor(k){const c=String(k).match(/^(\d+)\|(\d+)$/), g=String(k).mat
 // the race record's "laid": per laid mark (by its card name in lower case), the RO's choice, and for auto the fix saved
 function laidRec(r){const o={};
   new Set(Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{}))).forEach(key=>{const i=key.indexOf('|');
-    if(+key.slice(0,i)!==+r)return;const c=key.slice(i+1), sel=S.laidSel[key]||'auto', z=S.laidFrz[key]||'';
+    if(+key.slice(0,i)!==+r||S.laidLegacy[key])return;const c=key.slice(i+1), sel=S.laidSel[key]||'auto', z=S.laidFrz[key]||'';
     if(sel==='auto'){if(/^s:/.test(z))o[c]={sel:'auto',fix:z};}
     else if(sel==='card'||/^s:/.test(sel))o[c]={sel};});
   return o;}
@@ -1252,8 +1260,11 @@ function render(){
   // before anything is drawn, so the rows say "saved with the course" at once
   if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
   if(!S.winds||typeof S.winds!=='object')S.winds={};
-  {const w=S.winds[ckey(S.race,S.start)]||{};S.twd=w.twd||'';S.tws=w.tws||'';}
-  $('twd').value=S.twd;$('tws').value=S.tws;
+  // a wind direction being typed (the box has focus) is kept as typed until the RO leaves the box (STATUS A56)
+  {const w=S.winds[ckey(S.race,S.start)]||{}, typing=document.activeElement===$('twd');
+   S.twd=typing&&twdOk($('twd').value)?$('twd').value:(w.twd||'');S.tws=w.tws||'';
+   if(!typing)$('twd').value=S.twd;}
+  $('tws').value=S.tws;
   const tabs=$('tabs');tabs.innerHTML='';
   races().forEach(r=>{const b=document.createElement('button');b.textContent='Race '+r;b.setAttribute('aria-pressed',r===S.race);
     b.onclick=()=>{S.race=r;commit();};tabs.appendChild(b);});
@@ -1462,7 +1473,8 @@ function removeStart(i){
   const gone=ckey(r,last); if(S.synced[gone]!==undefined){S.courses[gone]=[];stamp(gone);}
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
-function stamp(k){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=$('day').value||todayISO();freezeFor(k);}
+// noFreeze: a save that a load leads to (checkLineRefs) saves no auto choice with it: opening an old race never adds one (A10)
+function stamp(k,noFreeze){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=$('day').value||todayISO();if(!noFreeze)freezeFor(k);}
 function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
 
 /* ---------- Setup and Race views ----------
@@ -1982,7 +1994,7 @@ function buildLegs(){
       if(!m)return (i+1)+'. mark missing'+(e.side?' ('+e.side+')':'');
       return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
     (ml?'\nTotal of measured legs '+total.toFixed(2)+' nm ('+ml+')':'\nTotal '+total.toFixed(2)+' nm')+'\n\n'+
-    [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+m.time:'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
+    [sl&&sl.cb,sl&&sl.pin,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
 }
 /* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
    The note is shown above the block and is not part of what is copied. */
@@ -2065,7 +2077,7 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   if(i0<0)return {block:pre.join('. ')+'. No leg can be measured. Nothing to copy.',err:true};
   const a=L.pts[i0];
   const text='{\n  "format": "orc-constructed-course",\n  "version": 1,\n  "name": '+JSON.stringify(name)+',\n'+
-    (ser?'  "series": '+JSON.stringify(ser)+',\n':'')+'  "north": "magnetic",\n'+
+    (ser?'  "x-series": '+JSON.stringify(ser)+',\n':'')+'  "north": "magnetic",\n'+
     '  "anchor": { "lat": '+a.lat.toFixed(6)+', "lng": '+a.lon.toFixed(6)+' },\n  "legs": [\n'+legs.join(',\n')+'\n  ]\n}\n';
   return {text,warns:pre.map(t=>t+'.').concat(cardSti.length?['STAND-IN - '+cardSti.join('; ')+'.']:[],side)};}
 let ccText='';
@@ -2794,8 +2806,8 @@ function checkLineRefs(ln){
       const m=refFix(v,w);
       if(!m){delete ls[w];S.lineFlags[k]=S.lineFlags[k]||{};
         S.lineFlags[k][w]='The '+END_LABEL[w]+' fix chosen for Race '+r+' Start '+(st+1)+' is no longer among the day\'s fixes '+
-          '(deleted or renamed): choice cleared, auto is used until you choose again';stamp(k);if(ln&&!ln[k])ln[k]=LOAD_WHY[1];}
-      else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k);if(ln&&!ln[k])ln[k]=LOAD_WHY[2];}});});
+          '(deleted or renamed): choice cleared, auto is used until you choose again';stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[1];}
+      else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[2];}});});
 }
 /* Line choices were held as phone-side fix ids before 2026-10-01.8; they become references once. The saved record
    already sent references, so nothing changes on the server and nothing looks unsent. */
@@ -2978,9 +2990,11 @@ function applyServerCourses(obj){
       const pk=Array.isArray(rec.picked)?[...new Set(rec.picked.filter(x=>typeof x==='string'&&/^s:/.test(x)&&S.marks.some(m=>refFor(m)===x)))]:[];
       if(pk.length)S.picked[r]=pk; else delete S.picked[r];
       // laid-mark choices saved with the race (A10): the server's replace this phone's for the race
-      Object.keys(S.laidSel).filter(x=>x.split('|')[0]===r).forEach(x=>delete S.laidSel[x]);
-      Object.keys(S.laidFrz).filter(x=>x.split('|')[0]===r).forEach(x=>delete S.laidFrz[x]);
-      const ld=rec.laid&&typeof rec.laid==='object'?rec.laid:{};
+      // a choice kept on this device only by a page before .35 (laidLegacy) stays until the server has one for that mark
+      const ld=rec.laid&&typeof rec.laid==='object'?rec.laid:{}, own=x=>x.split('|')[0]===r, mine=x=>S.laidLegacy[x]&&!ld[x.slice(x.indexOf('|')+1)];
+      Object.keys(S.laidLegacy).filter(x=>own(x)&&!mine(x)).forEach(x=>delete S.laidLegacy[x]);
+      Object.keys(S.laidSel).filter(x=>own(x)&&!mine(x)).forEach(x=>delete S.laidSel[x]);
+      Object.keys(S.laidFrz).filter(own).forEach(x=>delete S.laidFrz[x]);
       Object.keys(ld).forEach(c=>{const v=ld[c]||{}, key=r+'|'+c;
         if(v.sel==='card'||(typeof v.sel==='string'&&/^s:/.test(v.sel)))S.laidSel[key]=v.sel;
         else if(v.sel==='auto'&&typeof v.fix==='string'&&/^s:/.test(v.fix)){S.laidSel[key]='auto';S.laidFrz[key]=v.fix;}});
@@ -3183,10 +3197,10 @@ $('course').addEventListener('click',e=>{const t=e.target.closest('.endAuto');if
 // "A newer fix: … – use it?" on a line end: auto now saves that fix
 $('course').addEventListener('click',e=>{const t=e.target.closest('.endLive');if(!t)return;const k=ckey(S.race,S.start);
   S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[t.dataset.w]:t.dataset.f});stamp(k);commit();});
-$('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;delete S.laidFrz[t.dataset.k];stamp();commit();});
+$('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;delete S.laidFrz[t.dataset.k];delete S.laidLegacy[t.dataset.k];stamp();commit();});
 $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='ack')Object.assign(S.laidAck,laidPending);
-  if(b.dataset.a==='use'){S.laidSel[b.dataset.k]=b.dataset.f;delete S.laidFrz[b.dataset.k];}
+  if(b.dataset.a==='use'){S.laidSel[b.dataset.k]=b.dataset.f;delete S.laidFrz[b.dataset.k];delete S.laidLegacy[b.dataset.k];}
   if(b.dataset.a==='no')S.laidNo[b.dataset.k]=(S.laidNo[b.dataset.k]||[]).concat(b.dataset.f);
   if(b.dataset.a!=='no')stamp();   // OK and Use this fix are the RO's choice: saved with the course
   commit();};
@@ -3265,7 +3279,7 @@ function courseAct(b){
     // before the start: the mark was re-laid, so every rounding uses the new position.
     // during the race: only this rounding and the ones after it; earlier roundings keep the old position.
     cs.forEach((e,j)=>{if(e.id===old&&(!during||j>=i))e.id=nw.id;});}}
-  if(b.dataset.a==='laidnewest'){S.laidSel[b.dataset.k]='auto';delete S.laidFrz[b.dataset.k];}   // stamp below saves the latest
+  if(b.dataset.a==='laidnewest'){S.laidSel[b.dataset.k]='auto';delete S.laidFrz[b.dataset.k];delete S.laidLegacy[b.dataset.k];}   // stamp below saves the latest
   if(b.dataset.a==='savepaste'){savePasted(cs[i].id);return;}
   if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
   if(b.dataset.a==='del')cs.splice(i,1);
@@ -3288,13 +3302,14 @@ $('cardReopen').onclick=()=>{cardOpen=true;render();};
 $('rRace').onchange=e=>{S.race=+e.target.value;commit();};
 $('rStart').onchange=e=>{S.start=+e.target.value;commit();};
 function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};stamp();save();buildLegs();scheduleSave();}
-/* A wind direction is used and saved only from 0 to 360 (whole or decimal degrees); anything else is said beside the box
-   and not saved, and the course keeps its last good direction (Pat, 13 October 2026, STATUS A56) */
+/* A wind direction is used only from 0 to 360 (whole or decimal degrees); anything else is said beside the box and not
+   used, and the course keeps its last good direction (STATUS A56). The legs follow the box as it is typed; the direction
+   is saved with the course only when the RO leaves the box (or presses Enter), so a half-typed one is never saved
+   (Pat, 13 October 2026). */
 function twdOk(v){return v===''||(/^\d{1,3}(\.\d+)?$/.test(String(v).trim())&&+v>=0&&+v<=360);}
-$('twd').oninput=e=>{const v=e.target.value, ok=twdOk(v), w=$('twdWarn');
-  w.hidden=ok; w.textContent=ok?'':'Wind direction must be 0 to 360 °M: "'+v+'" is not used or saved.';
-  if(!ok)return;
-  S.twd=v;saveWind();};
+function twdWarnSay(v){const ok=twdOk(v), w=$('twdWarn');w.hidden=ok;w.textContent=ok?'':'Wind direction must be 0 to 360 °M: "'+v+'" is not used or saved.';return ok;}
+$('twd').oninput=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;buildLegs();};
+$('twd').onchange=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;saveWind();};
 $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
 function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
