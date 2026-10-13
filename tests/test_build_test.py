@@ -221,7 +221,7 @@ def t5_copy_guards():
     cd = fn_body(code, 'function ccDoc(')
     report('5 copy: ccDoc found', bool(cd))
     report("5 copy: ccDoc takes the leg table's legs and figures",
-           'legPts(r,st)' in cd and 'g.parts.forEach' in cd and 'pt.nm.toFixed(2)' in cd and 'magOf(pt.brg,vc)' in cd and 'vc=varOf(L)' in cd)
+           'legPts(r,st)' in cd and 'g.parts.forEach' in cd and 'pt.nm.toFixed(2)' in cd and 'mag1(pt.brg,vc)' in cd and 'vc=varOf(L)' in cd)
     report('5 copy: ccDoc writes nothing',
            not re.search(r'\b(commit|save|stamp|scheduleSave|render|course)\(', cd) and not re.search(r'\bS\.\w+(\[[^\]]*\])?\s*=[^=]', cd))
     bl = fn_body(code, 'function buildLegs(')
@@ -419,6 +419,8 @@ def t7_a40_guards():
             body = body.replace('const legs=[], vc=varOf(L);', 'const legs=[];').replace('magOf(pt.brg,vc)', 'magOf(pt.brg)')
             # .36 rebuilt: the series field is "x-series", an extra field in Mark McLoughlin's convention (Pat, 13 October 2026)
             body = body.replace('\'  "x-series": \'', '\'  "series": \'')
+            # and "course" to one decimal of a degree magnetic, as agreed with Mark McLoughlin on 10 October 2026
+            body = body.replace('mag1(pt.brg,vc)', 'magOf(pt.brg)')
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -630,15 +632,19 @@ def t13_changes36_guards():
     g('A49: a typed position from another date says it', "time:hhmm(m.time)+otherDate(m,day)" in code)
     g('A50: no chip of its own for a fix under a laid mark\'s name', 'const bm=bm0.filter(m=>!underLaid(m));' in code
       and '!isPasted(m)&&laidK.has(norm(m.name))' in code)
-    g('A54: the start line under the Start line lists', "sMiss+lineInfo()+" in code and 'No start line yet: no start time is set, so auto finds no committee boat or Start Pin.' in code)
+    g('A54: the start line under the Start line lists', "+lineInfo()+'</div>'+" in code and 'No start line yet: no start time is set, so auto finds no committee boat or Start Pin.' in code)
     g('A55: the scale bar in metres below 0.1 nm', "barNm<0.1?Math.round(barNm*1852)+' m'" in code)
     g('A56: a wind direction used only from 0 to 360, saved when the box is left', 'function twdOk(v)' in code and page.count('id="twdWarn"') == 1
-      and "$('twd').oninput=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;buildLegs();};" in code
-      and "$('twd').onchange=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;saveWind();};" in code)
+      and "twdBad='';S.twd=v;buildLegs();};" in code and "twdBad='';S.twd=v;saveWind();};" in code)
     g('A49: no date label in the WhatsApp text', r".replace(/ on \S+ \d{1,2} \S+$/,'')" in code)
     g('A10: opening an old race never writes a choice: device-only laid choices from before .35 are not saved by a load, and a load-led save adds no auto choice',
       'S.laidLegacy[key])return;' in fn_body(code, 'function laidRec(') and "if(S.laidShape!==35)" in code
       and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 2 and 'if(!noFreeze)freezeFor(k);' in code)
+    g('A54: section 3\'s start line note follows the wind box as section 4 does', "sMiss+'<div id=\"lineInfo\">'+lineInfo()+'</div>'+" in code
+      and "if($('lineInfo'))$('lineInfo').innerHTML=lineInfo();" in fn_body(code, 'function buildLegs('))
+    g('A56: an out-of-range direction is used as none and never saved', "twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}" in code
+      and code.count("if(!twdWarnSay(v)){twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}") == 2 and 'if(twdBad)S.twd=\'\';' in code)
+    g('Copy for Sail Scoring: course to one decimal of a degree magnetic', 'function mag1(brgT,v){' in code and '"course": \'+mag1(pt.brg,vc)' in code)
     g('C: Copy for Sail Scoring names the series "x-series"', '\'  "x-series": \'' in code and '\'  "series": \'' not in code)
 
 

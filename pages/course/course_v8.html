@@ -1261,9 +1261,13 @@ function render(){
   if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
   if(!S.winds||typeof S.winds!=='object')S.winds={};
   // a wind direction being typed (the box has focus) is kept as typed until the RO leaves the box (STATUS A56)
-  {const w=S.winds[ckey(S.race,S.start)]||{}, typing=document.activeElement===$('twd');
-   S.twd=typing&&twdOk($('twd').value)?$('twd').value:(w.twd||'');S.tws=w.tws||'';
-   if(!typing)$('twd').value=S.twd;}
+  // an out-of-range direction left in the box (twdBad) stays there, used as no direction, until the RO corrects it or
+  // opens another course (Pat, 13 October 2026)
+  {const k=ckey(S.race,S.start), w=S.winds[k]||{}, typing=document.activeElement===$('twd');
+   if(twdBad&&twdBad!==k){twdBad='';twdWarnSay('');}
+   if(twdBad)S.twd='';
+   else{S.twd=typing&&twdOk($('twd').value)?$('twd').value:(w.twd||'');if(!typing)$('twd').value=S.twd;}
+   S.tws=w.tws||'';}
   $('tws').value=S.tws;
   const tabs=$('tabs');tabs.innerHTML='';
   races().forEach(r=>{const b=document.createElement('button');b.textContent='Race '+r;b.setAttribute('aria-pressed',r===S.race);
@@ -1364,7 +1368,7 @@ function render(){
   const sMiss=sm==='laid'&&!slRec?'<div class="meta warnTxt">⚠ Start line missing: Laid line is chosen and no committee boat and pin are usable, '+
       'so the first leg is not measured. <button type="button" class="ghost lineAct" data-act="chooseStart">Choose or record committee boat and pin</button> '+
       '<button type="button" class="ghost lineAct" data-act="useCard">Use Card mark</button></div>':'';
-  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+lineInfo()+
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+'<div id="lineInfo">'+lineInfo()+'</div>'+
     (sl0||sm==='card'||sm==='laid'?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
         '. Record the committee boat and pin to measure the real line and its bias.'+
@@ -1606,6 +1610,8 @@ function varAt(L){const d=S.pulledDay||$('day').value||todayISO(), y0=wmmYear(d)
 function varOf(L){return varAt(L).v;}
 // the course open on the page
 function varW(){return varOf(legPts());}
+// degrees magnetic to one decimal, 0.0 to 359.9, for Copy for Sail Scoring (Pat and Mark McLoughlin, 10 October 2026)
+function mag1(brgT,v){const m=Math.round(((brgT+v)%360+360)%360*10)/10;return (m>=360?0:m).toFixed(1);}
 function magOf(brgT,v){return Math.round(brgT+(v===undefined?varW():v)+360)%360;}
 function isCB(n){return /committee/i.test(n);}
 function isStartPin(n){return /pin/i.test(n)&&!/finish/i.test(n);}
@@ -1913,6 +1919,8 @@ function buildLegs(){
   course();   // as before: the selected start's course entry is created and tidied here; legPts itself never writes
   const L=legPts(), {ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts}=L;
   setSendWarn(L); $('ccPasted').innerHTML=pastedHtml(L);
+  // section 3's start line note follows the wind box too, so it always matches section 4 (Pat, 13 October 2026, A54)
+  if($('lineInfo'))$('lineInfo').innerHTML=lineInfo();
   const vr=varOf(L);
   const twdM=S.twd===''?null:+S.twd;
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
@@ -2071,7 +2079,7 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   const wind=(twd!==null?', "windDirection": '+twd:'')+(twd!==null&&tws!==null?', "windSpeed": '+tws:'');
   const legs=[], vc=varOf(L);
   L.legs.forEach(g=>g.parts.forEach(pt=>legs.push('    { "name": '+JSON.stringify(pt.from+' - '+pt.to)+', "distance": '+pt.nm.toFixed(2)+
-    ', "course": '+magOf(pt.brg,vc)+wind+' }')));
+    ', "course": '+mag1(pt.brg,vc)+wind+' }')));
   // the anchor is where the first exported leg starts: the first point, unless the legs from it were not measured
   const i0=L.legs.findIndex(g=>!g.missing);
   if(i0<0)return {block:pre.join('. ')+'. No leg can be measured. Nothing to copy.',err:true};
@@ -3308,8 +3316,11 @@ function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};stamp();
    (Pat, 13 October 2026). */
 function twdOk(v){return v===''||(/^\d{1,3}(\.\d+)?$/.test(String(v).trim())&&+v>=0&&+v<=360);}
 function twdWarnSay(v){const ok=twdOk(v), w=$('twdWarn');w.hidden=ok;w.textContent=ok?'':'Wind direction must be 0 to 360 °M: "'+v+'" is not used or saved.';return ok;}
-$('twd').oninput=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;buildLegs();};
-$('twd').onchange=e=>{const v=e.target.value;if(!twdWarnSay(v))return;S.twd=v;saveWind();};
+// twdBad: the course whose box holds an out-of-range direction; while it does, the page uses no direction (TWA "–", no
+// off-square or favoured end, in sections 3 and 4 and the sketch) and saves nothing
+var twdBad='';   // var: render() reads it before this line runs
+$('twd').oninput=e=>{const v=e.target.value;if(!twdWarnSay(v)){twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}twdBad='';S.twd=v;buildLegs();};
+$('twd').onchange=e=>{const v=e.target.value;if(!twdWarnSay(v)){twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}twdBad='';S.twd=v;saveWind();};
 $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
 function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
