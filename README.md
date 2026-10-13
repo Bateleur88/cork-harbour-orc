@@ -332,9 +332,27 @@ footer "© 2026 Pat Tanner ORC Ireland".
   box is). So a saved course rebuilds the same on every device and every day. When a
   newer fix arrives later, the course row says "A newer fix: White Bay at 13:45 – use
   it?" (for a line end, "A newer fix: Committee boat R1 13:58 … – use it?") and nothing
-  changes until the RO taps "Use it". Auto that finds no fix yet saves nothing, so a
-  mark not yet laid follows its first fix until the course is next saved. Only fixes
-  saved on the server are saved as choices; `marks.php` stores the fields unchanged.
+  changes until the RO taps "Use it". Auto that finds no fix yet saves nothing; the
+  first fix it uses is saved with the course without a tap (Pat, 13 October 2026,
+  option (a)): as soon as the course is shown on the race day (the day loaded is
+  today), and on any day before it is sent (WhatsApp, Share, Copy text, Copy for Sail
+  Scoring), so a sent course always rebuilds exactly. Opening an old race never writes
+  to it. Only fixes saved on the server are saved as choices; `marks.php` stores the
+  fields unchanged.
+- *One chip per laid mark* (`STATUS.md` A50): a RIB fix or typed position under a laid
+  mark's name (Curlane, Dutchman, White Bay) has no chip of its own; the chip
+  "White Bay · laid mark" stands for it (with no such chip yet, one is offered:
+  "1 fix under this name"), and its Position box lists the fixes. A pasted position
+  keeps its own chip until it is saved to the race record. Course rows already naming
+  a plain fix are left as they are.
+- *Start line under the lists* (`STATUS.md` A54): as soon as both ends are found the
+  Start line row in section 3 gives its length and bearing ("Start line 149 m,
+  070°M"), and once a wind direction is typed how far it is off square and which end is
+  favoured, as section 4 does; with no start time set it says "No start line yet: no
+  start time is set, so auto finds no committee boat or Start Pin".
+- *Wind direction* (`STATUS.md` A56): used and saved only from 0 to 360; anything else
+  is said in red under the box ("Wind direction must be 0 to 360 °M: "1141" is not used
+  or saved.") and the course keeps its last good direction.
 - *Course chart*: the Chart draws what the Sketch draws, from the same data: the
   legs in order with arrowheads (a leg that follows a card passage goes through the
   card's waypoints, where the sketch draws it straight), the start and finish lines
@@ -517,14 +535,28 @@ footer "© 2026 Pat Tanner ORC Ireland".
   is held back in Send, as one with a missing mark is (below).
 - *Magnetic variation* (`STATUS.md` A11): the World Magnetic Model (WMM2025, NOAA NCEI
   and the British Geological Survey, the model Sail Scoring uses), embedded in the
-  page with its 90 official coefficient lines, worked out at one fixed point, the map
-  centre (51.82 N, 8.27 W), for the race date (the day loaded), never from the marks
-  loaded and never for today's date. So every device gives the same °M figures, and
-  an old race opened later keeps the figures of its day. At the map centre it gives
-  1.69° W for 27 September 2026 and 1.68° W for 13 October 2026, as NOAA's calculator
-  does. Sail Scoring converts an imported ORC constructed course at the start of its
-  first leg (the document's anchor) for the race date, so the two agree to about
-  0.01°.
+  page with its 90 official coefficient lines, worked out as Sail Scoring works it out
+  for the course we copy to it (from PAGE_VERSION 2026-10-06.36): at the course's
+  anchor (the start of its first measured leg, as Copy for Sail Scoring writes it, to
+  6 decimals), at noon UTC on the race date (the day loaded), rounded to 2 decimals as
+  Sail Scoring's `magvar` does. Never from the marks loaded, never for today's date.
+  A course with no measured leg has no anchor; Sail Scoring would then use its series'
+  venue position, which the page does not have, so the page uses the map centre
+  (51.82 N, 8.27 W) and says "variation at the map centre: no leg measured" beside the
+  wind arrow on the chart and the sketch.
+- *Distances and bearings* (`STATUS.md` A15, from PAGE_VERSION 2026-10-06.36):
+  Vincenty on the WGS84 ellipsoid, as the workbook (`scripts/geo.py`), for every
+  figure: legs, mark movement, line length and the 8 nm far-away check. The charts
+  still draw a straight leg as a rhumb line, which is what a straight line on their
+  map is.
+- *Typed positions* (`STATUS.md` A49): "Add a mark by typing its position" asks for
+  the time on the water (filled with the time now on the race day itself) and saves
+  it on the race day; Cancel stores nothing. A position typed before .36 carries the
+  time it was typed; one typed on another date than its race day says that date
+  ("R2 15:50 on Tue 13 Oct"). The message for a typed position far from the map centre
+  is red, as its chip is (A55). The sketch's scale bar is in metres below 0.1 nm.
+  After a change of day, "All course changes saved" speaks only for the day loaded
+  (A48).
 - *Holding back a broken course* (section 6): while the course has a missing mark, a
   leg not measured (a routing waypoint with nothing on one side), a leg shorter than
   50 m (flagged "two marks at nearly the same position" in the leg table) or a typed or
