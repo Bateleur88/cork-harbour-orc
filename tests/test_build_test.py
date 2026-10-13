@@ -78,6 +78,14 @@ altered in ways it must refuse and checks that it writes nothing:
                 correction); pasted positions in red where used with "Save to the race record", no duplicate saved, the
                 card-name refusal applied (A47); a saved typed position counts for its laid mark; the magnetic variation
                 for the Race day, not today (A11). Guards, not proof: no JavaScript is run
+ 11  .34        static guards for the changes after Pat's test of 2026-10-06.33-test (STATUS A11, A40, A45, A47): Share
+                and Copy text greyed like WhatsApp when switched off; the magnetic variation from the World Magnetic Model
+                (WMM2025, the 90 coefficient lines exactly as the official WMM.COF, by their SHA-256) at the map centre for
+                the day loaded, never from the marks loaded; a far typed or pasted position in a course holds Send back;
+                the WhatsApp heading's date is the day loaded, and a Race day changed but not loaded is said and holds Send
+                back; a pasted line matching a saved position makes no chip and says so; typed and pasted positions are
+                never checked for their age; a leg through RO-chosen waypoints names a laid mark's fix on the physical leg
+                touching it; every start with a saved course is shown. Guards, not proof: no JavaScript is run
 
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
@@ -467,12 +475,13 @@ def t9_fixes32_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok: report('9 .32: ' + name, ok)
     bl = fn_body(code, 'function buildLegs(')
-    g('1 the WhatsApp date is the Race day box, never S.date',
-      "const head=[series.name,$('day').value?longDate($('day').value):''].filter(Boolean).join(' – ')||'Course';" in bl
+    # .34 (Pat, 13 October 2026): the date is the day loaded, and a Race day changed but not loaded holds Send back (group 11)
+    g('1 the WhatsApp date is the day loaded, never S.date',
+      "const head=[series.name,S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';" in bl
       and 'S.date' not in bl)
     g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>render());" in code)
     g('2 routing waypoints are not carried either', 'm.race<S.race&&!isCourseCard(m)&&!isRwCard(m)' in fn_body(code, 'function bank('))
-    g('4 one line per refused name', "concat(refused.map(cardRefusal));" in code and "$('readStatus').innerHTML=said.map(esc).join('<br>');" in code)
+    g('4 one line per refused name', "refused.map(cardRefusal));" in code and "$('readStatus').innerHTML=said.map(esc).join('<br>');" in code)
     cr = fn_body(code, 'function cardRefusal(')
     g('5 the refusal by kind: a buoy, or a point (routing waypoint, Grassy Mid)',
       "point=m.rw||m.type==='Start/finish modelling point'" in cr and "'If you need a different point, give it a different name.'" in cr
@@ -483,8 +492,8 @@ def t9_fixes32_guards():
       and "'its planning position (the card position)'" in code and "'the RIB fix'" in code and "'the RIB fix at '" not in code)
     ln = fn_body(code, 'function laidNotice(')
     g('8 the notice says when nothing moved', "'It has not moved, so no leg has changed.'" in ln and "' nm, unchanged.'" in ln)
-    g('9 a far typed or pasted position is left out of the magnetic variation',
-      'const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];' in fn_body(code, 'function varW('))
+    # .34: the variation is at one fixed point, so no position (far or not) can change it (group 11)
+    g('9 no position, far or not, changes the magnetic variation', 'S.marks' not in fn_body(code, 'function varW('))
 
 
 def t10_changes33_guards():
@@ -533,7 +542,39 @@ def t10_changes33_guards():
       and "S.outbox.push({action:'add',id:pid,date:d,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:0,time:t});" in sp and 'if(ch)stamp(k);' in sp)
     g('7 a saved typed position counts for its laid mark', 'const cand=S.marks.filter(x=>(ribFix(x)||(isTypedPos(x)&&!!x.sid))&&x.race<=race)' in fn_body(code, 'function laidState('))
     vw = fn_body(code, 'function varW(')
-    g('8 the magnetic variation for the Race day, not today', "String($('day').value||'').match(" in vw and 'const yr=rd?+rd[1]+(+rd[2]-1)/12:' in vw)
+    g('8 the magnetic variation for the race date, not today', "const d=S.pulledDay||$('day').value||todayISO(), y=wmmYear(d);" in vw)
+
+
+# the 90 coefficient lines of WMM2025 (WMM.COF, NOAA NCEI and BGS, 13 November 2024), each "g h g-dot h-dot", joined by ";"
+# as the page holds them (WMM_COF): SHA-256 of that text, so the table cannot drift from the official file unnoticed
+WMM2025_COF_SHA = 'd6eb9370bf06b7d80fef2543fe121e317fbba41a737d24522457971980b75c1a'
+
+
+def t11_changes34_guards():
+    import hashlib
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('11 .34: ' + name, ok)
+    g('1 Share and Copy text greyed when switched off, as WhatsApp is', '.btn[aria-disabled="true"],.btn:disabled{opacity:.4;pointer-events:none}' in page)
+    cof = re.search(r"WMM_COF='([^']*)'", code)
+    g('2 the WMM2025 coefficients are the official file', bool(cof) and hashlib.sha256(cof.group(1).encode()).hexdigest() == WMM2025_COF_SHA
+      and len(cof.group(1).split(';')) == 90 and 'const WMM_EPOCH=2025.0' in code)
+    vw = fn_body(code, 'function varW(')
+    g('2 the variation at the map centre for the day loaded, from the model', "S.pulledDay||$('day').value||todayISO()" in vw
+      and '-wmmDecl(HARBOUR_CENTRE.lat,HARBOUR_CENTRE.lon,' in vw and 'S.marks' not in vw)
+    sw = fn_body(code, 'function setSendWarn(')
+    g('3 a far position in a course holds Send back', "filter(m=>farNm(m))" in sw and "'This course uses a position more than '+FAR_NM+' nm from the map centre ('" in sw)
+    g('4 a Race day changed but not loaded is said and holds Send back', page.count('id="dayChanged"') == 1
+      and "'Race day changed to '+longDate(dc)+': tap Get latest marks'" in sw and "$('day').value!==S.pulledDay" in sw)
+    g('4 the heading date is the day loaded', "S.pulledDay?longDate(S.pulledDay):''" in fn_body(code, 'function buildLegs('))
+    rp = fn_body(code, 'function readPaste(')
+    g('5 a pasted line matching a saved position makes no chip', 'x.sid&&x.race===m.race' in rp and 'dup.push(t);return;}' in rp
+      and "' is already in the race record with the same position.'" in code)
+    g('6 typed and pasted positions are never checked for their age', 'list.forEach(m=>{if(isOtherMark(m))return;const a=fixAge(m);' in fn_body(code, 'function fxChecks('))
+    g('7 a laid mark at its fix named on a physical leg through RO-chosen waypoints', "p.atFix&&(p.moveNote||'to RIB fix, not depth-checked')" in fn_body(code, 'function roLeg('))
+    g('9 every start with a saved course is shown', '+k.split(\'|\')[1]+1' in fn_body(code, 'function classesOf('))
 
 
 def main():
@@ -549,6 +590,7 @@ def main():
         t8_fixes31_guards()
         t9_fixes32_guards()
         t10_changes33_guards()
+        t11_changes34_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

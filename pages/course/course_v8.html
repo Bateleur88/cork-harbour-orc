@@ -113,7 +113,7 @@ svg{display:block;width:100%;height:auto}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .btn{display:flex;align-items:center;justify-content:center;padding:14px;border-radius:14px;font-weight:700;text-decoration:none;border:2px solid var(--ink);background:transparent;color:var(--ink)}
 .btn.wa{grid-column:1/-1;background:#1F8A4C;border-color:#1F8A4C;color:#fff;padding:16px}
-.btn[aria-disabled="true"]{opacity:.4;pointer-events:none}
+.btn[aria-disabled="true"],.btn:disabled{opacity:.4;pointer-events:none}
 .ssHead{font-size:1rem;margin:22px 0 4px}
 .legsCap{caption-side:top;text-align:left;font-weight:700;font-size:.9rem;margin:10px 0 2px;color:var(--ink)}
 .segToggle{margin-top:4px;padding:2px 8px;border-radius:8px;border:1px solid var(--sea);background:transparent;color:var(--sea);font-size:.8rem;font-weight:700}
@@ -253,6 +253,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <label>Race day<input id="day" type="date"></label>
   </div>
   <button class="act" id="pull">Get latest marks</button>
+  <!-- the Race day box changed but that day not loaded: the page still holds the day loaded (setSendWarn) -->
+  <p class="status err" id="dayChanged" role="status" hidden></p>
   <p class="hint" style="color:var(--muted);font-size:.85rem;margin:6px 0 0">After the first tap it refreshes by itself every 30 seconds.</p>
   <p class="status" id="readStatus" role="status" aria-live="polite"></p>
   <!-- what happened to this device's course saves (saveLines): refused saves, why a load or a change of day sends, and
@@ -399,7 +401,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.33';
+const PAGE_VERSION='2026-10-06.34';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -496,7 +498,12 @@ function readPaste(txt){
   if(hdr)date=hdr[2].trim();
   // a line naming a card mark is refused and stores nothing (cardNameOf); the other lines are read as before
   const refused=[]; added.refused=refused;
-  const add=m=>{const c=cardNameOf(m.name);if(c){if(!refused.includes(c))refused.push(c);return;}m.pasted=true;push(m);added.push(m);};
+  // a line matching a position already saved for that race (same name and position, A47) makes no device-only chip
+  const dup=[]; added.dup=dup;
+  const add=m=>{const c=cardNameOf(m.name);if(c){if(!refused.includes(c))refused.push(c);return;}
+    if(S.marks.some(x=>x.sid&&x.race===m.race&&x.name.toLowerCase()===m.name.toLowerCase()&&Math.abs(x.lat-m.lat)<1e-7&&Math.abs(x.lon-m.lon)<1e-7)){
+      const t=m.name+' (Race '+m.race+')';if(!dup.includes(t))dup.push(t);return;}
+    m.pasted=true;push(m);added.push(m);};
   txt.split(/\r?\n/).forEach(line=>{
     line=line.trim(); if(!line||/^```/.test(line))return;
     // a row copied from the card (the workbook's Marks sheet): tab-separated columns, "E4 / North Cardinal", the type,
@@ -682,7 +689,11 @@ delete S.startClasses;
 if(!Array.isArray(S.dayClasses))S.dayClasses=[];
 function ownClasses(r){return S.raceClasses[r||S.race]||null;}
 function dayFallback(){return S.dayClasses.some(l=>l.length)?S.dayClasses:null;}
-function classesOf(r){return ownClasses(r)||[[],[],[]];}
+// a race's starts: its start groups, and at least every start that has a course (a start added with no classes is not
+// saved as a group, so its course must still be shown and opened; Pat, 13 October 2026)
+function classesOf(r){const rr=r||S.race, own=ownClasses(rr)||[[],[],[]];
+  const n=Math.max(own.length,...Object.keys(S.courses||{}).filter(k=>/^\d+\|\d+$/.test(k)&&+k.split('|')[0]===rr&&(S.courses[k]||[]).length).map(k=>+k.split('|')[1]+1));
+  return n>own.length?own.concat(Array.from({length:n-own.length},()=>[])):own;}
 // the race's own groups, empty the first time it is edited; every edit marks them as built for the day being worked on
 function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=[[],[],[]];stamp('_starts|'+r);return S.raceClasses[r];}
 S.starts=classesOf().map((_,i)=>'Start '+(i+1));
@@ -877,9 +888,12 @@ function roLeg(a,vias,b){
     const t=p.card&&q.card&&!p.atFix&&!q.atFix?T[p.card+'|'+q.card]:null, g=t||rhumb(p,q);
     if(!t)untested=true;
     nm+=g.nm; if(i===0)brg=g.brg;
-    parts.push({nm:g.nm,brg:g.brg,from:p.name,to:q.name,note:t?'':'not depth-checked'});}
+    // a laid mark at its fix (RIB, typed or pasted, resolveLaid) names it on the physical leg touching it, as legGeom does
+    const mv=[p.atFix&&(p.moveNote||'to RIB fix, not depth-checked'),q.atFix&&(q.moveNote||'to RIB fix, not depth-checked')].filter(Boolean);
+    parts.push({nm:g.nm,brg:g.brg,from:p.name,to:q.name,note:mv.length?mv.join('; '):t?'':'not depth-checked'});}
+  const notes=[...new Set(parts.map(x=>x.note).filter(Boolean))];
   return {r:{nm,m:nm*1852,brg},via:'',viaText:'routed via '+vias.map(v=>v.name).join(' → ')+' (RO-chosen)',
-    fixNote:untested?'not depth-checked':'',parts,route:vias,ro:true};
+    fixNote:untested?notes.join('; '):'',parts,route:vias,ro:true};
 }
 let laidPending={}, lastTotal=0, lastPullAt=0;
 // legs (legPts): so the earlier total takes a leg through RO-chosen routing waypoints as every other figure does (roLeg)
@@ -1402,18 +1416,61 @@ function renderRaceAlerts(){
 }
 
 const BOAT_M=10;
-/* Magnetic variation (°W), worked out silently for Irish waters from the marks' position and today's date.
-   Fitted to WMM values for 2026 (Dublin 1.55°W, Cork 1.88°W), easing about 0.2° a year. Good to about ±0.5°. */
-function varW(){
-  // a typed or pasted position more than FAR_NM away (farNm, STATUS A45) is left out: a flagged position must never change
-  // anyone's °M figures (Pat, 12 October 2026)
-  const near=S.marks.filter(m=>!farNm(m)), ms=near.length?near:[{lat:51.8,lon:-8.3}];
-  const lon=ms.reduce((a,m)=>a+m.lon,0)/ms.length;
-  // the race date, the Race day in section 1, never today's, so an old race keeps the °M figures of its day (STATUS A11)
-  const rd=String($('day').value||'').match(/^(\d{4})-(\d{2})-\d{2}$/), now=new Date();
-  const yr=rd?+rd[1]+(+rd[2]-1)/12:now.getFullYear()+now.getMonth()/12;
-  return Math.max(0,1.55+0.15*(-6.26-lon)-0.2*(yr-2026));
-}
+/* The World Magnetic Model, WMM2025 (NOAA NCEI and the British Geological Survey; coefficients released 13 November 2024,
+   valid 2025.0 to 2030.0), the model Sail Scoring uses. WMM_COF holds the 90 lines of the official WMM.COF in order
+   (n = 1..12, m = 0..n), each "g h g-dot h-dot"; wmmDecl is NOAA's own calculation (geomag.c), ported line for line, at
+   sea level. It returns the declination in degrees, east positive (the page's variation, west positive, is its negative). */
+const WMM_EPOCH=2025.0, WMM_COF='-29351.8 0.0 12.0 0.0;-1410.8 4545.4 9.7 -21.5;-2556.6 0.0 -11.6 0.0;2951.1 -3133.6 -5.2 -27.7;1649.3 -815.1 -8.0 -12.1;1361.0 0.0 -1.3 0.0;-2404.1 -56.6 -4.2 4.0;1243.8 237.5 0.4 -0.3;453.6 -549.5 -15.6 -4.1;895.0 0.0 -1.6 0.0;799.5 278.6 -2.4 -1.1;55.7 -133.9 -6.0 4.1;-281.1 212.0 5.6 1.6;12.1 -375.6 -7.0 -4.4;-233.2 0.0 0.6 0.0;368.9 45.4 1.4 -0.5;187.2 220.2 0.0 2.2;-138.7 -122.9 0.6 0.4;-142.0 43.0 2.2 1.7;20.9 106.1 0.9 1.9;64.4 0.0 -0.2 0.0;63.8 -18.4 -0.4 0.3;76.9 16.8 0.9 -1.6;-115.7 48.8 1.2 -0.4;-40.9 -59.8 -0.9 0.9;14.9 10.9 0.3 0.7;-60.7 72.7 0.9 0.9;79.5 0.0 -0.0 0.0;-77.0 -48.9 -0.1 0.6;-8.8 -14.4 -0.1 0.5;59.3 -1.0 0.5 -0.8;15.8 23.4 -0.1 0.0;2.5 -7.4 -0.8 -1.0;-11.1 -25.1 -0.8 0.6;14.2 -2.3 0.8 -0.2;23.2 0.0 -0.1 0.0;10.8 7.1 0.2 -0.2;-17.5 -12.6 0.0 0.5;2.0 11.4 0.5 -0.4;-21.7 -9.7 -0.1 0.4;16.9 12.7 0.3 -0.5;15.0 0.7 0.2 -0.6;-16.8 -5.2 -0.0 0.3;0.9 3.9 0.2 0.2;4.6 0.0 -0.0 0.0;7.8 -24.8 -0.1 -0.3;3.0 12.2 0.1 0.3;-0.2 8.3 0.3 -0.3;-2.5 -3.3 -0.3 0.3;-13.1 -5.2 0.0 0.2;2.4 7.2 0.3 -0.1;8.6 -0.6 -0.1 -0.2;-8.7 0.8 0.1 0.4;-12.9 10.0 -0.1 0.1;-1.3 0.0 0.1 0.0;-6.4 3.3 0.0 0.0;0.2 0.0 0.1 -0.0;2.0 2.4 0.1 -0.2;-1.0 5.3 -0.0 0.1;-0.6 -9.1 -0.3 -0.1;-0.9 0.4 0.0 0.1;1.5 -4.2 -0.1 0.0;0.9 -3.8 -0.1 -0.1;-2.7 0.9 -0.0 0.2;-3.9 -9.1 -0.0 -0.0;2.9 0.0 0.0 0.0;-1.5 0.0 -0.0 -0.0;-2.5 2.9 0.0 0.1;2.4 -0.6 0.0 -0.0;-0.6 0.2 0.0 0.1;-0.1 0.5 -0.1 -0.0;-0.6 -0.3 0.0 -0.0;-0.1 -1.2 -0.0 0.1;1.1 -1.7 -0.1 -0.0;-1.0 -2.9 -0.1 0.0;-0.2 -1.8 -0.1 0.0;2.6 -2.3 -0.1 0.0;-2.0 0.0 0.0 0.0;-0.2 -1.3 0.0 -0.0;0.3 0.7 -0.0 0.0;1.2 1.0 -0.0 -0.1;-1.3 -1.4 -0.0 0.1;0.6 -0.0 -0.0 -0.0;0.6 0.6 0.1 -0.0;0.5 -0.1 -0.0 -0.0;-0.1 0.8 0.0 0.0;-0.4 0.1 0.0 -0.0;-0.2 -1.0 -0.1 -0.0;-1.3 0.1 -0.0 0.0;-0.7 0.2 -0.1 -0.1';
+let WMM=null;
+function wmmInit(){const N=13, z=()=>Array.from({length:N},()=>new Array(N).fill(0));
+  const c=z(), cd=z(), k=z(), snorm=new Array(N*N).fill(0), fn=new Array(N).fill(0), fm=new Array(N).fill(0);
+  const rows=WMM_COF.split(';').map(r=>r.split(' ').map(Number));let i=0;
+  for(let n=1;n<=12;n++)for(let m=0;m<=n;m++){const[g,h,gd,hd]=rows[i++];c[m][n]=g;cd[m][n]=gd;if(m!==0){c[n][m-1]=h;cd[n][m-1]=hd;}}
+  // Schmidt quasi-normalised coefficients to unnormalised
+  snorm[0]=1;
+  for(let n=1;n<=12;n++){snorm[n]=snorm[n-1]*(2*n-1)/n;let j=2;
+    for(let m=0;m<=n;m++){k[m][n]=((n-1)*(n-1)-m*m)/((2*n-1)*(2*n-3));
+      if(m>0){const f=((n-m+1)*j)/(n+m);snorm[n+m*N]=snorm[n+(m-1)*N]*Math.sqrt(f);j=1;c[n][m-1]*=snorm[n+m*N];cd[n][m-1]*=snorm[n+m*N];}
+      c[m][n]*=snorm[n+m*N];cd[m][n]*=snorm[n+m*N];}
+    fn[n]=n+1;fm[n]=n;}
+  k[1][1]=0;
+  WMM={c,cd,k,fn,fm};}
+function wmmDecl(glat,glon,year){if(!WMM)wmmInit();
+  const N=13,{c,cd,k,fn,fm}=WMM, a=6378.137, b=6356.7523142, re=6371.2, a2=a*a, b2=b*b, c2=a2-b2, a4=a2*a2, b4=b2*b2, c4=a4-b4;
+  const dt=year-WMM_EPOCH, dtr=Math.PI/180, alt=0, rlon=glon*dtr, rlat=glat*dtr;
+  const srlon=Math.sin(rlon), srlat=Math.sin(rlat), crlon=Math.cos(rlon), crlat=Math.cos(rlat), srlat2=srlat*srlat, crlat2=crlat*crlat;
+  const sp=new Array(N).fill(0), cp=new Array(N).fill(0), p=new Array(N*N).fill(0), dp=Array.from({length:N},()=>new Array(N).fill(0));
+  const pp=new Array(N).fill(0), tc=Array.from({length:N},()=>new Array(N).fill(0));
+  sp[0]=0;cp[0]=1;p[0]=1;pp[0]=1;dp[0][0]=0;sp[1]=srlon;cp[1]=crlon;
+  // geodetic to spherical coordinates
+  const q=Math.sqrt(a2-c2*srlat2), q1=alt*q, q2=((q1+a2)/(q1+b2))**2, ct=srlat/Math.sqrt(q2*crlat2+srlat2), st=Math.sqrt(1-ct*ct);
+  const r2=alt*alt+2*q1+(a4-c4*srlat2)/(q*q), r=Math.sqrt(r2), d=Math.sqrt(a2*crlat2+b2*srlat2), ca=(alt+d)/r, sa=c2*crlat*srlat/(r*d);
+  for(let m=2;m<=12;m++){sp[m]=sp[1]*cp[m-1]+cp[1]*sp[m-1];cp[m]=cp[1]*cp[m-1]-sp[1]*sp[m-1];}
+  const aor=re/r;let ar=aor*aor, br=0, bt=0, bp=0, bpp=0;
+  for(let n=1;n<=12;n++){ar*=aor;
+    for(let m=0;m<=n;m++){
+      if(n===m){p[n+m*N]=st*p[n-1+(m-1)*N];dp[m][n]=st*dp[m-1][n-1]+ct*p[n-1+(m-1)*N];}
+      else if(n===1&&m===0){p[n+m*N]=ct*p[n-1+m*N];dp[m][n]=ct*dp[m][n-1]-st*p[n-1+m*N];}
+      else if(n>1&&n!==m){if(m>n-2){p[n-2+m*N]=0;dp[m][n-2]=0;}
+        p[n+m*N]=ct*p[n-1+m*N]-k[m][n]*p[n-2+m*N];dp[m][n]=ct*dp[m][n-1]-st*p[n-1+m*N]-k[m][n]*dp[m][n-2];}
+      tc[m][n]=c[m][n]+dt*cd[m][n];if(m!==0)tc[n][m-1]=c[n][m-1]+dt*cd[n][m-1];
+      const par=ar*p[n+m*N];let t1, t2;
+      if(m===0){t1=tc[m][n]*cp[m];t2=tc[m][n]*sp[m];}
+      else{t1=tc[m][n]*cp[m]+tc[n][m-1]*sp[m];t2=tc[m][n]*sp[m]-tc[n][m-1]*cp[m];}
+      bt-=ar*t1*dp[m][n];bp+=fm[m]*t2*par;br+=fn[n]*t1*par;
+      if(st===0&&m===1){pp[n]=n===1?pp[n-1]:ct*pp[n-1]-k[m][n]*pp[n-2];bpp+=fm[m]*t2*ar*pp[n];}}}
+  bp=st===0?bpp:bp/st;
+  const bx=-bt*ca-br*sa, by=bp;
+  return Math.atan2(by,bx)/dtr;}
+// the decimal year at the start of a calendar day (YYYY-MM-DD), as NOAA's calculator and pygeomag count it
+function wmmYear(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return null;const y=+m[1];
+  const days=(Date.UTC(y+1,0,1)-Date.UTC(y,0,1))/864e5;return y+(Date.UTC(y,+m[2]-1,+m[3])-Date.UTC(y,0,1))/864e5/days;}
+/* The magnetic variation, degrees west positive (as magOf adds it): the World Magnetic Model at one fixed point, the map
+   centre (51.82 N, 8.27 W), for the race date, the day loaded (else the Race day box, else today), so °M figures never
+   depend on which marks a device has loaded, and an old race keeps the figures of its day (STATUS A11; Pat, 13 October
+   2026). At the map centre: 1.69° W on 27 September 2026, 1.68° W on 13 October 2026, as NOAA's calculator gives. */
+function varW(){const d=S.pulledDay||$('day').value||todayISO(), y=wmmYear(d);
+  return -wmmDecl(HARBOUR_CENTRE.lat,HARBOUR_CENTRE.lon,y===null?wmmYear(todayISO()):y);}
 function magOf(brgT){return Math.round(brgT+varW()+360)%360;}
 function isCB(n){return /committee/i.test(n);}
 function isStartPin(n){return /pin/i.test(n)&&!/finish/i.test(n);}
@@ -1766,8 +1823,9 @@ function buildLegs(){
   lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:cardEndMode('s')==='card'};
   plot(pts,plotLines);
   buildShift(cs);
-  // the date is the Race day in section 1, whether or not that day has fixes and whatever was loaded or pasted before
-  const head=[series.name,$('day').value?longDate($('day').value):''].filter(Boolean).join(' – ')||'Course';
+  // the date is the day loaded, whether or not it has fixes, whatever was pasted; a Race day changed but not loaded is said
+  // above Send and holds it back (setSendWarn; Pat, 13 October 2026)
+  const head=[series.name,S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';
   // the WhatsApp text: a clean course list for competitors (STATUS A40). Routing waypoints are left out of the course line,
   // the mark list and the positions; the line, squaring and wind analysis stay on the page only
   const wRows=L.rows.filter(e=>!isRwCard(markById(e.id)));
@@ -1884,6 +1942,13 @@ let sendBad='';
 function setSendWarn(L){const w=[];
   if(L&&L.miss.length)w.push('This course has a missing mark: fix it before sending to competitors.');
   if(L&&orphanNames(L).length)w.push('This course has a leg that is not measured (routing waypoint '+orphanNames(L).join(', ')+' not between two marks): fix it before sending to competitors.');
+  // a typed or pasted position more than FAR_NM from the map centre in the course (A45), like a missing mark
+  const far=[...new Set((L&&L.cs||[]).filter(m=>farNm(m)).map(m=>m.name+', '+Math.round(farNm(m))+' nm'))];
+  if(far.length)w.push('This course uses a position more than '+FAR_NM+' nm from the map centre ('+far.join('; ')+'): fix it before sending to competitors.');
+  // the Race day box changed but that day not loaded: the page still holds the day loaded
+  const dc=S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay?$('day').value:'';
+  $('dayChanged').hidden=!dc; $('dayChanged').textContent=dc?'Race day changed to '+longDate(dc)+': tap Get latest marks':'';
+  if(dc)w.push('Race day changed to '+longDate(dc)+': tap Get latest marks before sending. This course is from '+longDate(S.pulledDay)+'.');
   sendBad=w.join(' ');$('sendWarn').hidden=!sendBad;$('sendWarn').textContent=sendBad;}
 function sendOk(){return !sendBad||confirm(sendBad+'\n\nSend anyway?');}
 // the marks a course plot names, each once, in drawing order, with its label (a name two different fixes share gets the
@@ -2046,7 +2111,8 @@ function fxChecks(list){
     (m.race===b.race&&(fixMoment(m)||0)>(fixMoment(b)||0))))b=m;});return b;};
   // a typed or pasted position far from the harbour (farNm): a possible error, flagged, never refused (STATUS A38)
   list.forEach(m=>{const d=farNm(m);if(d)add(m,'check',farText(d)+'.','far');});
-  list.forEach(m=>{const a=fixAge(m);if(!a||a.s<FIX_AGE_CHECK_S)return;const bad=a.s>FIX_AGE_BAD_S;
+  // a typed (or corrected typed) or pasted position has no phone behind it: never checked for its age
+  list.forEach(m=>{if(isOtherMark(m))return;const a=fixAge(m);if(!a||a.s<FIX_AGE_CHECK_S)return;const bad=a.s>FIX_AGE_BAD_S;
     add(m,bad?'bad':'check','Position '+fmtAge(a.s)+' old when '+(a.by==='id'?'the phone saved it':
       'the server received it (a fix sent later, after no signal, also shows this)')+(bad?': probably not where the mark is.':': the phone may have used an earlier position.'));});
   [...new Set(list.map(m=>m.race))].sort((a,b)=>a-b).forEach(r=>{const own=list.filter(m=>m.race===r);
@@ -2946,13 +3012,13 @@ $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;st
 $('read').onclick=()=>{
   const t=$('paste').value;
   if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
-  const got=readPaste(t), n=got.length, refused=got.refused||[];
+  const got=readPaste(t), n=got.length, refused=got.refused||[], dup=got.dup||[];
   // "4 pasted positions read for Race 1: E4, No.10, No.3, No.12. They are kept on this device only: …" (STATUS A38)
   const byRace=[...new Set(got.map(m=>m.race))].map(r=>{const l=got.filter(m=>m.race===r);
     return nOf(l.length,'pasted position','pasted positions')+' read for Race '+r+': '+l.map(m=>m.name).join(', ');});
   const far=got.map(m=>({m,d:farNm(m)})).filter(x=>x.d).map(x=>' ⚠ '+x.m.name+' (Race '+x.m.race+') is '+farText(x.d)+'.');
   const said=(n?[byRace.join('; ')+'. '+(n===1?'It is':'They are')+' kept on this device only: not sent to the server, not seen by other devices, and lost if this device is cleared.'+far.join('')]:
-    refused.length?[]:['No positions found. Check the message was pasted whole.']).concat(refused.map(cardRefusal));
+    refused.length||dup.length?[]:['No positions found. Check the message was pasted whole.']).concat(dup.map(x=>x+' is already in the race record with the same position.'),refused.map(cardRefusal));
   $('readStatus').innerHTML=said.map(esc).join('<br>');   // one line each: the positions read, then each refused name
   $('readStatus').className='status '+(n&&!far.length&&!refused.length?'ok':'err');
   // the message stays in the box while a line was refused, so it can be put right
