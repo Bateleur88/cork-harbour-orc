@@ -13,6 +13,7 @@
 /* the page-wide svg rule collapses Leaflet's vector overlay, so undo it inside the map */
 .leaflet-container svg,.leaflet-pane svg{display:inline;width:auto;height:auto;max-width:none}
 .leaflet-container img{max-width:none}
+.windbox .windvar{display:block;font-size:.7rem;font-weight:400}
 .windbox{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:8px;padding:4px 7px;font-size:.8rem;color:var(--warn);text-align:center;font-weight:700}
 .windarrow{display:block;margin:0 auto 2px}
 /* the course chart: the leg arrowheads, and the mark names that stay on (chartLabels) */
@@ -335,9 +336,10 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
     <label>Finish<select id="finishSel"><option value="start">Start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
   </div>
   <div class="fields" id="windFields">
-    <label>Wind direction °M<input id="twd" type="number" min="0" max="359" inputmode="numeric" placeholder="optional"></label>
+    <label>Wind direction °M<input id="twd" type="number" min="0" max="360" inputmode="numeric" placeholder="optional"></label>
     <label>Wind speed kn<input id="tws" type="number" min="0" step="0.5" inputmode="decimal" placeholder="optional"></label>
   </div>
+  <p class="status err" id="twdWarn" role="status" hidden></p>
   <button class="act" id="toRace" hidden>Go to race view</button>
   </div>
 
@@ -401,7 +403,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.35';
+const PAGE_VERSION='2026-10-06.36';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -453,7 +455,11 @@ let series=(()=>{try{const o=JSON.parse(localStorage.getItem(SERIES_KEY)||'{}');
 function saveSeries(){try{localStorage.setItem(SERIES_KEY,JSON.stringify(series));}catch(e){}}
 
 
-/* ---------- geometry (rhumb line) ---------- */
+/* ---------- geometry ----------
+   Every distance and bearing the page shows is Vincenty's on the WGS84 ellipsoid (geo, geoDest), the method the workbook's
+   legs and depth checks use (scripts/geo.py), so the page, the workbook and the course card measure alike (STATUS A15;
+   Pat, 13 October 2026). The rhumb line (rhumb, dest) is kept only for drawing on the charts: a straight line on their
+   Mercator map is a rhumb line. */
 const R=6371000, rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
 function rhumb(a,b){
   const f1=rad(a.lat), f2=rad(b.lat); let dl=rad(b.lon-a.lon);
@@ -465,6 +471,40 @@ function rhumb(a,b){
   let brg=deg(Math.atan2(dl,dps)); brg=(brg+360)%360;
   return {m:d, nm:d/1852, brg};
 }
+const WGS_A=6378137, WGS_F=1/298.257223563, WGS_B=WGS_A*(1-WGS_F);
+// Vincenty inverse (scripts/geo.py vincenty): {m, nm, brg: initial bearing in degrees true}
+function geo(a,b){
+  if(Math.abs(a.lat-b.lat)<1e-12&&Math.abs(a.lon-b.lon)<1e-12)return {m:0,nm:0,brg:0};
+  const f=WGS_F, L=rad(b.lon-a.lon), U1=Math.atan((1-f)*Math.tan(rad(a.lat))), U2=Math.atan((1-f)*Math.tan(rad(b.lat)));
+  const sU1=Math.sin(U1), cU1=Math.cos(U1), sU2=Math.sin(U2), cU2=Math.cos(U2);
+  let lam=L, ss=0, cs=1, sig=0, c2a=1, c2sm=0;
+  for(let i=0;i<200;i++){const sl=Math.sin(lam), cl=Math.cos(lam);
+    ss=Math.hypot(cU2*sl,cU1*sU2-sU1*cU2*cl); cs=sU1*sU2+cU1*cU2*cl; sig=Math.atan2(ss,cs);
+    const sa=cU1*cU2*sl/ss; c2a=1-sa*sa; c2sm=c2a?cs-2*sU1*sU2/c2a:0;
+    const C=f/16*c2a*(4+f*(4-3*c2a)), prev=lam;
+    lam=L+(1-C)*f*sa*(sig+C*ss*(c2sm+C*cs*(-1+2*c2sm*c2sm)));
+    if(Math.abs(lam-prev)<1e-13)break;}
+  const u2=c2a*(WGS_A*WGS_A-WGS_B*WGS_B)/(WGS_B*WGS_B);
+  const A=1+u2/16384*(4096+u2*(-768+u2*(320-175*u2))), B=u2/1024*(256+u2*(-128+u2*(74-47*u2)));
+  const ds=B*ss*(c2sm+B/4*(cs*(-1+2*c2sm*c2sm)-B/6*c2sm*(-3+4*ss*ss)*(-3+4*c2sm*c2sm)));
+  const m=WGS_B*A*(sig-ds);
+  const brg=(deg(Math.atan2(cU2*Math.sin(lam),cU1*sU2-sU1*cU2*Math.cos(lam)))%360+360)%360;
+  return {m, nm:m/1852, brg};}
+// Vincenty direct: the point d metres from a on the initial bearing brgT (a mark moved, a pin squared)
+function geoDest(a,brgT,d){
+  const f=WGS_F, al=rad(brgT), sA=Math.sin(al), cA=Math.cos(al), tU1=(1-f)*Math.tan(rad(a.lat));
+  const cU1=1/Math.sqrt(1+tU1*tU1), sU1=tU1*cU1, s1=Math.atan2(tU1,cA), sa=cU1*sA, c2a=1-sa*sa;
+  const u2=c2a*(WGS_A*WGS_A-WGS_B*WGS_B)/(WGS_B*WGS_B);
+  const A=1+u2/16384*(4096+u2*(-768+u2*(320-175*u2))), B=u2/1024*(256+u2*(-128+u2*(74-47*u2)));
+  let sig=d/(WGS_B*A), c2sm=0, ss=0, cs=1;
+  for(let i=0;i<200;i++){c2sm=Math.cos(2*s1+sig); ss=Math.sin(sig); cs=Math.cos(sig);
+    const ds=B*ss*(c2sm+B/4*(cs*(-1+2*c2sm*c2sm)-B/6*c2sm*(-3+4*ss*ss)*(-3+4*c2sm*c2sm))), prev=sig;
+    sig=d/(WGS_B*A)+ds; if(Math.abs(sig-prev)<1e-12)break;}
+  c2sm=Math.cos(2*s1+sig); ss=Math.sin(sig); cs=Math.cos(sig);
+  const x=sU1*ss-cU1*cs*cA, lat=Math.atan2(sU1*cs+cU1*ss*cA,(1-f)*Math.sqrt(sa*sa+x*x));
+  const lam=Math.atan2(ss*sA,cU1*cs-sU1*ss*cA), C=f/16*c2a*(4+f*(4-3*c2a));
+  const dl=lam-(1-C)*f*sa*(sig+C*ss*(c2sm+C*cs*(-1+2*c2sm*c2sm)));
+  return {lat:deg(lat), lon:a.lon+deg(dl)};}
 function twa(brg,twd){let a=Math.abs(((brg-twd+540)%360)-180);return a;}
 function dest(a,brgT,d){
   const f1=rad(a.lat), th=rad(brgT), df=d/R*Math.cos(th);
@@ -589,7 +629,7 @@ function typedSays(t,ok){$('fxStatus').className='status'+(ok?' ok':' err');$('f
 async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S.pulledDay;
   if(!m||!isTypedPos(m)||!m.sid||m.pending)return;
   if(!day){typedSays('Load the day first.',false);return;}
-  const who=m.name+', Race '+m.race+', typed at '+(m.time||'an unknown time')+', '+rhumb(HARBOUR_CENTRE,m).nm.toFixed(1)+' nm from the map centre (51.82 N, 8.27 W)';
+  const who=m.name+', Race '+m.race+', typed at '+(m.time||'an unknown time')+', '+geo(HARBOUR_CENTRE,m).nm.toFixed(1)+' nm from the map centre (51.82 N, 8.27 W)';
   if(act==='withdraw'){
     const u=usesOf(m);
     if(u.length){typedSays(m.name+' cannot be withdrawn: it is used in '+u.join(', ')+'. Remove it from '+(u.length>1?'those courses':'that course')+' first.',false);return;}
@@ -787,7 +827,7 @@ function isOtherMark(m){return isPasted(m)||isTypedPos(m);}
    sign, say), never refused. Measured from the map centre, 51.82 N 8.27 W, the point the charts open on; every mark in
    the workbook (v3.20) is within 7 nm of it. Recorded fixes are never flagged. */
 const HARBOUR_CENTRE={lat:51.82,lon:-8.27}, FAR_NM=8;
-function farNm(m){if(!isOtherMark(m)||!isFinite(m.lat)||!isFinite(m.lon))return 0;const d=rhumb(HARBOUR_CENTRE,m).nm;return d>FAR_NM?d:0;}
+function farNm(m){if(!isOtherMark(m)||!isFinite(m.lat)||!isFinite(m.lon))return 0;const d=geo(HARBOUR_CENTRE,m).nm;return d>FAR_NM?d:0;}
 function farText(d){return Math.round(d)+' nm from the map centre (51.82 N, 8.27 W): check the position, for example a longitude typed without its minus sign';}
 function laterFix(a,b){return a.race!==b.race?a.race>b.race:(a.tms&&b.tms?a.tms>b.tms:a.fix>b.fix);}
 function lev(a,b){const d=Array.from({length:b.length+1},(_,j)=>j);
@@ -828,6 +868,19 @@ function freezeLines(k,r,st){const v=S.lineSel[k]||{}, fz=Object.assign({},S.lin
   ['cb','pin','fpin'].forEach(w=>{if((v[w]&&v[w]!=='auto')||fz[w])return;const e=endPick(w,r,st);
     if(e.how==='auto'&&!e.saved&&e.m&&e.m.sid)fz[w]=refFor(e.m);});
   if(Object.keys(fz).length)S.lineAuto[k]=fz;}
+/* The fixes auto picked, saved with the open course now, without the RO doing anything (Pat, 13 October 2026, A10 (a)):
+   when the course is shown on the race day (the day loaded is today), and on any day when it is sent (WhatsApp, Share,
+   Copy text, Copy for Sail Scoring). Opening an old race never writes to it. Only for the day loaded, and only what is
+   not saved yet; with no signal the choice waits on this device as any course edit does. Returns true if anything changed. */
+function freezeNow(k){k=k||ckey(S.race,S.start);const day=S.pulledDay;if(!day||!/^\d+\|\d+$/.test(k))return false;
+  const r=+k.split('|')[0], before=JSON.stringify([laidRec(r),S.lineAuto[k]||{}]);
+  S.courseDay=S.courseDay||{};const was=S.courseDay[k], wasS=S.courseDay['_starts|'+r];
+  S.courseDay[k]=day; if(freezeLaid(r))S.courseDay['_starts|'+r]=day; freezeLines(k,r,+k.split('|')[1]);
+  if(JSON.stringify([laidRec(r),S.lineAuto[k]||{}])===before){
+    if(was===undefined)delete S.courseDay[k]; else S.courseDay[k]=was;
+    if(wasS===undefined)delete S.courseDay['_starts|'+r]; else S.courseDay['_starts|'+r]=wasS;
+    return false;}
+  save();return true;}
 function freezeFor(k){const c=String(k).match(/^(\d+)\|(\d+)$/), g=String(k).match(/^_starts\|(\d+)$/), r=c?+c[1]:g?+g[1]:0;
   if(!r)return;
   if(freezeLaid(r))S.courseDay['_starts|'+r]=S.courseDay[k];
@@ -880,7 +933,7 @@ function legGeom(a,b){
   // An end that is not where the card puts it (atFix: a laid mark at its RIB fix, or a card course's start or finish
   // at the recorded line) keeps the card's route; only the segment touching it is measured, and labelled with its
   // moveNote, because that segment was never depth-checked.
-  let r=rhumb(a,b), via='', fixNote='', parts=null, route=[], viaText='';
+  let r=geo(a,b), via='', fixNote='', parts=null, route=[], viaText='';
   const noteOf=e=>e.moveNote||'to RIB fix, not depth-checked';
   const moved=[a.atFix&&noteOf(a),b.atFix&&noteOf(b)].filter(Boolean);
   // a route the workbook authors one way only is in the snapshot reversed too (rev, STATUS A40): the page never reverses one
@@ -898,7 +951,7 @@ function legGeom(a,b){
       const nodes=[a].concat(p.segs.slice(0,-1).map(s=>CARD.marks[s.to]),[b]);
       if(nodes.every(Boolean)){let nm=0,brg=null;parts=[];
         p.segs.forEach((s,i)=>{const first=i===0&&a.atFix, last=i===p.segs.length-1&&b.atFix;
-          const g=first||last?rhumb(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;
+          const g=first||last?geo(nodes[i],nodes[i+1]):{nm:s.nm,brg:s.brg};nm+=g.nm;if(i===0)brg=g.brg;
           const note=[first&&noteOf(a),last&&noteOf(b)].filter(Boolean).filter((t,k,arr)=>arr.indexOf(t)===k).join('; ');
           parts.push(Object.assign({nm:g.nm,brg:g.brg,note},ends(i)));});
         r={nm,m:nm*1852,brg};}
@@ -924,7 +977,7 @@ function testedChords(){if(TESTED)return TESTED;TESTED={};
 function roLeg(a,vias,b){
   const nodes=[a].concat(vias,[b]), T=testedChords(), parts=[]; let nm=0, brg=null, untested=false;
   for(let i=0;i<nodes.length-1;i++){const p=nodes[i], q=nodes[i+1];
-    const t=p.card&&q.card&&!p.atFix&&!q.atFix?T[p.card+'|'+q.card]:null, g=t||rhumb(p,q);
+    const t=p.card&&q.card&&!p.atFix&&!q.atFix?T[p.card+'|'+q.card]:null, g=t||geo(p,q);
     if(!t)untested=true;
     nm+=g.nm; if(i===0)brg=g.brg;
     // a laid mark at its fix (RIB, typed or pasted, resolveLaid) names it on the physical leg touching it, as legGeom does
@@ -950,7 +1003,7 @@ function laidNotice(pts,total,legs){
     const oldPts=pts.map(p=>{const c=p.laidSt&&changed[p.laidSt.key];return c?Object.assign({},p,{lat:c.ack.lat,lon:c.ack.lon,atFix:c.ack.src!=='card'}):p;});
     let old=0; for(let i=0;i<oldPts.length-1;i++)if(!oldPts[i].missing&&!oldPts[i+1].missing){const g=(legs||[])[i];
       old+=(g&&g.ro?roLeg(oldPts[i],g.route,oldPts[i+1]):legGeom(oldPts[i],oldPts[i+1])).r.nm;}
-    keys.forEach(k=>{const c=changed[k], d=Math.round(rhumb(c.ack,c.cur).m);
+    keys.forEach(k=>{const c=changed[k], d=Math.round(geo(c.ack,c.cur).m);
       // the earlier source in today's words, from the fix it named where that fix is still loaded
       const was=c.ack.src==='card'?laidSrcText(null):(()=>{const x=S.marks.find(y=>fkey(y)===c.ack.src);return x?laidSrcText(x,c.p.race):c.ack.label;})();
       bits.push('<p class="note flag">'+esc(c.p.card)+' now uses '+esc(c.cur.label)+'; it was at '+esc(was)+'. '+
@@ -1072,14 +1125,15 @@ function drawChartInner(){
       .addTo(LMarks);
     LLabels.push({mk,label});});
   if(S.twd!==''){                                   /* wind arrow, same convention as the sketch: °M shown, arrow drawn true */
-    const tM=+S.twd, tT=((tM-varW())%360+360)%360;
+    const va=varAt(legPts()), tM=+S.twd, tT=((tM-va.v)%360+360)%360;
     const w=L.control({position:'topright'});
     // the same drawn arrow as the sketch: pointing south when unrotated (wind from the north), rotated by the true
     // direction, so it points downwind. A text glyph was used before; it points east, which put it 90° out.
     w.onAdd=function(){const d=L.DomUtil.create('div','windbox');
       d.innerHTML='<svg class="windarrow" width="28" height="28" viewBox="-14 -14 28 28" aria-hidden="true"><g transform="rotate('+(tT%360).toFixed(1)+')">'+
         '<line x1="0" y1="-11" x2="0" y2="5" stroke="currentColor" stroke-width="2.5"/><path d="M-5,4 L0,12 L5,4 z" fill="currentColor"/></g></svg>'+
-        '<span>wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</span>';
+        '<span>wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</span>'+
+        (va.centre?'<span class="windvar">variation at the map centre: no leg measured</span>':'');
       return d;};
     w.addTo(LMap); LWind=w;
   }
@@ -1194,6 +1248,9 @@ function cardImport(){
 
 /* ---------- render ---------- */
 function render(){
+  // on the race day, the fixes the open course's auto choices use are saved with it as soon as it is shown (A10 (a)),
+  // before anything is drawn, so the rows say "saved with the course" at once
+  if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
   if(!S.winds||typeof S.winds!=='object')S.winds={};
   {const w=S.winds[ckey(S.race,S.start)]||{};S.twd=w.twd||'';S.tws=w.tws||'';}
   $('twd').value=S.twd;$('tws').value=S.tws;
@@ -1237,8 +1294,20 @@ function render(){
   if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));stamp();commit();};}
   else cp.hidden=true;
   const bk=$('bank');bk.innerHTML='';
-  const bm=bank().filter(m=>!isLineMark(m.name));
+  const bm0=bank().filter(m=>!isLineMark(m.name));
+  /* A fix under a laid mark's name (a RIB fix, or a typed position saved on the server or waiting to send) has no chip of
+     its own: the laid mark's chip stands for it, and its Position box offers the fixes. A pasted position keeps its own
+     chip until it is saved (Save to the race record is there). Course rows already naming such a fix are left as they are
+     (Pat, 13 October 2026, STATUS A50). With no laid-mark chip in the race yet, one is offered that adds it, as Fixed marks does. */
+  const laidK=new Map(laidNames().map(n=>[norm(n),n])), underLaid=m=>!m.card&&!m.virtual&&!isPasted(m)&&laidK.has(norm(m.name));
+  const bm=bm0.filter(m=>!underLaid(m));
+  const laidOffer=[...new Set(bm0.filter(underLaid).map(m=>laidK.get(norm(m.name))))].filter(nm=>!bm.some(x=>x.card===nm));
   if(!bank().length)bk.innerHTML='<p class="empty">No marks for Race '+S.race+' yet.</p>';
+  laidOffer.forEach(nm=>{const n=bm0.filter(m=>underLaid(m)&&laidK.get(norm(m.name))===nm).length;
+    const b=document.createElement('button');b.className='chip card';b.setAttribute('aria-label','Add '+nm+', laid mark, to the course');
+    b.innerHTML='<span class="plus" aria-hidden="true">+</span> '+esc(nm)+' · laid mark<small>'+nOf(n,'fix','fixes')+' under this name</small>';
+    b.onclick=()=>{if(!S.marks.some(m=>m.id===cardId(S.race,nm)))pushCardMark(S.race,nm);course().push({id:cardId(S.race,nm),side:''});stamp();commit();};
+    bk.appendChild(b);});
   bm.forEach(m=>{const lm=isLaidCard(m)?resolveLaid(m):null, phones=lm?lm.laidSt.phones:(m.card?0:phoneCount(m));
     const b=document.createElement('button');b.className='chip'+(m.manual?' manual':'')+(m.card?' card':'')+(m.card&&m.flag&&!(lm&&lm.atFix)?' flagged':'')+(phones>1?' split':'');
     if(m.card&&m.flag&&!(lm&&lm.atFix))b.title=m.flag;
@@ -1284,7 +1353,7 @@ function render(){
   const sMiss=sm==='laid'&&!slRec?'<div class="meta warnTxt">⚠ Start line missing: Laid line is chosen and no committee boat and pin are usable, '+
       'so the first leg is not measured. <button type="button" class="ghost lineAct" data-act="chooseStart">Choose or record committee boat and pin</button> '+
       '<button type="button" class="ghost lineAct" data-act="useCard">Use Card mark</button></div>':'';
-  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+lineInfo()+
     (sl0||sm==='card'||sm==='laid'?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
         '. Record the committee boat and pin to measure the real line and its bias.'+
@@ -1510,13 +1579,22 @@ function wmmDecl(glat,glon,year){if(!WMM)wmmInit();
 // the decimal year at the start of a calendar day (YYYY-MM-DD), as NOAA's calculator and pygeomag count it
 function wmmYear(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return null;const y=+m[1];
   const days=(Date.UTC(y+1,0,1)-Date.UTC(y,0,1))/864e5;return y+(Date.UTC(y,+m[2]-1,+m[3])-Date.UTC(y,0,1))/864e5/days;}
-/* The magnetic variation, degrees west positive (as magOf adds it): the World Magnetic Model at one fixed point, the map
-   centre (51.82 N, 8.27 W), for the race date, the day loaded (else the Race day box, else today), so °M figures never
-   depend on which marks a device has loaded, and an old race keeps the figures of its day (STATUS A11; Pat, 13 October
-   2026). At the map centre: 1.69° W on 27 September 2026, 1.68° W on 13 October 2026, as NOAA's calculator gives. */
-function varW(){const d=S.pulledDay||$('day').value||todayISO(), y=wmmYear(d);
-  return -wmmDecl(HARBOUR_CENTRE.lat,HARBOUR_CENTRE.lon,y===null?wmmYear(todayISO()):y);}
-function magOf(brgT){return Math.round(brgT+varW()+360)%360;}
+/* The magnetic variation, degrees west positive (as magOf adds it), as Sail Scoring works it out for the course we copy
+   to it (STATUS A11; Pat, 13 October 2026): the World Magnetic Model at the course's anchor, the start of its first
+   measured leg as Copy for Sail Scoring writes it (6 decimals), at noon UTC on the race date (the day loaded, else the
+   Race day box, else today), rounded to 2 decimals as Sail Scoring's magvar 2.2.0 rounds it. So a course's °M figures
+   here and in Sail Scoring are the same, on every device. A course with no measured leg has no anchor; Sail Scoring then
+   uses its series' venue position, which the page does not have, so the page uses the map centre (51.82 N, 8.27 W) and
+   says so beside the wind arrow (varAt.centre). */
+function varAt(L){const d=S.pulledDay||$('day').value||todayISO(), y0=wmmYear(d), y=y0===null?wmmYear(todayISO()):y0;
+  const yr=Math.floor(y), noon=y+0.5/((Date.UTC(yr+1,0,1)-Date.UTC(yr,0,1))/864e5);
+  const i0=L&&L.legs?L.legs.findIndex(g=>!g.missing):-1, a=i0>=0&&L.pts&&L.pts[i0]?L.pts[i0]:null;
+  const lat=a?+a.lat.toFixed(6):HARBOUR_CENTRE.lat, lon=a?+a.lon.toFixed(6):HARBOUR_CENTRE.lon;
+  return {v:-Math.round(wmmDecl(lat,lon,noon)*100)/100, centre:!a};}
+function varOf(L){return varAt(L).v;}
+// the course open on the page
+function varW(){return varOf(legPts());}
+function magOf(brgT,v){return Math.round(brgT+(v===undefined?varW():v)+360)%360;}
 function isCB(n){return /committee/i.test(n);}
 function isStartPin(n){return /pin/i.test(n)&&!/finish/i.test(n);}
 function abbr(n){const s=n.trim();
@@ -1675,18 +1753,35 @@ function card(ents){
   if(finishMode()!=='last')out.push('Finish'); else if(out.length>1)out[out.length-1]+=' (finish)';
   return out.join(' – ');
 }
-function analysis(cs,twdT){
+/* The start line's length and bearing as soon as both ends are found, with no wind direction needed; once one is typed,
+   how far it is off square and which end is favoured (Pat, 13 October 2026, STATUS A54). Shown in section 4 (analysis) and
+   under the Start line lists in section 3 (lineInfo). */
+function startLineNote(twdT,vA){const sl=startLine();if(!sl)return null;
+  const r=geo(sl.cb,sl.pin);
+  if(twdT===null)return {text:'Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg,vA),3)+'°M'+(cardEndMode('s')==='card'?' (recorded, not used: Card mark chosen)':'')+'. Enter the wind direction for bias.',flag:false,wind:false};
+  const up=r.m*Math.cos(rad(((r.brg-twdT)+360)%360)); // +ve: pin further upwind
+  const fav=up>0?'pin':'boat';
+  const off=Math.abs(90-Math.abs(((r.brg-twdT+360)%360)>180?360-((r.brg-twdT+360)%360):((r.brg-twdT+360)%360)));
+  const line='Start line '+(cardEndMode('s')==='card'?'(recorded, not used: Card mark chosen) ':'')+Math.round(r.m)+' m, '+pad(magOf(r.brg,vA),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
+    (off<=2?' · no end favoured':' · '+fav+' end favoured by '+(Math.abs(up)<1?'under 1 m':Math.round(Math.abs(up))+' m (~'+(Math.abs(up)/BOAT_M).toFixed(1)+' boat lengths)'));
+  return {text:line,flag:off>5,wind:true};}
+function lineInfo(){const vA=varW(), tw=S.twd===''?null:((+S.twd-vA)%360+360)%360, n=startLineNote(tw,vA);
+  if(n)return '<div class="meta'+(n.flag?' warnTxt':'')+'">'+esc(n.text)+'</div>';
+  if(!startTime()&&cardEndMode('s')!=='card'){const ls=S.lineSel[ckey(S.race,S.start)]||{};
+    if((!ls.cb||ls.cb==='auto')||(!ls.pin||ls.pin==='auto'))return '<div class="meta warnTxt">No start line yet: no start time is set, so auto finds no committee boat or Start Pin. Set the start time, or choose them.</div>';}
+  return '';}
+function analysis(cs,twdT){const vA=varW();
   const bits=[],txt=[];
   const sl=startLine();
   if(sl){
-    const r=rhumb(sl.cb,sl.pin);
+    const r=geo(sl.cb,sl.pin);
     if(twdT===null){
-      bits.push('<p class="note">Start line '+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M'+(cardEndMode('s')==='card'?' (recorded, not used: Card mark chosen)':'')+'. Enter the wind direction for bias.</p>');
+      bits.push('<p class="note">'+esc(startLineNote(null,vA).text)+'</p>');
     }else{
       const up=r.m*Math.cos(rad(((r.brg-twdT)+360)%360)); // +ve: pin further upwind
       const fav=up>0?'pin':'boat';
       const off=Math.abs(90-Math.abs(((r.brg-twdT+360)%360)>180?360-((r.brg-twdT+360)%360):((r.brg-twdT+360)%360)));
-      const line='Start line '+(cardEndMode('s')==='card'?'(recorded, not used: Card mark chosen) ':'')+Math.round(r.m)+' m, '+pad(magOf(r.brg),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
+      const line='Start line '+(cardEndMode('s')==='card'?'(recorded, not used: Card mark chosen) ':'')+Math.round(r.m)+' m, '+pad(magOf(r.brg,vA),3)+'°M · '+(off<=2?'square to the wind':Math.round(off)+'° off square')+
         (off<=2?' · no end favoured':' · '+fav+' end favoured by '+(Math.abs(up)<1?'under 1 m':Math.round(Math.abs(up))+' m (~'+(Math.abs(up)/BOAT_M).toFixed(1)+' boat lengths)'));
       bits.push('<p class="note'+(off>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
     }
@@ -1694,12 +1789,12 @@ function analysis(cs,twdT){
   const w=cs.find(m=>/windward/i.test(m.name));
   if(w&&twdT!==null){
     const from=sl?sl.mid:cs[0];
-    const r=rhumb(from,w);
+    const r=geo(from,w);
     let d=((r.brg-twdT+540)%360)-180; // +ve: mark right of square
     const across=Math.abs(r.m*Math.sin(rad(d)));
     const dir=(twdT+(d>0?-90:90)+360)%360;
     const line=Math.abs(d)<1?'Windward mark square with the wind, '+r.nm.toFixed(2)+' nm':
-      'Windward mark '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir),3)+'°M to square it';
+      'Windward mark '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir,vA),3)+'°M to square it';
     bits.push('<p class="note'+(Math.abs(d)>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
   }
   return {html:bits.join(''),txt};
@@ -1723,23 +1818,23 @@ function buildShift(cs){
   const ref=sl?sl.mid:(lee||cs[0]);
   const refName=sl?'the start line':(lee?'the leeward mark':cs[0].name);
   if(!w){host.innerHTML='<p class="note">No windward mark in this course, so there is nothing to reset.</p>';box.hidden=true;shiftText='';return;}
-  const cur=rhumb(ref,w);
-  const np=dest(ref,newT,cur.m);
-  const mv=rhumb(w,np);
+  const cur=geo(ref,w);
+  const np=geoDest(ref,newT,cur.m);
+  const mv=geo(w,np);
   const out=[], html=[];
-  html.push('<p class="note">Beat measured from '+esc(refName)+', length kept at '+cur.nm.toFixed(2)+' nm. Old beat '+pad(magOf(cur.brg),3)+'°M, new beat '+pad(Math.round(+nm),3)+'°M.</p>');
-  const l1='Windward: move '+Math.round(mv.m)+' m towards '+pad(magOf(mv.brg),3)+'°M → '+ddm(np.lat,true)+' '+ddm(np.lon,false);
+  html.push('<p class="note">Beat measured from '+esc(refName)+', length kept at '+cur.nm.toFixed(2)+' nm. Old beat '+pad(magOf(cur.brg,v),3)+'°M, new beat '+pad(Math.round(+nm),3)+'°M.</p>');
+  const l1='Windward: move '+Math.round(mv.m)+' m towards '+pad(magOf(mv.brg,v),3)+'°M → '+ddm(np.lat,true)+' '+ddm(np.lon,false);
   out.push(l1); html.push('<p class="note flag">'+esc(l1)+'</p>');
   const off=cs.find(m=>/offset/i.test(m.name));
-  if(off){const op={lat:off.lat+(np.lat-w.lat),lon:off.lon+(np.lon-w.lon)};const omv=rhumb(off,op);
-    const l='Offset: move '+Math.round(omv.m)+' m towards '+pad(magOf(omv.brg),3)+'°M → '+ddm(op.lat,true)+' '+ddm(op.lon,false);
+  if(off){const op={lat:off.lat+(np.lat-w.lat),lon:off.lon+(np.lon-w.lon)};const omv=geo(off,op);
+    const l='Offset: move '+Math.round(omv.m)+' m towards '+pad(magOf(omv.brg,v),3)+'°M → '+ddm(op.lat,true)+' '+ddm(op.lon,false);
     out.push(l); html.push('<p class="note">'+esc(l)+'</p>');}
   if(sl){
-    const lineLen=rhumb(sl.cb,sl.pin).m, curBrg=rhumb(sl.cb,sl.pin).brg;
+    const lineLen=geo(sl.cb,sl.pin).m, curBrg=geo(sl.cb,sl.pin).brg;
     const opt=[(newT+90)%360,(newT+270)%360];
     const pick=Math.abs(((opt[0]-curBrg+540)%360)-180)<=Math.abs(((opt[1]-curBrg+540)%360)-180)?opt[0]:opt[1];
-    const npin=dest(sl.cb,pick,lineLen), pmv=rhumb(sl.pin,npin);
-    const l=pmv.m<5?'Start line stays square within 5 m.':'Start Pin: move '+Math.round(pmv.m)+' m towards '+pad(magOf(pmv.brg),3)+'°M → '+ddm(npin.lat,true)+' '+ddm(npin.lon,false)+' (squares the line)';
+    const npin=geoDest(sl.cb,pick,lineLen), pmv=geo(sl.pin,npin);
+    const l=pmv.m<5?'Start line stays square within 5 m.':'Start Pin: move '+Math.round(pmv.m)+' m towards '+pad(magOf(pmv.brg,v),3)+'°M → '+ddm(npin.lat,true)+' '+ddm(npin.lon,false)+' (squares the line)';
     out.push(l); html.push('<p class="note">'+esc(l)+'</p>');
   }
   host.innerHTML=html.join('');
@@ -1776,7 +1871,7 @@ function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
   const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg&&fsx.kind!=='missing'?cardEnd(ccfg.f,'Finish'):null);
   // the card's route from its start was validated for the water near that start point: say so if the line is far off
   const farLine=[];
-  if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(rhumb(sl.mid,CARD.marks[ccfg.s]).m);
+  if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(geo(sl.mid,CARD.marks[ccfg.s]).m);
     if(d>500)farLine.push('The recorded start line is '+d+' m from the card\'s '+ccfg.s+' start point. The leg'+
       (fPt&&fPt.moveNote?'s from it and to it follow the card\'s routes':' from it follows the card\'s route')+
       ' from '+ccfg.s+', which assumes the line is close to it: check on the chart.');}
@@ -1806,7 +1901,7 @@ function buildLegs(){
   course();   // as before: the selected start's course entry is created and tidied here; legPts itself never writes
   const L=legPts(), {ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts}=L;
   setSendWarn(L); $('ccPasted').innerHTML=pastedHtml(L);
-  const vr=varW();
+  const vr=varOf(L);
   const twdM=S.twd===''?null:+S.twd;
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
   const twsv=S.tws===''?null:+S.tws;
@@ -1822,7 +1917,7 @@ function buildLegs(){
   for(let i=0;i<pts.length-1;i++){
     const a=pts[i],b=pts[i+1];
     const g=L.legs[i], {r,viaText,fixNote}=g;
-    g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg),3)));   // SailScoring: "nm °M", one line per physical leg
+    g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg,vr),3)));   // SailScoring: "nm °M", one line per physical leg
     // a leg to or from a missing mark (STATUS A38): a row that says so, no figures, nothing in the SailScoring lines
     if(g.missing){rows+='<tr><td>Leg '+(i+1)+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+
         '<br><span class="viaTxt warnTxt">not measured: mark missing</span></td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr>';
@@ -1830,7 +1925,7 @@ function buildLegs(){
     total+=r.nm;
     const isLine=false;
     const brgT=Math.round(r.brg)%360;
-    const brgM=magOf(r.brg);
+    const brgM=magOf(r.brg,vr);
     const ang=twdv===null?null:Math.round(twa(r.brg,twdv));
     // a leg made of more than one physical leg (a card passage) can be opened to show each, as the SailScoring block lists them
     const nParts=g.parts.length, open=openLegs.has(ckey(S.race,S.start)+'|'+i);
@@ -1843,7 +1938,7 @@ function buildLegs(){
     if(nParts>1)g.parts.forEach((pt,j)=>{const sa=twdv===null?null:Math.round(twa(pt.brg,twdv));
       rows+='<tr class="segRow" data-leg="'+i+'"'+(open?'':' hidden')+'><td>'+(i+1)+String.fromCharCode(97+j)+' '+esc(pt.from)+' → '+esc(pt.to)+
         (pt.note?'<br><span class="viaTxt warnTxt">'+esc(pt.note)+'</span>':'')+'</td>'+
-        '<td class="n">'+pad(magOf(pt.brg),3)+'°M<br>'+pad(Math.round(pt.brg)%360,3)+'°T</td>'+
+        '<td class="n">'+pad(magOf(pt.brg,vr),3)+'°M<br>'+pad(Math.round(pt.brg)%360,3)+'°T</td>'+
         '<td class="n">'+pt.nm.toFixed(2)+'<br>'+Math.round(pt.nm*1852)+' m</td>'+
         '<td class="n">'+(sa===null?'–':sa+'°')+'</td></tr>';});
     // the WhatsApp text is a course list for competitors (STATUS A40): no route notes or labels; a leg through routing
@@ -1962,9 +2057,9 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   // the race name first, then the warnings in short form (the full ones are beside the button)
   const name=label+(preS.length?' - '+preS.join('. '):'');
   const wind=(twd!==null?', "windDirection": '+twd:'')+(twd!==null&&tws!==null?', "windSpeed": '+tws:'');
-  const legs=[];
+  const legs=[], vc=varOf(L);
   L.legs.forEach(g=>g.parts.forEach(pt=>legs.push('    { "name": '+JSON.stringify(pt.from+' - '+pt.to)+', "distance": '+pt.nm.toFixed(2)+
-    ', "course": '+magOf(pt.brg)+wind+' }')));
+    ', "course": '+magOf(pt.brg,vc)+wind+' }')));
   // the anchor is where the first exported leg starts: the first point, unless the legs from it were not measured
   const i0=L.legs.findIndex(g=>!g.missing);
   if(i0<0)return {block:pre.join('. ')+'. No leg can be measured. Nothing to copy.',err:true};
@@ -2063,12 +2158,13 @@ function plot(pts,segs){
   let barNm=1; while(oneNm*barNm>W*0.45)barNm/=2; while(oneNm*barNm<W*0.15)barNm*=2;
   const bw=oneNm*barNm;
   g+='<g stroke="var(--ink)" stroke-width="2"><line x1="14" y1="'+(H-16)+'" x2="'+(14+bw).toFixed(1)+'" y2="'+(H-16)+'"/><line x1="14" y1="'+(H-21)+'" x2="14" y2="'+(H-11)+'"/><line x1="'+(14+bw).toFixed(1)+'" y1="'+(H-21)+'" x2="'+(14+bw).toFixed(1)+'" y2="'+(H-11)+'"/></g>'+
-    '<text x="14" y="'+(H-24)+'" font-size="11" fill="var(--muted)">'+(barNm<1?barNm.toFixed(2):barNm)+' nm</text>';
+    '<text x="14" y="'+(H-24)+'" font-size="11" fill="var(--muted)">'+(barNm<0.1?Math.round(barNm*1852)+' m':(barNm<1?barNm.toFixed(2):barNm)+' nm')+'</text>';
   // north arrow
   g+='<g transform="translate('+(W-24)+',26)"><line x1="0" y1="14" x2="0" y2="-10" stroke="var(--ink)" stroke-width="2" marker-end="url(#ah)"/><text x="4" y="-6" font-size="12" fill="var(--ink)">N</text></g>';
-  if(S.twd!==''){const vr=varW(), tM=+S.twd, tT=((tM-vr)%360+360)%360;
+  if(S.twd!==''){const va=varAt(legPts()), vr=va.v, tM=+S.twd, tT=((tM-vr)%360+360)%360;
     g+='<g transform="translate(26,'+(H-70)+') rotate('+(tT%360)+')"><line x1="0" y1="-16" x2="0" y2="16" stroke="var(--warn)" stroke-width="2" marker-end="url(#aw)"/></g>'+
-    '<text x="6" y="'+(H-44)+'" font-size="11" fill="var(--warn)">wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</text>';}
+    '<text x="6" y="'+(H-44)+'" font-size="11" fill="var(--warn)">wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</text>'+
+    (va.centre?'<text x="6" y="'+(H-30)+'" font-size="10" fill="var(--warn)">variation at the map centre: no leg measured</text>':'');}
   $('plot').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Course plan, north up">'+
     '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--sea)"/></marker>'+
     '<marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/></marker></defs>'+g+'</svg>';
@@ -2175,12 +2271,12 @@ function fxChecks(list){
     add(m,bad?'bad':'check','Position '+fmtAge(a.s)+' old when '+(a.by==='id'?'the phone saved it':
       'the server received it (a fix sent later, after no signal, also shows this)')+(bad?': probably not where the mark is.':': the phone may have used an earlier position.'));});
   [...new Set(list.map(m=>m.race))].sort((a,b)=>a-b).forEach(r=>{const own=list.filter(m=>m.race===r);
-    own.filter(m=>isStartPin(m.name)||isFinishPin(m.name)).forEach(p=>own.filter(x=>!isLineMark(x.name)).forEach(x=>{const d=rhumb(p,x).m;
+    own.filter(m=>isStartPin(m.name)||isFinishPin(m.name)).forEach(p=>own.filter(x=>!isLineMark(x.name)).forEach(x=>{const d=geo(p,x).m;
       if(d<PIN_NEAR_M)add(p,'check',Math.round(d)+' m from the Race '+r+' '+x.name+' ('+at(x)+'): a pin this close may have been recorded at the mark.');}));
     // the start line against the leg to the first mark of the race's first course; the line ends as the race has them
     const cb=latestOf(r,isCB), pin=latestOf(r,isStartPin); let first=null;
     for(let st=0;!first&&st<9;st++){const e=(S.courses[ckey(r,st)]||[])[0];if(e)first=markById(typeof e==='string'?e:e.id)||null;}
-    if(cb&&pin&&first){const ln=rhumb(cb,pin).brg, lg=rhumb({lat:(cb.lat+pin.lat)/2,lon:(cb.lon+pin.lon)/2},first).brg;
+    if(cb&&pin&&first){const ln=geo(cb,pin).brg, lg=geo({lat:(cb.lat+pin.lat)/2,lon:(cb.lon+pin.lon)/2},first).brg;
       const off=Math.abs((((lg-ln)%180)+180)%180-90);
       if(off>LINE_SQUARE_DEG){const t='Race '+r+' start line (committee boat '+at(cb)+(cb.race<r?' from Race '+cb.race:'')+', pin '+at(pin)+
           (pin.race<r?' from Race '+pin.race:'')+') is '+Math.round(off)+'° off square to the leg to '+first.name+': one end may be wrong.';
@@ -2198,7 +2294,7 @@ function fxChecks(list){
   });
   // the same mark in different races: a fix far from every other race's fix of that name
   list.filter(m=>!isLineMark(m.name)).forEach(m=>{let b=null;
-    list.forEach(x=>{if(x.race===m.race||isLineMark(x.name)||norm(x.name)!==norm(m.name))return;const d=rhumb(m,x).m;if(!b||d<b.d)b={d,x};});
+    list.forEach(x=>{if(x.race===m.race||isLineMark(x.name)||norm(x.name)!==norm(m.name))return;const d=geo(m,x).m;if(!b||d<b.d)b={d,x};});
     if(b&&b.d>SAME_NAME_M)add(m,'check',Math.round(b.d)+' m from the nearest '+m.name+' in another race (Race '+b.x.race+', '+at(b.x)+
       '): check it is the same mark, or that it was moved.');});
   return {fl,rf};
@@ -2534,6 +2630,11 @@ function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth
 function hhmm(t){const d=new Date(t);return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2);}
 function longDate(iso){try{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-IE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}catch(e){return iso;}}
 let pullOk=false, pullSeq=0, dayGen=0;   // dayGen counts changes of loaded day; see saveCourses
+// a typed position (accuracy 0, no phone) whose time is on another date than its race day: before 2026-10-06.36 a typed
+// position took the time it was typed, so one typed on another day says that date, e.g. " on Tue 13 Oct" (STATUS A49)
+function otherDate(m,day){if(m.acc!==0||typeof m.device==='string'&&m.device||typeof m.time!=='number')return '';
+  const d=new Date(m.time), iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return iso===day?'':' on '+d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}).replace(/,/g,'');}
 async function pull(quiet){
   // loads can overlap (the button, the 30 s refresh, moving a fix): only the latest one started may change anything,
   // so a load that is no longer the latest stops at its next wait, before it touches the phone's state
@@ -2590,6 +2691,8 @@ async function pull(quiet){
       // what earlier actions said (sent, withdrawn, already in the race record, imported) belongs to the old day; a
       // typed position still waiting to send keeps its line (Pat, 13 October 2026)
       ['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';$(id).className='status';});
+      // "All course changes saved" speaks only for the day loaded (STATUS A48); it comes back with this day's next save
+      saveState.okAt=0; showSave();
       ['courses','startTimes','finishes','lineSel','lineAuto','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // start groups likewise: only a race's groups set for this day stay; the old day-wide groups come from this day's file only
@@ -2610,7 +2713,7 @@ async function pull(quiet){
     S.marks=S.marks.filter(m=>!m.server); S.replaced=rpl;
     const n={};
     list.forEach(m=>{const k=m.race+'|'+m.name.toLowerCase();n[k]=(n[k]||0)+1;
-      push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time),tms:m.time,rcv:typeof m.received==='number'?m.received:null,server:true,sid:m.id,
+      push({race:m.race,name:m.name,fix:n[k],lat:m.lat,lon:m.lon,acc:m.acc,time:hhmm(m.time)+otherDate(m,day),tms:m.time,rcv:typeof m.received==='number'?m.received:null,server:true,sid:m.id,
         device:typeof m.device==='string'?m.device:'',recorder:typeof m.recorder==='string'?m.recorder:''});});
     if(list.length)S.date=longDate(day);
     S.pulledDay=day;
@@ -2959,7 +3062,7 @@ function readSays(f,msg,cls){const el=$('readStatus');if(f.acc!==0||el.textConte
   el.textContent=msg;el.className='status'+(cls?' '+cls:'');}
 function outRefused(f,why){return outName(f)+': refused by the server ('+why+'). Not saved on the server; kept on this device in the "Not sent" list.'+outFar(f);}
 // a typed position far from the harbour keeps its flag in every message about it (farNm)
-function outFar(f){const d=f.acc===0&&isFinite(f.lat)&&isFinite(f.lon)?rhumb(HARBOUR_CENTRE,f).nm:0;return d>FAR_NM?' ⚠ It is '+farText(d)+'.':'';}
+function outFar(f){const d=f.acc===0&&isFinite(f.lat)&&isFinite(f.lon)?geo(HARBOUR_CENTRE,f).nm:0;return d>FAR_NM?' ⚠ It is '+farText(d)+'.':'';}
 let sending=false;
 async function sendOutbox(){
   if(sending||!S.outbox.length)return; sending=true;
@@ -2978,12 +3081,13 @@ async function sendOutbox(){
           moved++; said.push(outRefused(f,why)); if(S===s0){save();readSays(f,outRefused(f,why),'err');} continue;}
         stop={f,k,e}; break;}
       s0.outbox.shift(); s0.marks=s0.marks.filter(m=>m.pid!==f.id); if(S===s0)save();
-      sent++; said.push(f.acc===0?outName(f)+': sent.'+outFar(f):'Committee boat sent.'); if(S===s0)readSays(f,outName(f)+': sent.'+outFar(f),'ok');
+      sent++; said.push(f.acc===0?outName(f)+': sent.'+outFar(f):'Committee boat sent.'); if(S===s0)readSays(f,outName(f)+': sent.'+outFar(f),outFar(f)?'err':'ok');
     }
     if(S===s0){
       if(stop){said.push(outWait(stop.f,stop.k,stop.e)+(s0.outbox.length>1?' '+(s0.outbox.length-1)+' more waiting behind it, in order.':''));
         s0.outbox.forEach(q=>readSays(q,outWait(q,stop.k,stop.e),''));}
-      $('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved?' err':stop?'':' ok');
+      // a typed position far from the harbour keeps its warning in red, as its chip does (STATUS A55)
+      $('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved||said.some(x=>x.indexOf(' ⚠ It is ')>=0)?' err':stop?'':' ok');
       if(moved)commit();
       if(sent&&!stop)await pull(true);}
   }catch(e){
@@ -3133,12 +3237,20 @@ $('addManual').onclick=()=>{
   const pos=prompt('Position — e.g. 51 49.123 N 008 17.456 W, or 51.818717 -8.290933');if(!pos)return;
   const p=parsePos(pos);
   if(!p){$('readStatus').textContent='Could not read that position.';$('readStatus').className='status err';return;}
+  // the time on the water, on the race day: filled in with the time now when the race day is today (Pat, 13 October 2026,
+  // STATUS A49). Cancel stores nothing
+  const day=$('day').value||todayISO();
+  const ta=prompt('Time on the water for '+name.trim()+' (Race '+S.race+'), as hh:mm, for example 14:05',day===todayISO()?hhmm(Date.now()):'');
+  if(ta===null)return;
+  const hm=String(ta).trim().match(/^(\d{1,2})[:.](\d{2})$/);
+  if(!hm||+hm[1]>23||+hm[2]>59){$('readStatus').textContent='Could not read "'+String(ta).trim()+'" as a time: nothing stored. Use hh:mm, for example 14:05.';$('readStatus').className='status err';return;}
+  const t=new Date(+day.slice(0,4),+day.slice(5,7)-1,+day.slice(8,10),+hm[1],+hm[2]).getTime();
   const nm=name.trim(), fix=1+S.marks.filter(m=>m.race===S.race&&m.name.toLowerCase()===nm.toLowerCase()).length;
   const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-  S.outbox.push({action:'add',id,date:$('day').value||todayISO(),race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:Date.now()});
-  push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(Date.now()),pending:true,pid:id});
+  S.outbox.push({action:'add',id,date:day,race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:t});
+  push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(t),pending:true,pid:id});
   // far from the harbour: flagged as a possible error, never refused (STATUS A38)
-  const d=rhumb(HARBOUR_CENTRE,p).nm;
+  const d=geo(HARBOUR_CENTRE,p).nm;
   $('readStatus').textContent=nm+', typed position, Race '+S.race+': saved on this device. Sending…'+(d>FAR_NM?' ⚠ It is '+farText(d)+'.':'');
   $('readStatus').className='status '+(d>FAR_NM?'err':'ok');
   $('cbStatus').textContent=nm+', typed position, Race '+S.race+': sending…';$('cbStatus').className='status';commit();sendOutbox();
@@ -3176,13 +3288,21 @@ $('cardReopen').onclick=()=>{cardOpen=true;render();};
 $('rRace').onchange=e=>{S.race=+e.target.value;commit();};
 $('rStart').onchange=e=>{S.start=+e.target.value;commit();};
 function saveWind(){S.winds[ckey(S.race,S.start)]={twd:S.twd,tws:S.tws};stamp();save();buildLegs();scheduleSave();}
-$('twd').oninput=e=>{S.twd=e.target.value;saveWind();};
+/* A wind direction is used and saved only from 0 to 360 (whole or decimal degrees); anything else is said beside the box
+   and not saved, and the course keeps its last good direction (Pat, 13 October 2026, STATUS A56) */
+function twdOk(v){return v===''||(/^\d{1,3}(\.\d+)?$/.test(String(v).trim())&&+v>=0&&+v<=360);}
+$('twd').oninput=e=>{const v=e.target.value, ok=twdOk(v), w=$('twdWarn');
+  w.hidden=ok; w.textContent=ok?'':'Wind direction must be 0 to 360 °M: "'+v+'" is not used or saved.';
+  if(!ok)return;
+  S.twd=v;saveWind();};
 $('tws').oninput=e=>{S.tws=e.target.value;saveWind();};
 function plotRefresh(){}
 $('newWind').oninput=()=>{const ents=course().filter(e=>markById(e.id));buildShift(ents.map(e=>markById(e.id)));};
 $('shiftCopy').onclick=async()=>{if(!shiftText)return;try{await navigator.clipboard.writeText(shiftText);$('shiftCopy').textContent='Copied';setTimeout(()=>$('shiftCopy').textContent='Copy move',1500);}catch(e){}};
-$('wa').addEventListener('click',e=>{if(!text||!sendOk())e.preventDefault();});
-$('share').onclick=async()=>{if(!text||!sendOk())return;try{await navigator.share({text});}catch(e){}};
+// before anything is sent, the course's auto choices are saved with it, on any day (A10 (a)): a sent course always rebuilds exactly
+function freezeSend(){if(freezeNow()){render();saveCourses();}}
+$('wa').addEventListener('click',e=>{if(!text||!sendOk()){e.preventDefault();return;}freezeSend();});
+$('share').onclick=async()=>{if(!text||!sendOk())return;freezeSend();try{await navigator.share({text});}catch(e){}};
 $('legs').addEventListener('click',e=>{const b=e.target.closest('[data-savepaste]');if(b)savePasted(b.dataset.savepaste);});
 $('ccPasted').addEventListener('click',e=>{const b=e.target.closest('[data-savepaste]');if(b)savePasted(b.dataset.savepaste);});
 $('legs').addEventListener('click',e=>{const b=e.target.closest('.segToggle');if(!b)return;
@@ -3193,10 +3313,10 @@ $('legs').addEventListener('click',e=>{const b=e.target.closest('.segToggle');if
 $('ssCopy').onclick=async()=>{if(!ssText)return;
   try{await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);}
   catch(e){const r=document.createRange();r.selectNodeContents($('ssOut'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
-$('ccCopy').onclick=async()=>{if(!ccText)return;
+$('ccCopy').onclick=async()=>{if(!ccText)return;freezeSend();
   try{await navigator.clipboard.writeText(ccText);$('ccFallback').hidden=true;$('ccCopy').textContent='Copied';setTimeout(()=>$('ccCopy').textContent='Copy for Sail Scoring',1500);}
   catch(e){$('ccText').value=ccText;$('ccFallback').hidden=false;$('ccText').focus();$('ccText').select();}};
-$('copy').onclick=async()=>{if(!text||!sendOk())return;try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
+$('copy').onclick=async()=>{if(!text||!sendOk())return;freezeSend();try{await navigator.clipboard.writeText(text);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy text',1500);}catch(e){const r=document.createRange();r.selectNodeContents($('out'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 /* ---------- Clear everything ----------
    S=fresh() resets what is saved on this phone; clearPageState() resets what a fresh load starts with that is NOT in S
    (module variables, inputs and panels render() does not set, work under way). Together they must leave the page as a

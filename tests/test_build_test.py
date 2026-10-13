@@ -213,7 +213,7 @@ def t5_copy_guards():
            page.count('id="ccCopy"') == 1 and 'id="ccCopy" style="grid-column:1/-1">Copy for Sail Scoring</button>' in page)
     report('5 copy: the "Copy legs for SailScoring" button unchanged',
            page.count('id="ssCopy"') == 1 and 'id="ssCopy" style="grid-column:1/-1">Copy legs for SailScoring</button>' in page)
-    report('5 copy: the leg table line format unchanged', "g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg),3)));" in code)
+    report('5 copy: the leg table line format unchanged', "g.parts.forEach(pt=>ss.push(pt.nm.toFixed(2)+' '+pad(magOf(pt.brg,vr),3)));" in code)   # .36: the course's own variation (A11)
     report('5 copy: the leg table copy code unchanged',
            "await navigator.clipboard.writeText(ssText);$('ssCopy').textContent='Copied';"
            "setTimeout(()=>$('ssCopy').textContent='Copy legs for SailScoring',1500);" in code and
@@ -221,7 +221,7 @@ def t5_copy_guards():
     cd = fn_body(code, 'function ccDoc(')
     report('5 copy: ccDoc found', bool(cd))
     report("5 copy: ccDoc takes the leg table's legs and figures",
-           'legPts(r,st)' in cd and 'g.parts.forEach' in cd and 'pt.nm.toFixed(2)' in cd and 'magOf(pt.brg)' in cd)
+           'legPts(r,st)' in cd and 'g.parts.forEach' in cd and 'pt.nm.toFixed(2)' in cd and 'magOf(pt.brg,vc)' in cd and 'vc=varOf(L)' in cd)
     report('5 copy: ccDoc writes nothing',
            not re.search(r'\b(commit|save|stamp|scheduleSave|render|course)\(', cd) and not re.search(r'\bS\.\w+(\[[^\]]*\])?\s*=[^=]', cd))
     bl = fn_body(code, 'function buildLegs(')
@@ -415,10 +415,12 @@ def t7_a40_guards():
         body = fn_body(code, head)
         if head == 'function ccDoc(':   # .31 adds one line, the routing waypoint INCOMPLETE (orphanText)
             body = chr(10).join(x for x in body.split(chr(10)) if 'orphanText(L)' not in x)
+            # .36 converts at the course's own variation (A11, Pat 13 October 2026): the only other change
+            body = body.replace('const legs=[], vc=varOf(L);', 'const legs=[];').replace('magOf(pt.brg,vc)', 'magOf(pt.brg)')
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
-    g('card marks are added only by tap, import or a saved row (four callers)', code.count('pushCardMark(') == 5,
+    g('card marks are added only by tap, import, a saved row or the laid-mark chip (A50, .36) (five callers)', code.count('pushCardMark(') == 6,
       str(code.count('pushCardMark(')))
     g('the page never reverses a route itself', not re.search(r"split\('\|'\)\.reverse\(\)|segs\.slice\(\)\.reverse", code))
     g('the Fixed marks fold is there once, closed', page.count('id="fixedWrap"') == 1 and
@@ -507,7 +509,7 @@ def t10_changes33_guards():
     g('1 its wording', "'This course has a missing mark: fix it before sending to competitors.'" in code
       and "'This course has a leg that is not measured (routing waypoint '" in code)
     g('1 WhatsApp, Share and Copy text each ask "Send anyway?"', "confirm(sendBad+'\\n\\nSend anyway?')" in code
-      and "$('wa').addEventListener('click',e=>{if(!text||!sendOk())e.preventDefault();});" in code
+      and "$('wa').addEventListener('click',e=>{if(!text||!sendOk()){e.preventDefault();return;}freezeSend();});" in code
       and "$('share').onclick=async()=>{if(!text||!sendOk())return;" in code and "$('copy').onclick=async()=>{if(!text||!sendOk())return;" in code)
     g('1 all three greyed when there is nothing to send', "$('share').disabled=!t; $('copy').disabled=!t;" in fn_body(code, 'function setOut('))
     g('1 buildLegs sets the warning for every course', 'setSendWarn(L);' in fn_body(code, 'function buildLegs('))
@@ -515,7 +517,7 @@ def t10_changes33_guards():
     g('3 a pasted or typed fix named as such', "'pasted position, this device only'" in code and "isTypedPos(x)?'typed position'" in code
       and "'auto (latest: '+fixWords(st.latest,m.race)+')'" in code and 'fixWords(x,m.race)' in fn_body(code, 'function laidPicker('))
     g('3 the leg note too', "'to '+(isPasted(u)?'pasted':'typed')+' position, not depth-checked'" in fn_body(code, 'function resolveLaid('))
-    bank_render = code[code.find("const bm=bank().filter(m=>!isLineMark(m.name));"):code.find('renderPicked(bm);')]
+    bank_render = code[code.find("const bm0=bank().filter(m=>!isLineMark(m.name));"):code.find('renderPicked(bm);')]
     g('4 a × on a card-mark chip only while no row of the race uses it',
       'if(m.card&&m.race===S.race&&!startsUsing(S.race,m.id).length)' in bank_render and "x.className='pickX'" in bank_render)
     ta = fn_body(code, 'async function typedAct(')
@@ -541,8 +543,8 @@ def t10_changes33_guards():
     g('6 save: the card-name refusal, no duplicate, rows moved', 'const c=cardNameOf(m.name);' in sp and 'is already in the race record with the same position' in sp
       and "S.outbox.push({action:'add',id:pid,date:d,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:0,time:t});" in sp and 'if(ch)stamp(k);' in sp)
     g('7 a saved typed position counts for its laid mark', 'const cand=S.marks.filter(x=>(ribFix(x)||(isTypedPos(x)&&!!x.sid))&&x.race<=race)' in fn_body(code, 'function laidState('))
-    vw = fn_body(code, 'function varW(')
-    g('8 the magnetic variation for the race date, not today', "const d=S.pulledDay||$('day').value||todayISO(), y=wmmYear(d);" in vw)
+    vw = fn_body(code, 'function varAt(')   # .36: varAt, at the course's anchor (A11)
+    g('8 the magnetic variation for the race date, not today', "const d=S.pulledDay||$('day').value||todayISO(), y0=wmmYear(d)" in vw)
 
 
 # the 90 coefficient lines of WMM2025 (WMM.COF, NOAA NCEI and BGS, 13 November 2024), each "g h g-dot h-dot", joined by ";"
@@ -561,9 +563,9 @@ def t11_changes34_guards():
     cof = re.search(r"WMM_COF='([^']*)'", code)
     g('2 the WMM2025 coefficients are the official file', bool(cof) and hashlib.sha256(cof.group(1).encode()).hexdigest() == WMM2025_COF_SHA
       and len(cof.group(1).split(';')) == 90 and 'const WMM_EPOCH=2025.0' in code)
-    vw = fn_body(code, 'function varW(')
-    g('2 the variation at the map centre for the day loaded, from the model', "S.pulledDay||$('day').value||todayISO()" in vw
-      and '-wmmDecl(HARBOUR_CENTRE.lat,HARBOUR_CENTRE.lon,' in vw and 'S.marks' not in vw)
+    vw = fn_body(code, 'function varAt(')   # .36 replaced the map centre with the course's anchor (A11): group 13
+    g('2 the variation from the model for the day loaded, never from the marks loaded', "S.pulledDay||$('day').value||todayISO()" in vw
+      and 'wmmDecl(lat,lon,noon)' in vw and 'S.marks' not in vw)
     sw = fn_body(code, 'function setSendWarn(')
     g('3 a far position in a course holds Send back', "filter(m=>farNm(m))" in sw and "'This course uses a position more than '+FAR_NM+' nm from the map centre ('" in sw)
     g('4 a Race day changed but not loaded is said and holds Send back', page.count('id="dayChanged"') == 1
@@ -604,6 +606,33 @@ def t12_changes35_guards():
       and 'e.m&&e.m.sid' in fn_body(code, 'function freezeLines('))
 
 
+def t13_changes36_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('13 .36: ' + name, ok)
+    va = fn_body(code, 'function varAt(')
+    g('fix 2: the variation at the Copy for Sail Scoring anchor, noon UTC, 2 decimals; the map centre only with no measured leg',
+      "L.legs.findIndex(g=>!g.missing)" in va and "+a.lat.toFixed(6)" in va and "noon=y+0.5/" in va
+      and "-Math.round(wmmDecl(lat,lon,noon)*100)/100" in va and "centre:!a" in va)
+    g('fix 2: the map-centre note beside both wind arrows', code.count("variation at the map centre: no leg measured") == 2)
+    g('fix 3: Vincenty for figures; rhumb only for drawing (4 places)', 'function geo(a,b){' in code and 'function geoDest(a,brgT,d){' in code
+      and len(re.findall(r'\brhumb\(', code)) == 6)
+    g('A10 (a): saved when shown on the race day only, and before every send',
+      "if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render(')
+      and code.count('freezeSend();') == 4)
+    g('A48: the save line cleared on a change of day', 'saveState.okAt=0; showSave();' in fn_body(code, 'async function pull('))
+    g('A49: a typed position asks for the time on the water, saved on the race day',
+      "prompt('Time on the water for '+name.trim()" in code and "date:day,race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:t}" in code)
+    g('A49: a typed position from another date says it', "time:hhmm(m.time)+otherDate(m,day)" in code)
+    g('A50: no chip of its own for a fix under a laid mark\'s name', 'const bm=bm0.filter(m=>!underLaid(m));' in code
+      and '!isPasted(m)&&laidK.has(norm(m.name))' in code)
+    g('A54: the start line under the Start line lists', "sMiss+lineInfo()+" in code and 'No start line yet: no start time is set, so auto finds no committee boat or Start Pin.' in code)
+    g('A55: the scale bar in metres below 0.1 nm', "barNm<0.1?Math.round(barNm*1852)+' m'" in code)
+    g('A56: a wind direction saved only from 0 to 360', 'if(!ok)return;' in code and 'function twdOk(v)' in code and page.count('id="twdWarn"') == 1)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -619,6 +648,7 @@ def main():
         t10_changes33_guards()
         t11_changes34_guards()
         t12_changes35_guards()
+        t13_changes36_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
