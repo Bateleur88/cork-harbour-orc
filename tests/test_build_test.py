@@ -577,6 +577,33 @@ def t11_changes34_guards():
     g('9 every start with a saved course is shown', '+k.split(\'|\')[1]+1' in fn_body(code, 'function classesOf('))
 
 
+def t12_changes35_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('12 .35: ' + name, ok)
+    pl = fn_body(code, 'async function pull(')
+    g('1 messages of the old day clear when a different day is loaded',
+      "['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';" in pl
+      and pl.index("['fxStatus','cardStatus']") > pl.index('if(day!==S.pulledDay){'))
+    g('4 a race with more than three starts is saved even with no classes',
+      "r.classes.length<=3" in fn_body(code, 'function isEmptyRec(') and 'classesOf(r).map(l=>l.slice())' in fn_body(code, 'function editClasses('))
+    sp = fn_body(code, 'function savePasted(')
+    g('5 a pasted line with no time asks for the time on the water; Cancel saves nothing',
+      "prompt('Time on the water for '" in sp and 'if(a===null)return;' in sp and 'Date.now():' not in sp)
+    sw = fn_body(code, 'function setSendWarn(')
+    g('6 a leg shorter than 50 m holds Send back and is flagged in the leg table', 'const SHORT_M=50;' in code
+      and 'const sh=shortLegs(L);' in sw and "(r.m<SHORT_M?'<br><span class=\"viaTxt warnTxt\">⚠ two marks at nearly the same position ('" in code)
+    g('7 the choices are saved with the course when it is saved', 'freezeFor(k);' in fn_body(code, 'function stamp(')
+      and 'o.laid=ld' in fn_body(code, 'function recordFor(') and '{lineAuto:Object.assign({},S.lineAuto[k])}' in fn_body(code, 'function recordFor(')
+      and 'Object.keys(S.laidFrz||{})' in fn_body(code, 'function allKeys('))
+    g('7 a saved auto choice is used, and a newer fix waits for the RO', "mode='saved'" in fn_body(code, 'function laidState(')
+      and "reason:'Auto, as saved with the course',live:" in fn_body(code, 'function autoUse(') and "' – use it?'" in code)
+    g('7 only fixes saved on the server are saved as choices', 'st.latest&&st.latest.sid' in fn_body(code, 'function freezeLaid(')
+      and 'e.m&&e.m.sid' in fn_body(code, 'function freezeLines('))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -591,6 +618,7 @@ def main():
         t9_fixes32_guards()
         t10_changes33_guards()
         t11_changes34_guards()
+        t12_changes35_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

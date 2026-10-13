@@ -401,7 +401,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.34';
+const PAGE_VERSION='2026-10-06.35';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -438,7 +438,7 @@ async function keyFetch(url,opts){
 const K=STORE+'course-plot-v1';
 const $=id=>document.getElementById(id);
 const pad=(n,w)=>String(n).padStart(w,'0');
-function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],notSent:[],laidSel:{},laidNo:{},laidAck:{},lineFlags:{},picked:{},mode:'setup'};}
+function fresh(){return{date:'',marks:[],courses:{},race:1,twd:'',tws:'',start:0,raceClasses:{},dayClasses:[],starts:['Start 1','Start 2','Start 3'],startTimes:{},finishes:{},lineSel:{},winds:{},synced:{},outbox:[],notSent:[],laidSel:{},laidNo:{},laidAck:{},laidFrz:{},lineAuto:{},lineFlags:{},picked:{},mode:'setup'};}
 function load(){try{const r=localStorage.getItem(K);if(r){const s=JSON.parse(r);if(s&&Array.isArray(s.marks))return s;}}catch(e){}return fresh();}
 function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
@@ -611,6 +611,9 @@ async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S
   fxSel='';await pull(true);
   // the rows keep their place: each now names the corrected position, and the changed courses are saved
   Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{if(ls[w]==='s:'+m.sid)ls[w]='s:'+nid;});});
+  Object.keys(S.lineAuto||{}).forEach(k=>{const la=S.lineAuto[k]||{};Object.keys(la).forEach(w=>{if(la[w]==='s:'+m.sid)la[w]='s:'+nid;});});
+  Object.keys(S.laidSel||{}).forEach(k=>{if(S.laidSel[k]==='s:'+m.sid)S.laidSel[k]='s:'+nid;});
+  Object.keys(S.laidFrz||{}).forEach(k=>{if(S.laidFrz[k]==='s:'+m.sid){S.laidFrz[k]='s:'+nid;stamp('_starts|'+k.split('|')[0]);}});
   Object.keys(S.courses||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k)&&isDirty(k))stamp(k);});commit();
   typedSays(m.name+' (Race '+m.race+') corrected to '+ddm(p.lat,true)+' '+ddm(p.lon,false)+'; the course rows that used it now use the corrected position.',true);}
 /* Pasted positions, Option B (STATUS A47, Pat 13 October 2026): a pasted position the course uses is on this device only
@@ -630,12 +633,18 @@ function savePasted(id){const m=S.marks.find(x=>x.id===id), st=$('readStatus');
   let to, msg;
   if(same){to=same.id;msg=m.name+' (Race '+m.race+') is already in the race record with the same position: that one is used, not saved twice.';}
   else{const pid=Date.now().toString(36)+Math.random().toString(36).slice(2,8), d=S.pulledDay||$('day').value||todayISO();
-    const hm=String(m.time||'').match(/^(\d{1,2}):(\d{2})$/), t=hm?new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10),+hm[1],+hm[2]).getTime():Date.now();
+    // a line with no time of its own: the RO gives the time on the water (STATUS A47; Pat, 13 October 2026). Cancel saves nothing
+    let hm=String(m.time||'').match(/^(\d{1,2}):(\d{2})$/);
+    if(!hm){const a=prompt('Time on the water for '+m.name+' (Race '+m.race+'), as hh:mm, for example 14:05. The pasted line has no time of its own.','');
+      if(a===null)return;
+      hm=String(a).trim().match(/^(\d{1,2})[:.](\d{2})$/);
+      if(!hm||+hm[1]>23||+hm[2]>59){alert('Could not read "'+String(a).trim()+'" as a time: nothing saved. Use hh:mm, for example 14:05.');return;}}
+    const t=new Date(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10),+hm[1],+hm[2]).getTime();
     const fix=1+S.marks.filter(x=>x!==m&&x.race===m.race&&x.name.toLowerCase()===m.name.toLowerCase()).length;
     S.outbox.push({action:'add',id:pid,date:d,race:m.race,name:m.name,lat:m.lat,lon:m.lon,acc:0,time:t});
     push({race:m.race,name:m.name,fix,lat:m.lat,lon:m.lon,acc:0,time:hhmm(t),pending:true,pid});
     to=m.race+'|'+m.name.toLowerCase()+'|'+fix;
-    msg=m.name+' (Race '+m.race+') saved to the race record as a typed position: sending…';}
+    msg=m.name+' (Race '+m.race+') saved to the race record as a typed position, time '+hhmm(t)+': sending…';}
   Object.keys(S.courses||{}).forEach(k=>{let ch=false;
     S.courses[k]=(S.courses[k]||[]).map(e=>{const eid=typeof e==='string'?e:e.id;if(eid!==m.id)return e;ch=true;return {id:to,side:typeof e==='string'?'':(e.side||'')};});
     if(ch)stamp(k);});
@@ -689,13 +698,15 @@ delete S.startClasses;
 if(!Array.isArray(S.dayClasses))S.dayClasses=[];
 function ownClasses(r){return S.raceClasses[r||S.race]||null;}
 function dayFallback(){return S.dayClasses.some(l=>l.length)?S.dayClasses:null;}
-// a race's starts: its start groups, and at least every start that has a course (a start added with no classes is not
-// saved as a group, so its course must still be shown and opened; Pat, 13 October 2026)
+// a race's starts: its start groups, and at least every start that has a course (before 2026-10-06.35 a start added with
+// no classes was not saved as a group, so its course must still be shown and opened; Pat, 13 October 2026). From .35 a
+// race with more than three starts is saved as a start group even with no classes ticked (isEmptyRec; STATUS A40), and
+// a race's first edit starts from the starts shown, so + Start adds a start after them
 function classesOf(r){const rr=r||S.race, own=ownClasses(rr)||[[],[],[]];
   const n=Math.max(own.length,...Object.keys(S.courses||{}).filter(k=>/^\d+\|\d+$/.test(k)&&+k.split('|')[0]===rr&&(S.courses[k]||[]).length).map(k=>+k.split('|')[1]+1));
   return n>own.length?own.concat(Array.from({length:n-own.length},()=>[])):own;}
 // the race's own groups, empty the first time it is edited; every edit marks them as built for the day being worked on
-function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=[[],[],[]];stamp('_starts|'+r);return S.raceClasses[r];}
+function editClasses(){const r=S.race;if(!S.raceClasses[r])S.raceClasses[r]=classesOf(r).map(l=>l.slice());stamp('_starts|'+r);return S.raceClasses[r];}
 S.starts=classesOf().map((_,i)=>'Start '+(i+1));
 let classOpen=false;
 if(typeof S.start!=='number')S.start=0;
@@ -713,7 +724,7 @@ Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).filter(e=
     return id===m.id?{id:nid,side:typeof e==='string'?'':(e.side||'')}:e;});});
   m.id=nid;moved=true;});
  if(moved)save();}
-['laidSel','laidNo','laidAck'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+['laidSel','laidNo','laidAck','laidFrz','lineAuto'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
 function startTime(){return S.startTimes[ckey(S.race,S.start)]||'';}
 function mins(t){const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;}
 function newerFix(m){
@@ -795,11 +806,39 @@ function laidState(cm){
   let use=latest, mode='auto';
   if(sel==='card'){use=null;mode='card';}
   else if(sel!=='auto'){const f=fixes.concat(near).find(x=>fkey(x)===sel);if(f){use=f;mode='pinned';}else mode='lost';}
-  const newer=mode!=='auto'&&latest&&latest!==use&&(!use||laterFix(latest,use))?latest:null;
+  else if(S.laidFrz&&S.laidFrz[key]){const z=S.laidFrz[key], f=fixes.find(x=>fkey(x)===z||(z.indexOf('s:')===0&&x.sid&&x.sid===sidNow(z.slice(2))));
+    if(f){use=f;mode='saved';}else mode='savedlost';}
+  const newer=mode!=='auto'&&mode!=='savedlost'&&latest&&latest!==use&&(!use||laterFix(latest,use))?latest:null;
   const suggest=near.filter(x=>x!==use&&!(S.laidNo[key]||[]).includes(fkey(x)));
   const phones=new Set(fixes.filter(x=>x.device&&(!use||x.race===use.race)).map(x=>x.device)).size;
   return {key,sel,mode,use,latest,fixes,near,suggest,newer,phones};
 }
+/* Saved with the course (STATUS A10; Pat, 13 October 2026, option A): a laid mark on auto, and a line end on auto, use
+   the fix auto picked when the course was saved, on every device and every day. The choice goes with the course when it
+   is next saved (stamp -> freezeFor): a laid mark's in its race's record (_starts|race, "laid"), as the laid-mark choice
+   is one per race; a line end's in its start's record ("lineAuto"). Auto that finds no fix saves nothing, so a mark not
+   yet laid, or a line not yet recorded, follows the first fix until the course is next saved. When a newer fix arrives
+   later the course row says so ("A newer fix: … – use it?") and nothing changes until the RO taps it. Only fixes saved
+   on the server are saved as choices. */
+function freezeLaid(r){let ch=false;
+  S.marks.filter(m=>m.card&&m.race===r&&!m.virtual&&CARD.marks[m.card]&&CARD.marks[m.card].laid).forEach(cm=>{const st=laidState(cm);
+    if(st.sel==='auto'&&!S.laidFrz[st.key]&&st.latest&&st.latest.sid){S.laidFrz[st.key]=fkey(st.latest);ch=true;}});
+  return ch;}
+function freezeLines(k,r,st){const v=S.lineSel[k]||{}, fz=Object.assign({},S.lineAuto[k]||{});
+  ['cb','pin','fpin'].forEach(w=>{if((v[w]&&v[w]!=='auto')||fz[w])return;const e=endPick(w,r,st);
+    if(e.how==='auto'&&!e.saved&&e.m&&e.m.sid)fz[w]=refFor(e.m);});
+  if(Object.keys(fz).length)S.lineAuto[k]=fz;}
+function freezeFor(k){const c=String(k).match(/^(\d+)\|(\d+)$/), g=String(k).match(/^_starts\|(\d+)$/), r=c?+c[1]:g?+g[1]:0;
+  if(!r)return;
+  if(freezeLaid(r))S.courseDay['_starts|'+r]=S.courseDay[k];
+  if(c)freezeLines(k,r,+c[2]);}
+// the race record's "laid": per laid mark (by its card name in lower case), the RO's choice, and for auto the fix saved
+function laidRec(r){const o={};
+  new Set(Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{}))).forEach(key=>{const i=key.indexOf('|');
+    if(+key.slice(0,i)!==+r)return;const c=key.slice(i+1), sel=S.laidSel[key]||'auto', z=S.laidFrz[key]||'';
+    if(sel==='auto'){if(/^s:/.test(z))o[c]={sel:'auto',fix:z};}
+    else if(sel==='card'||/^s:/.test(sel))o[c]={sel};});
+  return o;}
 function resolveLaid(cm){const st=laidState(cm),u=st.use;
   // the leg note names where the position came from: a typed or a pasted position, otherwise a RIB fix (legGeom)
   const mv=u&&(isPasted(u)||isTypedPos(u))?'to '+(isPasted(u)?'pasted':'typed')+' position, not depth-checked':undefined;
@@ -830,7 +869,7 @@ function laidPicker(m){
   const st=m.laidSt, pool=st.fixes.concat(st.near.filter(x=>fkey(x)===st.sel));
   const opt=(v,t)=>'<option value="'+esc(v)+'"'+(st.sel===v?' selected':'')+'>'+esc(t)+'</option>';
   return 'Position <select class="laidSel" data-k="'+esc(st.key)+'" aria-label="'+esc(m.name)+' position">'+
-    opt('auto',st.latest?'auto (latest: '+fixWords(st.latest,m.race)+')':'auto (no RIB fix yet)')+
+    opt('auto',st.mode==='saved'?'auto (saved with the course: '+fixWords(st.use,m.race)+')':st.latest?'auto (latest: '+fixWords(st.latest,m.race)+')':'auto (no RIB fix yet)')+
     pool.map(x=>opt(fkey(x),(norm(x.name)!==norm(m.card)?'"'+x.name+'" ':'')+fixWords(x,m.race))).join('')+
     opt('card','card position (planning only)')+'</select>';
 }
@@ -1275,9 +1314,12 @@ function render(){
         (st.use&&isPasted(st.use)?'<div class="meta warnTxt">⚠ '+PASTE_WARN+' <button type="button" class="ghost" data-savepaste="'+esc(st.use.id)+'">Save to the race record</button></div>':'')+
         (st.use?(st.phones>1?'<div class="meta warnTxt">⚠ fixes from '+st.phones+' phones; '+(st.mode==='auto'?'the latest is used':'your choice is used')+'</div>':'')
                :'<div class="meta warnTxt">Planning position until laid</div>')+
-        (st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
+        (st.newer&&st.mode==='saved'?'<div class="newer">A newer fix: '+esc(st.newer.name)+' at '+esc(st.newer.time||'?')+' – use it?'+
+          ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use it</button></div>':
+         st.newer?'<div class="newer">Newer fix at '+esc(st.newer.time)+' not used, because you chose '+(st.use?'the '+esc(st.use.time)+' fix':'the card position')+
           ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></div>':'')+
-        (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'');}
+        (st.mode==='lost'?'<div class="meta warnTxt">The fix you chose is no longer there (deleted or moved), so the latest is used.</div>':'')+
+        (st.mode==='savedlost'?'<div class="meta warnTxt">The fix saved with the course is no longer there, so the latest is used. <button data-a="laidnewest" data-k="'+esc(st.key)+'">Keep the latest</button></div>':'');}
     const far=farNm(m), other=isPasted(m)?'<span class="warnTxt">⚠ '+PASTE_WARN+'</span> <button type="button" class="ghost" data-a="savepaste" data-i="'+i+'">Save to the race record</button>':
       isTypedPos(m)?'typed position':'';
     // a routing waypoint is not rounded: no side; ↓ as well as ↑, to move it to its place in the course (STATUS A40)
@@ -1351,7 +1393,7 @@ function removeStart(i){
   const gone=ckey(r,last); if(S.synced[gone]!==undefined){S.courses[gone]=[];stamp(gone);}
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
-function stamp(k){S.courseDay=S.courseDay||{};S.courseDay[k||ckey(S.race,S.start)]=$('day').value||todayISO();}
+function stamp(k){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=$('day').value||todayISO();freezeFor(k);}
 function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
 
 /* ---------- Setup and Race views ----------
@@ -1389,9 +1431,12 @@ function renderRaceAlerts(){
   cs.forEach((e,i)=>{const m=markById(e.id); if(!m)return;
     if(m.laidSt){const st=m.laidSt; if(seen.has(st.key))return; seen.add(st.key);
       if(!st.use)a.push('<p class="note flag">'+esc(m.name)+': planning position until laid.</p>');
-      if(st.newer)a.push('<p class="newer">'+esc(m.name)+': newer fix at '+esc(st.newer.time)+' not used, because you chose '+
+      if(st.newer&&st.mode==='saved')a.push('<p class="newer">'+esc(m.name)+': a newer fix: '+esc(st.newer.name)+' at '+esc(st.newer.time||'?')+' – use it?'+
+        ' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use it</button></p>');
+      else if(st.newer)a.push('<p class="newer">'+esc(m.name)+': newer fix at '+esc(st.newer.time)+' not used, because you chose '+
         (st.use?'the '+esc(st.use.time)+' fix':'the card position')+' <button data-a="laidnewest" data-k="'+esc(st.key)+'">Use newest</button></p>');
       if(st.mode==='lost')a.push('<p class="note flag">'+esc(m.name)+': the fix you chose is no longer there, so the latest is used.</p>');
+      if(st.mode==='savedlost')a.push('<p class="note flag">'+esc(m.name)+': the fix saved with the course is no longer there, so the latest is used. <button data-a="laidnewest" data-k="'+esc(st.key)+'">Keep the latest</button></p>');
       if(st.phones>1)a.push('<p class="note flag">⚠ '+esc(m.name)+': fixes from '+st.phones+' phones; '+(st.mode==='auto'?'the latest is used':'your choice is used')+'.</p>');
       return;}
     const nw=newerFix(m), later=nw&&cs.some((x,j)=>j>i&&x.id===nw.id);
@@ -1530,10 +1575,16 @@ function endPick(w,r,st,own,sel){r=r||S.race;st=st==null?S.start:st;
         const newer=candidates(w,r).filter(m=>{const t=fixMoment(m);return t!==null&&t>t0&&t<=t1;});
         if(!newer.length)return {m:p.m,how:'inherited',from,reason:'Inherited from Start '+(from+1)+(p.m?'':' (none)')};
         const n=newer[newer.length-1];
-        return Object.assign(autoEnd(w,r,st,sel),{warn:'New '+END_LABEL[w]+' fix at '+(n.time||'?')+' since Start '+st+
+        return Object.assign(autoUse(w,r,st,sel),{warn:'New '+END_LABEL[w]+' fix at '+(n.time||'?')+' since Start '+st+
           '\'s choice, so auto is used: check it'});}}}
-  return autoEnd(w,r,st,sel);
+  return autoUse(w,r,st,sel);
 }
+// auto, or the fix auto picked when the course was saved (freezeLines); live: what auto gives now, when that differs
+function autoUse(w,r,st,sel){const a=autoEnd(w,r,st,sel), z=w==='fcb'?'':((S.lineAuto||{})[ckey(r,st)]||{})[w];
+  if(!z)return a;
+  const f=refFix(z,w);
+  if(!f)return Object.assign({},a,{warn:'The '+END_LABEL[w]+' fix saved with this course is no longer there, so auto is used: check it'});
+  return {m:f,how:'auto',saved:true,reason:'Auto, as saved with the course',live:a.m&&a.m!==f?a.m:null};}
 function autoEnd(w,r,st,sel){
   if(w==='fcb'){const s=endPick('cb',r,st,undefined,sel);
     return {m:s.m,how:s.m?'auto':'unset',reason:'Auto: same as this start\'s committee boat',warn:s.m?'':'No committee boat for this start'};}
@@ -1613,6 +1664,8 @@ function endPicker(w,cardStandIn){
     '<div class="meta" style="font-size:.85rem">'+esc(e.reason)+(e.m?': '+esc(fixText(e.m,w)):'')+
       (e.how==='chosen'||e.how==='none'?' <button type="button" class="ghost endAuto" data-w="'+w+'">Back to auto</button>':'')+'</div>'+
     (e.warn?'<div class="meta warnTxt">⚠ '+esc(e.warn)+'</div>':'')+
+    (e.saved&&e.live?'<div class="newer">'+((fixMoment(e.live)||0)>(fixMoment(e.m)||0)?'A newer fix: ':'Auto now gives: ')+esc(label)+' '+esc(fixText(e.live,w))+
+      ' – use it? <button type="button" class="endLive" data-w="'+w+'" data-f="'+esc(refFor(e.live))+'">Use it</button></div>':'')+
     (e.m&&accWarn(e.m)?'<div class="meta warnTxt">⚠ '+esc(label)+' in use is '+esc(fixText(e.m,w))+'</div>':'')+
     (phones>1?'<div class="meta warnTxt">⚠ fixes from '+phones+' phones</div>':'')+note;
 }
@@ -1782,6 +1835,7 @@ function buildLegs(){
     // a leg made of more than one physical leg (a card passage) can be opened to show each, as the SailScoring block lists them
     const nParts=g.parts.length, open=openLegs.has(ckey(S.race,S.start)+'|'+i);
     rows+='<tr><td>'+(isLine?'Line':'Leg '+(i+1))+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+(viaText?'<br><span class="viaTxt">'+esc(viaText)+'</span>':'')+(fixNote?'<br><span class="viaTxt warnTxt">'+esc(fixNote)+'</span>':'')+
+      (r.m<SHORT_M?'<br><span class="viaTxt warnTxt">⚠ two marks at nearly the same position ('+Math.round(r.m)+' m)</span>':'')+
       (nParts>1?'<br><button type="button" class="segToggle" data-leg="'+i+'" data-n="'+nParts+'" aria-expanded="'+open+'">'+(open?'▾ ':'▸ ')+nParts+' physical legs</button>':'')+'</td>'+
       '<td class="n">'+pad(brgM,3)+'°M<br><span style="color:var(--muted)">'+pad(brgT,3)+'°T</span></td>'+
       '<td class="n">'+r.nm.toFixed(2)+'<br><span style="color:var(--muted)">'+Math.round(r.m)+' m</span></td>'+
@@ -1935,16 +1989,21 @@ function setOut(t,none){
   else{wa.removeAttribute('href');wa.setAttribute('aria-disabled','true');}
   $('share').style.display=navigator.share?'':'none';$('copy').style.gridColumn=navigator.share?'':'1/-1';
 }
-/* A course with a missing mark, or a routing waypoint with no leg (so a leg not measured), is held back from competitors
+/* A course with a missing mark, a routing waypoint with no leg (so a leg not measured) or a leg shorter than 50 m, is held back from competitors
    (Pat, 13 October 2026): a red line above the Send buttons says so, and WhatsApp, Share and Copy text each ask "Send
    anyway?" first. With nothing to send, all three are greyed alike. The detail stays on the page. */
 let sendBad='';
+// a leg shorter than this: two marks at nearly the same position, held back as a missing mark is (Pat, 13 October 2026)
+const SHORT_M=50;
+function shortLegs(L){return ((L&&L.legs)||[]).map((g,i)=>!g.missing&&g.r&&g.r.m<SHORT_M?'Leg '+(i+1)+', '+L.pts[i].name+' → '+L.pts[i+1].name+', '+Math.round(g.r.m)+' m':null).filter(Boolean);}
 function setSendWarn(L){const w=[];
   if(L&&L.miss.length)w.push('This course has a missing mark: fix it before sending to competitors.');
   if(L&&orphanNames(L).length)w.push('This course has a leg that is not measured (routing waypoint '+orphanNames(L).join(', ')+' not between two marks): fix it before sending to competitors.');
   // a typed or pasted position more than FAR_NM from the map centre in the course (A45), like a missing mark
   const far=[...new Set((L&&L.cs||[]).filter(m=>farNm(m)).map(m=>m.name+', '+Math.round(farNm(m))+' nm'))];
   if(far.length)w.push('This course uses a position more than '+FAR_NM+' nm from the map centre ('+far.join('; ')+'): fix it before sending to competitors.');
+  const sh=shortLegs(L);
+  if(sh.length)w.push('This course has two marks at nearly the same position, a leg shorter than '+SHORT_M+' m ('+sh.join('; ')+'): fix it before sending to competitors.');
   // the Race day box changed but that day not loaded: the page still holds the day loaded
   const dc=S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay?$('day').value:'';
   $('dayChanged').hidden=!dc; $('dayChanged').textContent=dc?'Race day changed to '+longDate(dc)+': tap Get latest marks':'';
@@ -2528,7 +2587,10 @@ async function pull(quiet){
         all.forEach(k=>{delete saveState.refused[k];});
         dayDrop=null; saveState.dayBlock=null; showSave();}
       if(stale())return;
-      ['courses','startTimes','finishes','lineSel','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
+      // what earlier actions said (sent, withdrawn, already in the race record, imported) belongs to the old day; a
+      // typed position still waiting to send keeps its line (Pat, 13 October 2026)
+      ['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';$(id).className='status';});
+      ['courses','startTimes','finishes','lineSel','lineAuto','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // start groups likewise: only a race's groups set for this day stay; the old day-wide groups come from this day's file only
       Object.keys(S.raceClasses).forEach(r=>{if(!mine('_starts|'+r))delete S.raceClasses[r];});
@@ -2542,7 +2604,7 @@ async function pull(quiet){
       new Set(Object.keys(S.raceClasses).concat(Object.keys(S.picked))).forEach(r=>{S.synced['_starts|'+r]='';});
       Object.keys(S.synced).forEach(k=>{ln[k]=LOAD_WHY[0];});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
-      ['laidSel','laidNo','laidAck'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
+      ['laidSel','laidNo','laidAck','laidFrz'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
       if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;
     }
     S.marks=S.marks.filter(m=>!m.server); S.replaced=rpl;
@@ -2662,17 +2724,19 @@ function missName(id){const p=String(id).split('|');
 function recordFor(k){
   if(k==='_starts')return {classes:S.dayClasses};
   // a race's start groups, and its picked chips as "picked" only when it has any, so a race without picks saves exactly as before
-  if(k.indexOf('_starts|')===0){const pk=S.picked[k.slice(8)]||[];return pk.length?{classes:S.raceClasses[k.slice(8)]||[],picked:pk.slice()}:{classes:S.raceClasses[k.slice(8)]||[]};}
+  if(k.indexOf('_starts|')===0){const pk=S.picked[k.slice(8)]||[], ld=laidRec(k.slice(8)), o={classes:S.raceClasses[k.slice(8)]||[]};
+    if(pk.length)o.picked=pk.slice(); if(Object.keys(ld).length)o.laid=ld; return o;}
   const ls=S.lineSel[k]||{}, lsr={};
   Object.keys(ls).forEach(w=>{const v=ls[w];if(v==='auto'||v==='none'||/^[sl]:/.test(v))lsr[w]=v;});
   return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
           startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
           wind:(S.winds&&S.winds[k])||{twd:'',tws:''},
-          card:(S.cardCfg&&S.cardCfg[k])?cardRec(S.cardCfg[k]):null};
+          card:(S.cardCfg&&S.cardCfg[k])?cardRec(S.cardCfg[k]):null,
+          ...(S.lineAuto&&S.lineAuto[k]&&Object.keys(S.lineAuto[k]).length?{lineAuto:Object.assign({},S.lineAuto[k])}:{})};
 }
-function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&!(r.picked&&r.picked.length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
+function isEmptyRec(k,r){return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
 // the day-wide _starts is never sent: only each race's own groups are
-function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{})).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
+function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null, savingP=null, saveStop=false, dayDrop=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
@@ -2810,6 +2874,13 @@ function applyServerCourses(obj){
       // course row naming a lost fix is
       const pk=Array.isArray(rec.picked)?[...new Set(rec.picked.filter(x=>typeof x==='string'&&/^s:/.test(x)&&S.marks.some(m=>refFor(m)===x)))]:[];
       if(pk.length)S.picked[r]=pk; else delete S.picked[r];
+      // laid-mark choices saved with the race (A10): the server's replace this phone's for the race
+      Object.keys(S.laidSel).filter(x=>x.split('|')[0]===r).forEach(x=>delete S.laidSel[x]);
+      Object.keys(S.laidFrz).filter(x=>x.split('|')[0]===r).forEach(x=>delete S.laidFrz[x]);
+      const ld=rec.laid&&typeof rec.laid==='object'?rec.laid:{};
+      Object.keys(ld).forEach(c=>{const v=ld[c]||{}, key=r+'|'+c;
+        if(v.sel==='card'||(typeof v.sel==='string'&&/^s:/.test(v.sel)))S.laidSel[key]=v.sel;
+        else if(v.sel==='auto'&&typeof v.fix==='string'&&/^s:/.test(v.fix)){S.laidSel[key]='auto';S.laidFrz[key]=v.fix;}});
       if(Array.isArray(rec.classes)&&rec.classes.length)S.raceClasses[r]=rec.classes;
       if(pk.length||(Array.isArray(rec.classes)&&rec.classes.length)){S.courseDay=S.courseDay||{}; S.courseDay[k]=S.pulledDay;}}   // from the server: the day it came from
     else{
@@ -2819,6 +2890,9 @@ function applyServerCourses(obj){
       // a page before 2026-10-01.8 that saved this course turned 'none' into 'l:ne' (no fix id can be 'ne'): read it as none
       const ls={}; Object.keys(rec.lineSel||{}).forEach(w=>{const v=rec.lineSel[w]==='l:ne'?'none':rec.lineSel[w];
         ls[w]=typeof v==='string'&&(v==='none'||/^[sl]:/.test(v))?v:'auto';}); S.lineSel[k]=ls;
+      // line ends on auto: the fixes saved with the course (A10)
+      const la={}; Object.keys(rec.lineAuto||{}).forEach(w=>{const v=rec.lineAuto[w];if(END_TEST[w]&&typeof v==='string'&&/^s:/.test(v))la[w]=v;});
+      if(Object.keys(la).length)S.lineAuto[k]=la; else delete S.lineAuto[k];
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
       // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
       if('card' in rec){S.cardCfg=S.cardCfg||{};
@@ -2997,15 +3071,20 @@ document.addEventListener('click',e=>{const b=e.target.closest('.lineSw,.lineAct
   else if(act==='markFinish'){const r=$('finishRow'),sel=r&&r.querySelector('select[data-w="fpin"]');if(r)r.scrollIntoView({block:'center'});if(sel)sel.focus();}});
 function setEnd(w,v){const k=ckey(S.race,S.start);S.lineSel[k]=S.lineSel[k]||{};
   if(v==='auto')delete S.lineSel[k][w]; else S.lineSel[k][w]=v;
+  if(S.lineAuto[k]){delete S.lineAuto[k][w];if(!Object.keys(S.lineAuto[k]).length)delete S.lineAuto[k];}   // auto again: saved afresh (stamp)
   if(S.lineFlags[k])delete S.lineFlags[k][w];   // the RO has looked at this end again
   stamp(k); commit();}
 $('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(t)setEnd(t.dataset.w,t.value);});
 $('course').addEventListener('click',e=>{const t=e.target.closest('.endAuto');if(t)setEnd(t.dataset.w,'auto');});
-$('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;commit();});
+// "A newer fix: … – use it?" on a line end: auto now saves that fix
+$('course').addEventListener('click',e=>{const t=e.target.closest('.endLive');if(!t)return;const k=ckey(S.race,S.start);
+  S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[t.dataset.w]:t.dataset.f});stamp(k);commit();});
+$('course').addEventListener('change',e=>{const t=e.target.closest('.laidSel');if(!t)return;S.laidSel[t.dataset.k]=t.value;delete S.laidFrz[t.dataset.k];stamp();commit();});
 $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;
   if(b.dataset.a==='ack')Object.assign(S.laidAck,laidPending);
-  if(b.dataset.a==='use')S.laidSel[b.dataset.k]=b.dataset.f;
+  if(b.dataset.a==='use'){S.laidSel[b.dataset.k]=b.dataset.f;delete S.laidFrz[b.dataset.k];}
   if(b.dataset.a==='no')S.laidNo[b.dataset.k]=(S.laidNo[b.dataset.k]||[]).concat(b.dataset.f);
+  if(b.dataset.a!=='no')stamp();   // OK and Use this fix are the RO's choice: saved with the course
   commit();};
 $('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
 $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
@@ -3074,7 +3153,7 @@ function courseAct(b){
     // before the start: the mark was re-laid, so every rounding uses the new position.
     // during the race: only this rounding and the ones after it; earlier roundings keep the old position.
     cs.forEach((e,j)=>{if(e.id===old&&(!during||j>=i))e.id=nw.id;});}}
-  if(b.dataset.a==='laidnewest')S.laidSel[b.dataset.k]='auto';
+  if(b.dataset.a==='laidnewest'){S.laidSel[b.dataset.k]='auto';delete S.laidFrz[b.dataset.k];}   // stamp below saves the latest
   if(b.dataset.a==='savepaste'){savePasted(cs[i].id);return;}
   if(b.dataset.a==='side'){const o=['','P','S'];cs[i].side=o[(o.indexOf(cs[i].side||'')+1)%3];}
   if(b.dataset.a==='del')cs.splice(i,1);

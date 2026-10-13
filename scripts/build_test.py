@@ -6,7 +6,7 @@
 Writes, and nothing else:
     OUT/course-test/index.html   the RO page, talking only to /marks-test/ and keeping its own browser data
     OUT/marks-test/marks.php     an unchanged copy of marks.php (it keeps its data next to itself, in /marks-test/data/)
-    OUT/BUILD.txt                source commit, PAGE_VERSION and SHA-256 of both files
+    OUT/BUILD.txt                source commit, where each file came from (A28), PAGE_VERSION and SHA-256 of both files
 
 The test page differs from the live one in exactly these lines, each of which must occur exactly once:
     <script src="/marks/key.js">        -> /marks-test/key.js
@@ -181,6 +181,24 @@ def sha(b):
     return hashlib.sha256(b).hexdigest()
 
 
+def source_of(path, commit):
+    """Where a built file came from, in words (STATUS A28): the committed file only when it is inside the repository,
+    tracked, and the same as at HEAD; otherwise its path, said to be outside the repository, untracked or changed."""
+    full = os.path.abspath(path)
+    rel = os.path.relpath(full, ROOT) if os.path.splitdrive(full)[0].lower() == os.path.splitdrive(ROOT)[0].lower() else full
+    if rel.startswith('..') or os.path.isabs(rel):
+        return f'{full} (outside the repository: not a committed file)'
+    rel = rel.replace(os.sep, '/')
+    try:
+        tracked = subprocess.run(['git', '-C', ROOT, 'ls-files', '--error-unmatch', '--', rel], capture_output=True).returncode == 0
+        same = tracked and subprocess.run(['git', '-C', ROOT, 'diff', '--quiet', 'HEAD', '--', rel], capture_output=True).returncode == 0
+    except OSError:
+        return f'{rel} (git not available: commit unknown)'
+    if not tracked:
+        return f'{rel} (not tracked in the repository: not a committed file)'
+    return f'{rel} at commit {commit}' if same else f'{rel} (uncommitted changes since commit {commit})'
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--page', default=os.path.join(ROOT, 'pages', 'course', 'course_v8.html'))
@@ -201,6 +219,7 @@ def main():
     except OSError:
         commit, dirty = '', ''
     commit = commit or 'unknown'
+    page_src, marks_src = source_of(a.page, commit), source_of(a.marks, commit)
     pb = page.encode('utf-8')
     # written to a temporary folder first, then moved into place, so a failure never leaves half a build
     os.makedirs(a.out, exist_ok=True)
@@ -216,6 +235,8 @@ def main():
                 raise Refused('the copied marks.php differs from its source')
         with open(os.path.join(tmp, 'BUILD.txt'), 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'source commit {commit}{" (pages/ has uncommitted changes)" if dirty else ""}\n'
+                    f'page built from {page_src}\n'
+                    f'marks.php copied from {marks_src}\n'
                     f'PAGE_VERSION {version}\n'
                     f'course-test/index.html sha256 {sha(pb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
@@ -233,6 +254,8 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print(f'test build {version} from {commit}{" (uncommitted changes in pages/)" if dirty else ""} written to {a.out}')
+    print(f'  page built from {page_src}')
+    print(f'  marks.php copied from {marks_src}')
     print(f'  course-test/index.html  {sha(pb)}')
     print(f'  marks-test/marks.php    {sha(marks)}')
     return 0
