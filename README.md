@@ -350,9 +350,16 @@ footer "© 2026 Pat Tanner ORC Ireland".
   070°M"), and once a wind direction is typed how far it is off square and which end is
   favoured, as section 4 does; with no start time set it says "No start line yet: no
   start time is set, so auto finds no committee boat or Start Pin".
-- *Wind direction* (`STATUS.md` A56): used and saved only from 0 to 360; anything else
-  is said in red under the box ("Wind direction must be 0 to 360 °M: "1141" is not used
-  or saved.") and the course keeps its last good direction.
+- *Wind direction* (`STATUS.md` A56): used only from 0 to 360; anything else is said in
+  red under the box ("Wind direction must be 0 to 360 °M: "1141" is not used or
+  saved.") and the course keeps its last good direction. The legs follow the box as it
+  is typed; the direction is saved with the course only when the RO leaves the box (or
+  presses Enter), so a half-typed one is never saved.
+- *Choices kept on a device by an older page* (A10): a laid-mark choice made on a page
+  before .35 was kept on that device only. It stays in use there, but is saved with the
+  course only when the RO changes it, sends the course, or shows it on the race day,
+  never because a day is opened; it gives way to a choice the server has for that mark.
+  A save that a load leads to (a line end's reference updated) saves no auto choice.
 - *Course chart*: the Chart draws what the Sketch draws, from the same data: the
   legs in order with arrowheads (a leg that follows a card passage goes through the
   card's waypoints, where the sketch draws it straight), the start and finish lines
@@ -553,7 +560,7 @@ footer "© 2026 Pat Tanner ORC Ireland".
   the time on the water (filled with the time now on the race day itself) and saves
   it on the race day; Cancel stores nothing. A position typed before .36 carries the
   time it was typed; one typed on another date than its race day says that date
-  ("R2 15:50 on Tue 13 Oct"). The message for a typed position far from the map centre
+  ("R2 15:50 on Tue 13 Oct") on the RO's page; the WhatsApp text leaves the date out. The message for a typed position far from the map centre
   is red, as its chip is (A55). The sketch's scale bar is in metres below 0.1 nm.
   After a change of day, "All course changes saved" speaks only for the day loaded
   (A48).
@@ -627,7 +634,8 @@ one per physical leg, from the same function, the distance to 0.01 nm and the
 bearing in whole degrees magnetic (`"north": "magnetic"`), each named "From - To" as
 the legs table names its ends ("Start - Windward"). The name is the series, race
 date, race and start ("Autumn League, Sun 27 Sept 2026, Race 1, Start 1"); the
-series is also given as `"series"`, left out when the series name is not set. The
+series is also given as `"x-series"` (from PAGE_VERSION 2026-10-06.36; extra fields start
+with "x-" in Mark McLoughlin's format convention), left out when the series name is not set. The
 anchor is where the first leg starts, usually the start line's midpoint, to 6
 decimals. Wind direction (°M, as entered) is on every leg, or on none when not
 entered; wind speed likewise, left out when no direction is entered. Marks, line
