@@ -883,7 +883,10 @@ of a race), keep, outside the repository and dated:
 2. `/course/index.html`, downloaded as `index.html.live-YYYY-MM-DD`;
 3. the whole `/marks/data/` folder, downloaded as `marks-data-YYYY-MM-DD/`.
 
-Upload `marks.php` first, then the page. To roll back, upload the saved `marks.php`
+Upload `marks.php` first, then the page. Check the live page's version by view-source
+(Ctrl+U), searching for PAGE_VERSION: expect the new version with the live values
+`MARKS_BASE='/marks/'` and `STORE=''`; the page does not write PAGE_VERSION to the
+Console. To roll back, upload the saved `marks.php`
 and `index.html` again. Files a newer `marks.php` added to `data/` are ignored by the
 older one and can stay. Put a day's file back from the dated copy only if that file
 itself must be restored: it removes anything recorded or saved since the copy.
