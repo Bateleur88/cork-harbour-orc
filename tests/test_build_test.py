@@ -421,6 +421,8 @@ def t7_a40_guards():
             body = body.replace('\'  "x-series": \'', '\'  "series": \'')
             # and "course" to one decimal of a degree magnetic, as agreed with Mark McLoughlin on 10 October 2026
             body = body.replace('mag1(pt.brg,vc)', 'magOf(pt.brg)')
+            # and "x-estimate" when the start line is the RO's estimate (A58, Pat 14 October 2026)
+            body = body.replace("+(lineEstNow(r,st)?'  \"x-estimate\": '+JSON.stringify(lineEstNow(r,st).x)+',\\n':'')", '')
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -648,6 +650,28 @@ def t13_changes36_guards():
     g('C: Copy for Sail Scoring names the series "x-series"', '\'  "x-series": \'' in code and '\'  "series": \'' not in code)
 
 
+def t14_one_end_line_guards():
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('14 .36 A58: ' + name, ok)
+    eo = fn_body(code, 'function estOffer(')
+    g('the options only with a start time and exactly one end, not on a Card mark start', "if(!startTime()||cardEndMode('s')==='card'||midLine())return '';" in eo
+      and "if(!!cb===!!pin)return '';" in eo)
+    g('the options write nothing until the RO acts (no save, stamp or commit in the offer)', not re.search(r'(commit|save|stamp|scheduleSave|saveCourses|sendOutbox)\(', eo))
+    g('option 1 saves a typed position named for the missing end, and the line end of this start',"nm=w==='cb'?'Committee boat':'Start Pin'" in code
+      and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});" in code and 'geoDest(ref,((brgM-varW())%360+360)%360,dist)' in code)
+    g('option 2: the recorded end as midpoint, for the start and a start-line finish', "(midLine(r,st)||startLine(r,st,sel))" in code
+      and "return midLine(r,st)||startLine(r,st,sel);}" in code)
+    g('both saved with the course and read back', "{lineMid:Object.assign({},S.lineMid[k])}" in code and "{lineEst:Object.assign({},S.lineEst[k])}" in code
+      and 'S.lineMid[k]={w:lm.w,ref:lm.ref}' in code)
+    g('a real end recorded later is offered, never taken', "' is now available – use it? '" in code)
+    g('Copy for Sail Scoring says x-estimate; the WhatsApp text does not', "'  \"x-estimate\": '+JSON.stringify(lineEstNow(r,st).x)" in code
+      and 'estimate' not in fn_body(code, 'function setOut('))
+    g('D: the WhatsApp leg lines give °M only', "+pad(brgM,3)+'°M · '+r.nm.toFixed(2)+' nm'" in code and "°M ('+pad(brgT,3)+'°T)" not in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -664,6 +688,7 @@ def main():
         t11_changes34_guards()
         t12_changes35_guards()
         t13_changes36_guards()
+        t14_one_end_line_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
