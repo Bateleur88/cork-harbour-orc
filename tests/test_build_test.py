@@ -786,6 +786,7 @@ def t17_reopen_names_guards():
     g('3 the race-day save of A10 (a) waits for that refresh',
       "if(!reopenWait&&S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render('))
     g('3 the first render comes after reopenWait is set', 0 <= code.index("reopenWait=!!S.pulledDay") < code.index('\nrender();\n'))
+    g('3 the reopen note goes once the box and the day loaded agree', "if(!h)$('reopenNote').hidden=true;" in fn_body(code, 'function heldSay('))
     g('3 Clear everything leaves nothing to refresh', "reopenWait=false; $('reopenNote').hidden=true;" in fn_body(code, 'function clearPageState('))
     hl = fn_body(code, 'function helpLong(')
     g('2 the time in brackets is left out when the reference already ends with it',

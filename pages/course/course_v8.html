@@ -1505,7 +1505,7 @@ function removeStart(i){
    sent until Get latest marks loads the box's day. */
 function workDay(){return S.pulledDay||$('day').value||todayISO();}
 function dayHeld(){return !!(S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay);}
-function heldSay(){const h=dayHeld();document.body.classList.toggle('dayHeld',h);
+function heldSay(){const h=dayHeld();document.body.classList.toggle('dayHeld',h);if(!h)$('reopenNote').hidden=true;   // said only while held
   $('dayHeldNote').hidden=!h;$('dayHeldNote').innerHTML=h?esc('Race day is '+longDate($('day').value)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.')+
     ' <button type="button" class="ghost" id="heldPull">Get latest marks</button>':'';}
 function stamp(k,noFreeze){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=workDay();if(!noFreeze)freezeFor(k);}
