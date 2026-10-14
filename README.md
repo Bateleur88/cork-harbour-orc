@@ -1014,6 +1014,9 @@ result recorded long before these scripts existed.
    but the criterion is doing real work there.
 5. **Mark's 204.** Navigation Tests holds 204 distinct directed pairs, 61 of which
    are not physical chords. Probably the population behind his figure; unconfirmed.
+6. **Laid marks shown red.** A club laid mark at its planning position shows the red
+   outline and ⚠ as a chip, but is left out of the red outline in the Fixed marks
+   list; to be made consistent later (Pat, 14 October 2026).
 
 ## Workbook sheets
 
