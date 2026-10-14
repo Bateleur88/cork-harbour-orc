@@ -578,7 +578,7 @@ def t11_changes34_guards():
     sw = fn_body(code, 'function setSendWarn(')
     g('3 a far position in a course holds Send back', "filter(m=>farNm(m))" in sw and "'This course uses a position more than '+FAR_NM+' nm from the map centre ('" in sw)
     g('4 a Race day changed but not loaded is said and holds Send back', page.count('id="dayChanged"') == 1
-      and "'Race day changed to '+longDate(dc)+': tap Get latest marks'" in sw and "$('day').value!==S.pulledDay" in sw)
+      and "'Race day is '+longDate(dc)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.'" in sw and "$('day').value!==S.pulledDay" in sw)
     g('4 the heading date is the day loaded', "S.pulledDay?longDate(S.pulledDay):''" in fn_body(code, 'function buildLegs('))
     rp = fn_body(code, 'function readPaste(')
     g('5 a pasted line matching a saved position makes no chip', 'x.sid&&x.race===m.race' in rp and 'dup.push(t);return;}' in rp
@@ -726,6 +726,32 @@ def t15_start_line_setup_guards():
     g('the WhatsApp text still carries no estimate note', 'estimate' not in so and 'Grassy' not in so)
 
 
+def t16_day_guards():
+    """.37, A64 (Pat, 14 October 2026): never show or save a course for another day than the Race day box's; T1, Q1."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('16 .37 A64: ' + name, ok)
+    g('every course edit is labelled with the day loaded, never just the box', "S.courseDay[k]=workDay();" in code
+      and "function workDay(){return S.pulledDay||$('day').value||todayISO();}" in code and "S.courseDay[k]=$('day').value" not in code)
+    g('fixes recorded, typed or moved on this page belong to the day loaded', code.count('day=workDay();') == 3
+      and "day=$('day').value||todayISO()" not in code.replace("const day=$('day').value||todayISO(), st=$('readStatus');", ''))
+    g('held while the box and the day loaded differ, said in both views', "function dayHeld(){return !!(S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay);}" in code
+      and page.count('id="dayHeldNote"') == 1 and "'Race day is '+longDate($('day').value)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.'" in code
+      and "heldSay();" in fn_body(code, 'function render('))
+    g('while held the loaded day is hidden and every other control does nothing', 'body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,' in page
+      and "['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;" in code
+      and "#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote" in code)
+    g('the 30-second refresh never loads a day by itself while held', "pullOk&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code)
+    g('reopening the page loads the box\'s day fresh when a day was loaded before, and says so when that was another day',
+      "if(S.pulledDay){const was=S.pulledDay, now=$('day').value;" in code and "'The page was reopened: Race day is back to today, '" in code)
+    g('T1: no comma before "time on the water"', "</select>, time on the water" not in code and code.count("</select> time on the water '") == 2)
+    g('Q1: one end found and no line in use is drawn on the sketch and the chart, named an estimate when it is one',
+      "const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];" in code
+      and "(estOf(m)?' (estimate)':'')" in code and "plot(pts,plotLines,solo);" in code and "(P.solo||[]).map(m=>({a:m,b:m}))" in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -744,6 +770,7 @@ def main():
         t13_changes36_guards()
         t14_one_end_line_guards()
         t15_start_line_setup_guards()
+        t16_day_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

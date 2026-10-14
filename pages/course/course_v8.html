@@ -172,6 +172,8 @@ pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 
 .classpick .done{margin-top:10px;width:100%;padding:12px;border-radius:10px;border:none;background:var(--sea);color:var(--paper);font-weight:700}
 .classpick .rm{margin-top:8px;width:100%;padding:8px;background:none;border:none;color:var(--warn);text-decoration:underline}
 .starts .edit{border-style:dashed;font-weight:400}
+/* A64: while the Race day box and the day loaded differ, nothing of the loaded day is shown or changed (Pat, 14 October 2026) */
+body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,body.dayHeld .wrap>.setupOnly~*:not(#clear):not(.foot){display:none!important}
 .linkBtn{background:none;border:0;padding:0;color:var(--sea);text-decoration:underline;font-size:.85rem;cursor:pointer}
 .sugTxt{color:var(--muted)}
 .leaflet-tooltip.estTip{color:#B3261E;font-weight:600}
@@ -238,6 +240,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 </head>
 <body>
 <div class="wrap">
+  <!-- A64: the Race day box and the day loaded differ: said here in both views, everything else held until Get latest marks -->
+  <p class="status err" id="dayHeldNote" role="status" hidden></p>
   <div class="modebar" role="group" aria-label="View"><button type="button" data-mode="setup">Setup</button><button type="button" data-mode="race">Race</button></div>
   <!-- race view: what is needed after the gun. Shared controls (laid-mark notices, wind, committee boat) move into the slots here -->
   <div class="raceOnly">
@@ -259,6 +263,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <button class="act" id="pull">Get latest marks</button>
   <!-- the Race day box changed but that day not loaded: the page still holds the day loaded (setSendWarn) -->
   <p class="status err" id="dayChanged" role="status" hidden></p>
+  <!-- A64: the page was reopened on another day than the one loaded before: said once, until the next load the RO starts -->
+  <p class="status" id="reopenNote" role="status" hidden></p>
   <p class="hint" style="color:var(--muted);font-size:.85rem;margin:6px 0 0">After the first tap it refreshes by itself every 30 seconds.</p>
   <p class="status" id="readStatus" role="status" aria-live="polite"></p>
   <!-- what happened to this device's course saves (saveLines): refused saves, why a load or a change of day sends, and
@@ -1103,7 +1109,7 @@ function drawChartInner(){
         ln.est?{permanent:true,direction:'bottom',offset:[0,12],className:'estTip'}:{sticky:true}).addTo(LRoute);
     bounds.push([ln.a.lat,ln.a.lon],[ln.b.lat,ln.b.lon]);});
   // the legs, in order, each with its arrowhead
-  P.pts.forEach(m=>{if(ok(m)&&!isFar(m))bounds.push([m.lat,m.lon]);});
+  P.pts.concat(P.solo||[]).forEach(m=>{if(ok(m)&&!isFar(m))bounds.push([m.lat,m.lon]);});
   for(let i=0;i<P.pts.length-1;i++){const a=P.pts[i], b=P.pts[i+1];if(!ok(a)||!ok(b))continue;
     if(isFar(a)||isFar(b)){if(!(isFar(a)&&isFar(b)))farLegs.push({a,b,n:isFar(a)?b:a,f:isFar(a)?a:b});continue;}
     const via=((P.legs[i]||{}).route||[]).filter(ok), path=[a].concat(via,[b]).map(m=>[m.lat,m.lon]);
@@ -1130,7 +1136,7 @@ function drawChartInner(){
       if(!labelled.has(f.id)){labelled.add(f.id);
         L.marker([c.lat,c.lon],{interactive:false,keyboard:false,icon:L.divIcon({className:'farLab',iconSize:null,iconAnchor:[0,-10],
           html:'<span style="background:var(--surface);color:var(--warn);font-size:12px;padding:1px 4px;border-radius:4px;white-space:nowrap">'+esc(f.name+', '+Math.round(farNm(f))+' nm, off the plot')+'</span>'})}).addTo(LRoute);}});}
-  courseMarks(P.pts,P.lines.map(ln=>({a:ln.a,b:ln.b}))).forEach(({m,label})=>{if(!ok(m)||isFar(m))return;
+  courseMarks(P.pts,P.lines.map(ln=>({a:ln.a,b:ln.b})).concat((P.solo||[]).map(m=>({a:m,b:m})))).forEach(({m,label})=>{if(!ok(m)||isFar(m))return;
     const flagged=m.card&&m.flag&&!m.atFix;
     const mk=L.circleMarker([m.lat,m.lon],{radius:7,color:flagged?'#b26a00':LINE,weight:flagged?3:1.5,fillColor:cv('--buoy')||'#ffc21a',fillOpacity:1})
       .bindPopup(esc(m.name+fixSrc(m)+laidTag(m))+(m.time&&!m.card?'<br>'+esc(m.time)+(accOf(m)?' · '+esc(accOf(m)):''):'')+(flagged?'<br>⚠ '+esc(m.flag):''))
@@ -1260,6 +1266,7 @@ function cardImport(){
 
 /* ---------- render ---------- */
 function render(){
+  heldSay();   // A64
   // on the race day, the fixes the open course's auto choices use are saved with it as soon as it is shown (A10 (a)),
   // before anything is drawn, so the rows say "saved with the course" at once
   if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
@@ -1490,7 +1497,16 @@ function removeStart(i){
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
 // noFreeze: a save that a load leads to (checkLineRefs) saves no auto choice with it: opening an old race never adds one (A10)
-function stamp(k,noFreeze){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=$('day').value||todayISO();if(!noFreeze)freezeFor(k);}
+/* A64 (Pat, 14 October 2026): every course edit, fix and send belongs to the day loaded (S.pulledDay), never just to the
+   date in the Race day box; before any day is loaded (a course built at the dock, before signal) it belongs to the box's
+   day, as before. dayHeld: the box and the day loaded differ, so the loaded day is not shown and nothing is changed or
+   sent until Get latest marks loads the box's day. */
+function workDay(){return S.pulledDay||$('day').value||todayISO();}
+function dayHeld(){return !!(S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay);}
+function heldSay(){const h=dayHeld();document.body.classList.toggle('dayHeld',h);
+  $('dayHeldNote').hidden=!h;$('dayHeldNote').innerHTML=h?esc('Race day is '+longDate($('day').value)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.')+
+    ' <button type="button" class="ghost" id="heldPull">Get latest marks</button>':'';}
+function stamp(k,noFreeze){k=k||ckey(S.race,S.start);S.courseDay=S.courseDay||{};S.courseDay[k]=workDay();if(!noFreeze)freezeFor(k);}
 function commit(){save();render();if(typeof scheduleSave==='function')scheduleSave();if(typeof cbWatch!=='undefined'&&cbWatch===null&&$('recCB'))$('recCB').textContent='Record committee boat here – Race '+S.race;}
 
 /* ---------- Setup and Race views ----------
@@ -1889,7 +1905,7 @@ function estOffer(){if(!startTime()||lineOff()||midLine())return '';
     'Estimate the line, or record the '+missing+'.</div>'+
     '<div class="meta estBox">1. Place the '+missing+': <input class="estIn" data-f="dist" type="number" min="1" inputmode="numeric" placeholder="200" value="'+esc(d.dist)+'" style="width:5.5em"> m at '+
     '<input class="estIn" data-f="brg" type="number" min="0" max="360" inputmode="numeric" placeholder="'+ph+'" value="'+esc(d.brg)+'" style="width:5em">°M from '+
-    '<select class="estIn" data-f="ref"><option value=""'+(d.ref?'':' selected')+'>'+esc(fixWords2(have))+' (the recorded end)</option>'+raceMarkOpts(d.ref,have.id)+fixedOpts(d.ref)+'</select>, time on the water '+
+    '<select class="estIn" data-f="ref"><option value=""'+(d.ref?'':' selected')+'>'+esc(fixWords2(have))+' (the recorded end)</option>'+raceMarkOpts(d.ref,have.id)+fixedOpts(d.ref)+'</select> time on the water '+
     '<input class="estIn" data-f="time" type="text" inputmode="numeric" placeholder="'+esc(String(have.time||'').replace(/ on .*$/,''))+'" value="'+esc(d.time)+'" style="width:4.5em"> '+
     '<button type="button" class="estAct" data-act="place" data-w="'+w+'">Place '+missing+'</button></div>'+
     '<div class="meta estBox">Suggest a bearing: <button type="button" class="ghost estAct" data-act="sqWind" aria-pressed="'+(d.sq==='wind')+'">Square to wind</button> '+
@@ -1901,7 +1917,7 @@ function bothOffer(){if(!startTime()||lineOff()||midLine())return '';
   if(endPick('cb').m||endPick('pin').m)return '';
   const d=estDraftFor(ckey(S.race,S.start));
   return '<div class="meta warnTxt">Neither end of the start line is recorded for this start: no start line. Record the committee boat and Start Pin, or estimate the line.</div>'+
-    '<div class="meta estBox">Start Pin at <select class="estIn" data-f="at"><option value="">choose a mark</option>'+raceMarkOpts(d.at,'')+fixedOpts(d.at)+'</select>, time on the water '+
+    '<div class="meta estBox">Start Pin at <select class="estIn" data-f="at"><option value="">choose a mark</option>'+raceMarkOpts(d.at,'')+fixedOpts(d.at)+'</select> time on the water '+
     '<input class="estIn" data-f="ptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.ptime)+'" style="width:4.5em"> '+
     '<button type="button" class="estAct" data-act="pinAt">Set Start Pin here</button></div>'+
     '<div class="meta sugTxt">The Start Pin is saved as a typed position at that mark, an estimate; then place the committee boat from it.</div>';}
@@ -2138,8 +2154,12 @@ function buildLegs(){
       plotLines.push({a:{id:'_eA',name:'',lat:A.lat,lon:A.lon,drawn:true},b:{id:'_eB',name:'',lat:B.lat,lon:B.lon,drawn:true},kind:'start',est:true});}}
   else if(estL){const x=plotLines.find(y=>y.kind==='start');if(x)x.est=true;}
   plotEst=estL?(estL.kind==='mid'?'start line: estimate (one end used as midpoint)':'start line: estimate'):'';
-  lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:lineOffWhy()};
-  plot(pts,plotLines);
+  // only one end of the start line found and no line in use: that end is drawn, named an estimate when it is one (Pat,
+  // 14 October 2026); drawing only, no leg starts from it
+  const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];
+  const solo=one.length===1?one.map(m=>Object.assign({},m,{name:m.name+(estOf(m)?' (estimate)':'')})):[];
+  lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:lineOffWhy(),solo};
+  plot(pts,plotLines,solo);
   buildShift(cs);
   // the date is the day loaded, whether or not it has fixes, whatever was pasted; a Race day changed but not loaded is said
   // above Send and holds it back (setSendWarn; Pat, 13 October 2026)
@@ -2272,8 +2292,8 @@ function setSendWarn(L){const w=[];
   if(sh.length)w.push('This course has two marks at nearly the same position, a leg shorter than '+SHORT_M+' m ('+sh.join('; ')+'): fix it before sending to competitors.');
   // the Race day box changed but that day not loaded: the page still holds the day loaded
   const dc=S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay?$('day').value:'';
-  $('dayChanged').hidden=!dc; $('dayChanged').textContent=dc?'Race day changed to '+longDate(dc)+': tap Get latest marks':'';
-  if(dc)w.push('Race day changed to '+longDate(dc)+': tap Get latest marks before sending. This course is from '+longDate(S.pulledDay)+'.');
+  $('dayChanged').hidden=!dc; $('dayChanged').textContent=dc?'Race day is '+longDate(dc)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.':'';
+  if(dc)w.push('Race day is '+longDate(dc)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks before sending.');
   sendBad=w.join(' ');$('sendWarn').hidden=!sendBad;$('sendWarn').textContent=sendBad;}
 function sendOk(){return !sendBad||confirm(sendBad+'\n\nSend anyway?');}
 // the marks a course plot names, each once, in drawing order, with its label (a name two different fixes share gets the
@@ -2286,15 +2306,15 @@ function courseMarks(cs,segs){
   marks.forEach(m=>{if(seen.has(m.id))return;seen.add(m.id);out.push({m,label:m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'')});});
   return out;}
 let plotEst='';   // buildLegs: the start line is the RO's estimate (A58), said beside the start in the sketch
-function plot(pts,segs){
-  segs=segs||[];
+function plot(pts,segs,solo){
+  segs=segs||[];solo=solo||[];
   // a missing mark (STATUS A38) has no position: it is not drawn, and neither are the legs to and from it
   const cs0=pts.filter(m=>!m.missing);
   // a typed or pasted position far away (farNm, STATUS A45) is left out of the frame: a leg to or from it is drawn to the
   // edge with an arrow and a label ("FarT, 614 nm, off the plot"); the figures are the real ones everywhere else
   const near=cs0.filter(m=>!farNm(m)), cs=near.length?near:cs0, isFar=m=>near.length&&!!farNm(m);
   const W=340,H=380,P=34;
-  const all=cs.concat(...segs.map(g=>[g.a,g.b]).filter(m=>!isFar(m)));
+  const all=cs.concat(...segs.map(g=>[g.a,g.b]).filter(m=>!isFar(m)),solo.filter(m=>!isFar(m)));
   const lat0=all.reduce((s,m)=>s+m.lat,0)/all.length, k=Math.cos(rad(lat0));
   const xs=all.map(m=>m.lon*k), ys=all.map(m=>m.lat);
   const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
@@ -2319,7 +2339,7 @@ function plot(pts,segs){
     g+='<line x1="'+px(a).toFixed(1)+'" y1="'+py(a).toFixed(1)+'" x2="'+px(b).toFixed(1)+'" y2="'+py(b).toFixed(1)+'" stroke="var(--sea)" stroke-width="2" marker-end="url(#ah)"/>';}
   segs=segs.filter(sg=>!isFar(sg.a)&&!isFar(sg.b));
   segs.forEach(sg=>{g+='<line x1="'+px(sg.a).toFixed(1)+'" y1="'+py(sg.a).toFixed(1)+'" x2="'+px(sg.b).toFixed(1)+'" y2="'+py(sg.b).toFixed(1)+'" stroke="'+(sg.est?'var(--warn)':'var(--ink)')+'" stroke-width="2" stroke-dasharray="5 4"/>';});
-  courseMarks(cs,segs).forEach(({m,label})=>{
+  courseMarks(cs,segs.concat(solo.filter(m=>!isFar(m)).map(m=>({a:m,b:m})))).forEach(({m,label})=>{
     const x=px(m),y=py(m);
     g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="7" fill="var(--buoy)" stroke="var(--ink)" stroke-width="1.5"/>'+
        (x>W*0.62?'<text x="'+(x-11).toFixed(1)+'" y="'+(y+4).toFixed(1)+'" font-size="12" text-anchor="end" fill="var(--ink)">'
@@ -2920,8 +2940,8 @@ async function pull(quiet){
 $('day').value=todayISO();
 // the WhatsApp heading follows the Race day box at once (buildLegs), before the day is loaded
 $('day').addEventListener('change',()=>render());
-$('pull').onclick=()=>pull(false);
-setInterval(()=>{if(!document.hidden&&pullOk&&$('day').value===todayISO())pull(true);},30000);
+$('pull').onclick=()=>{$('reopenNote').hidden=true;pull(false);};
+setInterval(()=>{if(!document.hidden&&pullOk&&!dayHeld()&&$('day').value===todayISO())pull(true);},30000);
 
 /* ---------- move a fix that was recorded under the wrong race ---------- */
 function renderMover(){
@@ -2940,7 +2960,7 @@ async function moveFix(sid,newRace){
   const m=S.marks.find(x=>x.sid===sid); if(!m||newRace===m.race)return;
   const st=$('readStatus');
   st.textContent='Moving '+m.name+' to Race '+newRace+'…'; st.className='status';
-  const day=$('day').value||todayISO();
+  const day=workDay();
   const t=m.tms||Date.now();
   try{
     await postFix({action:'add',id:sid,date:day,race:newRace,name:m.name,lat:m.lat,lon:m.lon,acc:m.acc||0,time:t});
@@ -3331,7 +3351,7 @@ $('recCB').onclick=()=>{
   cbStop=stop;
   const done=()=>{stop();
     if(!best){$('cbStatus').textContent='No fix received. Check location is allowed for this page.';$('cbStatus').className='status err';return;}
-    const c=best.coords, day=$('day').value||todayISO();
+    const c=best.coords, day=workDay();
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
     const fix=1+S.marks.filter(m=>m.race===S.race&&/^committee boat$/i.test(m.name)).length;
     S.outbox.push({action:'add',id,date:day,race:S.race,name:'Committee boat',lat:c.latitude,lon:c.longitude,acc:c.accuracy,time:best.timestamp||Date.now()});
@@ -3496,8 +3516,8 @@ $('addManual').onclick=()=>{
   const p=parsePos(pos);
   if(!p){$('readStatus').textContent='Could not read that position.';$('readStatus').className='status err';return;}
   // the time on the water, on the race day: filled in with the time now when the race day is today (Pat, 13 October 2026,
-  // STATUS A49). Cancel stores nothing
-  const day=$('day').value||todayISO();
+  // STATUS A49). Cancel stores nothing. The day is the day loaded (A64)
+  const day=workDay();
   const ta=prompt('Time on the water for '+name.trim()+' (Race '+S.race+'), as hh:mm, for example 14:05',day===todayISO()?hhmm(Date.now()):'');
   if(ta===null)return;
   const hm=String(ta).trim().match(/^(\d{1,2})[:.](\d{2})$/);
@@ -3625,6 +3645,19 @@ sendOutbox();
 showSeries(); syncSeries();
 setInterval(()=>{if(!document.hidden)syncSeries();},30000);
 window.addEventListener('online',syncSeries);
+/* A64: while held, a tap, a change or typing anywhere but the Race day box, Get latest marks, "Change day anyway", Clear
+   everything, the series name and the view buttons does nothing (the held parts are hidden as well) */
+{const ok=t=>!!t.closest('#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote');
+ ['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;
+   const t=e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea');if(!t||ok(t))return;
+   e.preventDefault();e.stopImmediatePropagation();},true));
+ document.addEventListener('click',e=>{if(e.target.closest('#heldPull')){$('reopenNote').hidden=true;pull(false);}});}
+/* A64: reopening the page (a reload, a crash, a new tab) loads the Race day box's day fresh from the server whenever a
+   day was loaded before, so a course left over from another day is never shown; when that was another day, it is said */
+if(S.pulledDay){const was=S.pulledDay, now=$('day').value;
+  if(was!==now){$('reopenNote').hidden=false;$('reopenNote').textContent='The page was reopened: Race day is back to today, '+longDate(now)+'. '+
+    longDate(was)+' was loaded before: to carry on with it, set Race day to it and tap Get latest marks.';}
+  pull(false);}
 })();
 </script>
 </body>
