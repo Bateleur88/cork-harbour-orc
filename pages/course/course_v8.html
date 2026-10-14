@@ -802,7 +802,7 @@ function markById(id){const m=S.marks.find(x=>x.id===id);return isLaidCard(m)?re
    Older fixes, pasted ones and this page's own have no device: they are said in plain words (a typed position, pasted, or
    phone not known), never guessed (Pat, 14 October 2026; this page said "unattributed" before).
    Two fixes of one mark in one race from different phones are two opinions of where it is, so they are flagged. */
-function whoOf(m){if(m.card||m.pending)return '';if(!m.device)return isPasted(m)?'pasted':isTypedPos(m)?'typed position':'phone not known';return m.recorder||'unnamed phone';}
+function whoOf(m){if(m.card||m.pending)return '';if(!m.device)return isPasted(m)?'pasted':isTypedPos(m)?'typed position':'phone not known';return m.recorder||'phone with no name';}
 function accOf(m){return typeof m.acc==='number'&&m.acc>0?'±'+Math.round(m.acc)+' m':'';}
 function sameMark(m){const k=m.name.toLowerCase();return S.marks.filter(x=>x.race===m.race&&!x.card&&x.name.toLowerCase()===k).sort((a,b)=>a.fix-b.fix);}
 function phoneCount(m){return new Set(sameMark(m).filter(x=>x.device).map(x=>x.device)).size;}
@@ -1269,8 +1269,9 @@ function cardImport(){
 function render(){
   heldSay();   // A64
   // on the race day, the fixes the open course's auto choices use are saved with it as soon as it is shown (A10 (a)),
-  // before anything is drawn, so the rows say "saved with the course" at once
-  if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
+  // before anything is drawn, so the rows say "saved with the course" at once; after a reopen, only once the refresh from
+  // the server has succeeded (reopenWait, A64; Pat, 14 October 2026)
+  if(!reopenWait&&S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();
   if(!S.winds||typeof S.winds!=='object')S.winds={};
   // a wind direction being typed (the box has focus) is kept as typed until the RO leaves the box (STATUS A56)
   // an out-of-range direction left in the box (twdBad) stays there, used as no direction, until the RO corrects it or
@@ -1790,8 +1791,11 @@ function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '
 function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}
 function helpOf(m){return estOf(m)||setOf(m);}
 function fixWhen(m){return 'R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
-function helpLong(m){const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')';const e=estOf(m);
-  return e?(e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+' ('+fixWhen(m)+')':'';}
+// the time is left out when the reference already ends with it ("from Start Pin R1 11:09", saved so by .36), so it is not
+// said twice (Pat, 14 October 2026)
+function helpLong(m){const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')';const e=estOf(m);if(!e)return '';
+  const w=fixWhen(m), f=String(e.from);
+  return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')');}
 function helpShort(m){const p=setOf(m);if(p)return 'Start Pin ('+p.at+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
 function helpWarn(m){const p=setOf(m), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
@@ -2837,6 +2841,9 @@ function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth
 function hhmm(t){const d=new Date(t);return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2);}
 function longDate(iso){try{const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-IE',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}catch(e){return iso;}}
 let pullOk=false, pullSeq=0, dayGen=0;   // dayGen counts changes of loaded day; see saveCourses
+// A64: the page was reopened on the day it had loaded: its stored copy is shown and refreshed from the server in the
+// background whenever there is signal, until one load succeeds
+let reopenWait=false;
 // a typed position (accuracy 0, no phone) whose time is on another date than its race day: before 2026-10-06.36 a typed
 // position took the time it was typed, so one typed on another day says that date, e.g. " on Tue 13 Oct" (STATUS A49)
 function otherDate(m,day){if(m.acc!==0||typeof m.device==='string'&&m.device||typeof m.time!=='number')return '';
@@ -2935,7 +2942,7 @@ async function pull(quiet){
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
     if(!stale())checkLineRefs(ln);
-    if(!stale()){pullOk=true; lastPullAt=Date.now();}
+    if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false;}
     // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
     // then was edited while the day was not loaded
     if(!stale()){if(!wasOk)allKeys().filter(isDirty).forEach(k=>{if(!ln[k])ln[k]=LOAD_WHY[3];});
@@ -2952,10 +2959,12 @@ async function pull(quiet){
   }
 }
 $('day').value=todayISO();
+reopenWait=!!S.pulledDay&&S.pulledDay===$('day').value;   // A64: set before the first render, which then saves no auto choice
 // the WhatsApp heading follows the Race day box at once (buildLegs), before the day is loaded
 $('day').addEventListener('change',()=>render());
 $('pull').onclick=()=>{$('reopenNote').hidden=true;pull(false);};
-setInterval(()=>{if(!document.hidden&&pullOk&&!dayHeld()&&$('day').value===todayISO())pull(true);},30000);
+setInterval(()=>{if(!document.hidden&&(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);},30000);
+window.addEventListener('online',()=>{if(reopenWait&&!dayHeld())pull(true);});
 
 /* ---------- move a fix that was recorded under the wrong race ---------- */
 function renderMover(){
@@ -3622,6 +3631,7 @@ $('copy').onclick=async()=>{if(!text||!sendOk())return;freezeSend();try{await na
    key (last values seen). Nothing here is sent to the server. */
 function clearPageState(){
   pullSeq++; pullOk=false; lastPullAt=0; dayGen++; clearTimeout(saveTimer);   // a load or save under way changes nothing now
+  reopenWait=false; $('reopenNote').hidden=true;                              // A64: nothing stored is left to refresh
   if(cbWatch!==null&&cbStop)cbStop();                                         // a committee boat fix in progress is dropped
   fxAll=false; $('fxAll').checked=false; fxHide.clear(); fxSel=''; fxChart=false; fxFit='';   // Check recorded marks
   $('fxSketchB').setAttribute('aria-pressed','true'); $('fxChartB').setAttribute('aria-pressed','false'); $('fxStatus').textContent='';
@@ -3667,12 +3677,17 @@ window.addEventListener('online',syncSeries);
    const t=e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea');if(!t||ok(t))return;
    e.preventDefault();e.stopImmediatePropagation();},true));
  document.addEventListener('click',e=>{if(e.target.closest('#heldPull')){$('reopenNote').hidden=true;pull(false);}});}
-/* A64: reopening the page (a reload, a crash, a new tab) loads the Race day box's day fresh from the server whenever a
-   day was loaded before, so a course left over from another day is never shown; when that was another day, it is said */
+/* A64 (Pat, 14 October 2026, after the first .37 report): reopening the page (a reload, a crash, a new tab) when a day was
+   loaded before. The same day as the Race day box (a reload on the race day): the copy stored on this device is shown at
+   once with nothing held, and refreshed from the server in the background whenever there is signal (reopenWait), so a
+   reload with no signal never leaves the RO with no course on screen; the race-day save of A10 (a) waits for that refresh.
+   Another day: the page is held (dayHeld) and nothing is loaded by itself; it says which day was loaded, so a course left
+   over from another day is never shown or changed until the RO loads the box's day or sets the box back. */
 if(S.pulledDay){const was=S.pulledDay, now=$('day').value;
   if(was!==now){$('reopenNote').hidden=false;$('reopenNote').textContent='The page was reopened: Race day is back to today, '+longDate(now)+'. '+
-    longDate(was)+' was loaded before: to carry on with it, set Race day to it and tap Get latest marks.';}
-  pull(false);}
+    longDate(was)+' was loaded before and is still on this device: to carry on with it, set Race day back to it. To load today, tap Get latest marks.';}
+  else{$('readStatus').textContent='The page was reopened: showing what this device holds for '+longDate(was)+'. It refreshes from the server when there is signal.';
+    $('readStatus').className='status';pull(true);}}
 })();
 </script>
 </body>

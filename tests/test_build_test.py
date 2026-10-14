@@ -629,7 +629,7 @@ def t13_changes36_guards():
     g('fix 3: Vincenty for figures; rhumb only for drawing (4 places)', 'function geo(a,b){' in code and 'function geoDest(a,brgT,d){' in code
       and len(re.findall(r'\brhumb\(', code)) == 6)
     g('A10 (a): saved when shown on the race day only, and before every send',
-      "if(S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render(')
+      "S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render(')
       and code.count('freezeSend();') == 4)
     g('A48: the save line cleared on a change of day', 'saveState.okAt=0; showSave();' in fn_body(code, 'async function pull('))
     g('A49: a typed position asks for the time on the water, saved on the race day',
@@ -724,7 +724,7 @@ def t15_start_line_setup_guards():
       "&&!(m.race<r&&helpOf(m))).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
       and "(estOf(eo)?'A start line estimate from Race '+eo.race:'A Start Pin set in Race '+eo.race)+' is available – use it? '" in code)
     g('T7: a helper end named by what the RO did, time last, in lists, notes and Check recorded marks; short on the drawings',
-      "'Start Pin: '+p.at+' ('+fixWhen(m)+')'" in code and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+' ('+fixWhen(m)+')'" in code
+      "'Start Pin: '+p.at+' ('+fixWhen(m)+')'" in code and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')" in code
       and "'Start Pin ('+p.at+')'" in code and "' (est.)'" in code and "function fixText(m,w){if(helpOf(m))return helpLong(m);" in code
       and "const lab1=m=>helpOf(m)?helpLong(m):" in code)
     g('T7: no "unattributed": a typed position, pasted, or phone not known', "'unattributed'" not in code
@@ -752,13 +752,45 @@ def t16_day_guards():
     g('while held the loaded day is hidden and every other control does nothing', 'body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,' in page
       and "['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;" in code
       and "#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote" in code)
-    g('the 30-second refresh never loads a day by itself while held', "pullOk&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code)
-    g('reopening the page loads the box\'s day fresh when a day was loaded before, and says so when that was another day',
+    g('the 30-second refresh never loads a day by itself while held', "(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code)
+    g('reopening the page when a day was loaded before says so when that was another day (changed by group 17)',
       "if(S.pulledDay){const was=S.pulledDay, now=$('day').value;" in code and "'The page was reopened: Race day is back to today, '" in code)
     g('T1: no comma before "time on the water"', "</select>, time on the water" not in code and code.count("</select> time on the water '") == 2)
     g('Q1: one end found and no line in use is drawn on the sketch and the chart, named an estimate when it is one',
       "const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];" in code
       and "label:helpShort(m)||m.name" in code and "plot(pts,plotLines,solo);" in code and "(P.solo||[]).map(m=>({a:m,b:m}))" in code)
+
+
+def t17_reopen_names_guards():
+    """.37, Pat's answers of 14 October 2026 to the first .37 report: reopening on the same day shows the stored copy at
+    once and refreshes in the background, held only on another day (A64, answer 3); a reference's time is not said twice
+    (A58, answer 2); "phone with no name" (A58, answer 4)."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('17 .37 answers: ' + name, ok)
+    tail = code[code.index("if(S.pulledDay){const was=S.pulledDay, now=$('day').value;"):]
+    tail = tail[:tail.index('})();')]
+    g('3 reopened on another day: held, nothing loaded by itself, said with the way back',
+      "if(was!==now){$('reopenNote').hidden=false;" in tail and 'pull(false)' not in tail
+      and "' was loaded before and is still on this device: to carry on with it, set Race day back to it. To load today, tap Get latest marks.'" in tail)
+    g('3 reopened on the same day: the stored copy shown at once, refreshed quietly in the background',
+      "else{$('readStatus').textContent='The page was reopened: showing what this device holds for '+longDate(was)+'. It refreshes from the server when there is signal.';" in tail
+      and tail.count('pull(true);') == 1)
+    g('3 the background refresh is retried every 30 seconds and when the signal comes back, until one load succeeds',
+      "reopenWait=!!S.pulledDay&&S.pulledDay===$('day').value;" in code
+      and "(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code
+      and "window.addEventListener('online',()=>{if(reopenWait&&!dayHeld())pull(true);});" in code
+      and "pullOk=true; lastPullAt=Date.now(); reopenWait=false;" in code)
+    g('3 the race-day save of A10 (a) waits for that refresh',
+      "if(!reopenWait&&S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render('))
+    g('3 the first render comes after reopenWait is set', 0 <= code.index("reopenWait=!!S.pulledDay") < code.index('\nrender();\n'))
+    g('3 Clear everything leaves nothing to refresh', "reopenWait=false; $('reopenNote').hidden=true;" in fn_body(code, 'function clearPageState('))
+    hl = fn_body(code, 'function helpLong(')
+    g('2 the time in brackets is left out when the reference already ends with it',
+      "f.endsWith(' '+w)?'':' ('+w+')'" in hl and "'°M from '+e.from+' ('+fixWhen(m)+')'" not in code)
+    g('4 a RIB phone with no recorder name is "phone with no name"', "return m.recorder||'phone with no name';" in code and "'unnamed phone'" not in code)
 
 
 def main():
@@ -780,6 +812,7 @@ def main():
         t14_one_end_line_guards()
         t15_start_line_setup_guards()
         t16_day_guards()
+        t17_reopen_names_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
