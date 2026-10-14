@@ -423,6 +423,9 @@ def t7_a40_guards():
             body = body.replace('mag1(pt.brg,vc)', 'magOf(pt.brg)')
             # and "x-estimate" when the start line is the RO's estimate (A58, Pat 14 October 2026)
             body = body.replace("+(lineEstNow(r,st)?'  \"x-estimate\": '+JSON.stringify(lineEstNow(r,st).x)+',\\n':'')", '')
+            # .37: a hand-built Grassy start gets the STAND-IN note beside the button, as an imported one does (A58 part 2)
+            body = body.replace('if(L.sPt&&!L.sl&&L.ccfg)', 'if(L.sPt&&!L.sl)')
+            body = chr(10).join(x for x in body.split(chr(10)) if 'gsOf(r,st))cardSti.push(' not in x)
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -657,7 +660,8 @@ def t14_one_end_line_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok: report('14 .36 A58: ' + name, ok)
     eo = fn_body(code, 'function estOffer(')
-    g('the options only with a start time and exactly one end, not on a Card mark start', "if(!startTime()||cardEndMode('s')==='card'||midLine())return '';" in eo
+    g('the options only with a start time and exactly one end, not on a Card mark start', "if(!startTime()||lineOff()||midLine())return '';" in eo
+      and "function lineOff(r,st){return cardEndMode('s',r,st)==='card'||!!gsOf(r,st);}" in code
       and "if(!!cb===!!pin)return '';" in eo)
     g('the options write nothing until the RO acts (no save, stamp or commit in the offer)', not re.search(r'(commit|save|stamp|scheduleSave|saveCourses|sendOutbox)\(', eo))
     g('option 1 saves a typed position named for the missing end, and the line end of this start',"nm=w==='cb'?'Committee boat':'Start Pin'" in code
@@ -670,6 +674,56 @@ def t14_one_end_line_guards():
     g('Copy for Sail Scoring says x-estimate; the WhatsApp text does not', "'  \"x-estimate\": '+JSON.stringify(lineEstNow(r,st).x)" in code
       and 'estimate' not in fn_body(code, 'function setOut('))
     g('D: the WhatsApp leg lines give °M only', "+pad(brgM,3)+'°M · '+r.nm.toFixed(2)+' nm'" in code and "°M ('+pad(brgT,3)+'°T)" not in code)
+
+
+def t15_start_line_setup_guards():
+    """.37, A58 part 2 (Pat, 14 October 2026): the start line setup."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('15 .37 A58 part 2: ' + name, ok)
+    eo, bo, li = fn_body(code, 'function estOffer('), fn_body(code, 'function bothOffer('), fn_body(code, 'function lineInfo(')
+    es = fn_body(code, 'function estSuggest(')
+    g('the helper offers write nothing (no save, stamp, commit or send)', not any(re.search(r'(commit|save|stamp|scheduleSave|saveCourses|sendOutbox)\(', b)
+      for b in (eo, bo, li, es, fn_body(code, 'function raceMarkOpts('), fn_body(code, 'function fixedOpts('))))
+    g('both ends missing: offered only with a start time, no Card mark or Grassy start, no midpoint and no end found',
+      "if(!startTime()||lineOff()||midLine())return '';" in bo and "if(endPick('cb').m||endPick('pin').m)return '';" in bo)
+    g('suggestions are greyed placeholders only: the boxes keep what the RO typed', 'placeholder="200" value="\'+esc(d.dist)+\'"' in eo
+      and 'placeholder="\'+ph+\'" value="\'+esc(d.brg)+\'"' in eo and 'd.dist=' not in code and 'd.brg=' not in code)
+    g('starboard: committee boat 90 deg right of the pin looking upwind or to the first mark; pin = cb - 90; port swaps',
+      "const turn=(w==='cb'?90:-90)*(d.port==='1'?-1:1)" in es and 'n(+S.twd)' in es and 'n(magOf(geo(have,f.m).brg,varW()))' in es)
+    g('no wind or no first mark: a warning, no suggestion', "'No wind direction: type it in the wind box first" in es and "'No first mark yet: add the course first" in es)
+    g('the first mark skips routing waypoints', 'if(m&&isRwCard(m)){rw=true;continue;}' in fn_body(code, 'function firstMarkOf('))
+    g('the "from" list and the Start Pin list offer the full Fixed marks list', eo.count('fixedOpts(d.ref)') == 1 and bo.count('fixedOpts(d.at)') == 1
+      and 'Object.keys(CARD.marks).forEach' in fn_body(code, 'function fixedOpts('))
+    g('a Start Pin set at a mark: a typed position, this start\'s pin, flagged as an estimate', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
+      and "S.linePinAt[k]={ref:'s:'+id,at};" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
+      and "return p?{w:'pin',ref:p.ref,at:p.at}:null;" in code and "'Start Pin at '+e.at" in code)
+    g('its time defaults to the start time', "tt=String(d.ptime||'').trim()||startTime()" in code)
+    g('one Undo withdraws every estimate of the start, committee boat first, after one confirmation', "sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1))" in code
+      and code.count("reason:'estimate undone by the RO'") == 1)
+    g('a recorded end while auto uses an estimate: offered, never taken', "re=e.how==='auto'?realEnd(w,e.m):null" in code
+      and 'data-f="\'+esc(refFor(re))+\'">Use it</button>' in code)
+    g('Grassy start: hand-built only, saved as startPt, read back, line not used, finish at Grassy Mid on Start line',
+      "if(act==='grassy'){if(cardCfgNow())return;S.startPt[k]='Grassy Mid';" in code and "{startPt:S.startPt[k]}" in code
+      and "if(rec.startPt==='Grassy Mid')S.startPt[k]='Grassy Mid'; else delete S.startPt[k];" in code
+      and "return lineOff(r,st)?null:(midLine(r,st)||startLine(r,st,sel));" in code
+      and "gsOf(r,st)&&finishMode(r,st)==='start'?cardEnd('Grassy Mid','Finish'):null" in code)
+    cc = fn_body(code, 'function ccDoc(')
+    g('Grassy start: the STAND-IN note beside Copy for Sail Scoring, never in the name', "measured from Grassy Mid (Grassy start chosen)');" in cc
+      and 'gsOf' not in cc.split('const pre=')[1].split('const name=')[0])
+    g('the new fields are written only when used, so other records save exactly as before',
+      "...(S.startPt&&S.startPt[k]?{startPt:S.startPt[k]}:{})," in code and "...(S.linePinAt&&S.linePinAt[k]?{linePinAt:" in code)
+    bl = fn_body(code, 'function buildLegs(')
+    g('the midpoint is drawn as a 200 m line square to the first leg, drawing only', 'A=geoDest(sl.end,(b+90)%360,100), B=geoDest(sl.end,(b+270)%360,100)' in bl
+      and "drawn:true},kind:'start',est:true}" in bl and '!g.a.drawn' in fn_body(code, 'function courseMarks('))
+    g('the chart labels an estimated line', "ln.est?'Start line: estimate'" in code and "permanent:true,direction:'bottom',offset:[0,12],className:'estTip'" in code)
+    g('decision 2a: an estimated end carries forward only within its race; a later race is offered it, never given it by auto',
+      "&&!(m.race<r&&estOf(m))).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
+      and "A start line estimate from Race '+eo.race+' is available – use it? '" in code)
+    so = fn_body(code, 'function setOut(')
+    g('the WhatsApp text still carries no estimate note', 'estimate' not in so and 'Grassy' not in so)
 
 
 def main():
@@ -689,6 +743,7 @@ def main():
         t12_changes35_guards()
         t13_changes36_guards()
         t14_one_end_line_guards()
+        t15_start_line_setup_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
