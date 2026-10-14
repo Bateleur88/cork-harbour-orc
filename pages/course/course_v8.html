@@ -799,9 +799,10 @@ function markById(id){const m=S.marks.find(x=>x.id===id);return isLaidCard(m)?re
 
 /* ---------- who recorded a fix ----------
    Fixes from the RIB page carry device (a random id per phone) and recorder (a typed name, may be empty).
-   Older fixes, pasted ones and this page's own have no device: they are shown as unattributed, never guessed.
+   Older fixes, pasted ones and this page's own have no device: they are said in plain words (a typed position, pasted, or
+   phone not known), never guessed (Pat, 14 October 2026; this page said "unattributed" before).
    Two fixes of one mark in one race from different phones are two opinions of where it is, so they are flagged. */
-function whoOf(m){if(m.card||m.pending)return '';if(!m.device)return 'unattributed';return m.recorder||'unnamed phone';}
+function whoOf(m){if(m.card||m.pending)return '';if(!m.device)return isPasted(m)?'pasted':isTypedPos(m)?'typed position':'phone not known';return m.recorder||'unnamed phone';}
 function accOf(m){return typeof m.acc==='number'&&m.acc>0?'±'+Math.round(m.acc)+' m':'';}
 function sameMark(m){const k=m.name.toLowerCase();return S.marks.filter(x=>x.race===m.race&&!x.card&&x.name.toLowerCase()===k).sort((a,b)=>a.fix-b.fix);}
 function phoneCount(m){return new Set(sameMark(m).filter(x=>x.device).map(x=>x.device)).size;}
@@ -1342,7 +1343,7 @@ function render(){
     // a typed position: "typed position" and its time, or what is happening to it while it is not on the server
     const info=lm?[m.race<S.race?'from Race '+m.race:'',laidSrc(lm)]:
       isPasted(m)?[m.race<S.race?'from Race '+m.race:'','pasted position',m.time,accOf(m),'this device only']:
-      isTypedPos(m)?[m.race<S.race?'from Race '+m.race:'',estOf(m)?'estimate: '+estWords(estOf(m)).replace(/^\S+( \S+)? placed /,''):'typed position',m.notSent?'not sent: refused':m.pending?'waiting to send':m.time]:
+      isTypedPos(m)?[m.race<S.race?'from Race '+m.race:'',helpOf(m)?helpLong(m):'typed position',m.notSent?'not sent: refused':m.pending?'waiting to send':m.time]:
       [m.race<S.race?'from Race '+m.race:'',m.card?(m.flag?'⚠':''):(m.pending?'waiting to send':(m.time||'typed')),accOf(m),whoOf(m)];
     const far=farNm(m);
     // a chip adds a mark to the course: "+" says so, and the badge counts how often it is already in (a mark can be rounded twice)
@@ -1673,7 +1674,7 @@ function startMoment(r,st){return dayMoment(S.startTimes[ckey(r,st)]);}
 // RO (A58) carries forward only within its own race: a later race is offered it (estEarlier), never given it by auto
 // (Pat, 14 October 2026)
 function candidates(w,r){r=r||S.race;const t=END_TEST[w];
-  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&estOf(m))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&helpOf(m))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
 // what an end's list offers the RO: every recorded fix of the end's type from any race of the day, earlier races first,
 // then by time, each labelled with its race and time (fixText). The fix itself is never changed
 function endChoices(w){const t=END_TEST[w];
@@ -1777,15 +1778,26 @@ function lineOffWhy(){return cardEndMode('s')==='card'?'Card mark':gsOf()?'Grass
 function midLine(r,st){const z=(S.lineMid||{})[ckey(r??S.race,st??S.start)];if(!z)return null;const f=refFix(z.ref,z.w);
   return f?{mid:{lat:f.lat,lon:f.lon},est:'mid',end:f,w:z.w}:null;}
 // the estimate a fix is, if the RO placed it (Option 1): its lineEst record, from any start of the day
-function estOf(m){if(!m)return null;const hit=e=>e&&typeof e.ref==='string'&&(m.sid===sidNow(e.ref.slice(2))||(m.pending&&m.pid===e.ref.slice(2)));
-  const e=Object.values(S.lineEst||{}).find(hit);if(e)return e;
-  // a Start Pin set at a mark (A58 part 2): S.linePinAt[start] = {ref, at}
-  const p=Object.values(S.linePinAt||{}).find(hit);return p?{w:'pin',ref:p.ref,at:p.at}:null;}
-function estWords(e){return 'at' in e?'Start Pin at '+e.at:(e.w==='cb'?'committee boat':'Start Pin')+' placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+const refHit=m=>e=>e&&typeof e.ref==='string'&&(m.sid===sidNow(e.ref.slice(2))||(m.pending&&m.pid===e.ref.slice(2)));
+function estOf(m){return m?Object.values(S.lineEst||{}).find(refHit(m))||null:null;}
+function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+/* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
+   (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
+   way it is a line end set with the helper (helpOf): it carries forward only within its race (decision 2a), and wherever
+   it appears it is named by what the RO did, in plain words, the time last (T7): helpLong in lists, notes and Check
+   recorded marks, helpShort on the sketch and the Chart. A mark with an uncertain card position, or a laid mark at its
+   planning position, keeps its warning (helpWarn). */
+function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}
+function helpOf(m){return estOf(m)||setOf(m);}
+function fixWhen(m){return 'R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
+function helpLong(m){const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')';const e=estOf(m);
+  return e?(e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+' ('+fixWhen(m)+')':'';}
+function helpShort(m){const p=setOf(m);if(p)return 'Start Pin ('+p.at+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
+function helpWarn(m){const p=setOf(m), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the start line's estimate for start r|st: {kind:'mid'|'placed', text} or null
 function lineEstNow(r,st){if(gsOf(r,st))return null;const md=midLine(r,st);
-  if(md){const w=fixWords2(md.end)+(estOf(md.end)?' ('+estWords(estOf(md.end))+')':'');
+  if(md){const w=helpLong(md.end)||fixWords2(md.end);
     return {kind:'mid',text:'one end missing ('+w+' used as midpoint)',x:'start line: '+w+' used as midpoint'};}
   const sl=lineOff(r,st)?null:startLine(r,st);if(!sl)return null;
   // both ends may be estimates: a Start Pin set at a mark, then the committee boat placed from it
@@ -1808,16 +1820,17 @@ function finishLine(r,st,sel){
     return fs.kind==='finishpin'?mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m):fs.kind==='startline'?startLine(r,st,sel):null;}
   const f=finishMode(r,st);if(f==='last')return null;if(f==='finishpin')return mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m);if(gsOf(r,st))return null;return midLine(r,st)||startLine(r,st,sel);}
 // one fix as a dropdown entry: its race and time ("R2 13:09"), accuracy (and its warning), recorder, and "after this start"
-function fixText(m,w){const t=fixMoment(m), st=startMoment(S.race,S.start), aw=accWarn(m);
+function fixText(m,w){if(helpOf(m))return helpLong(m);   // T7
+  const t=fixMoment(m), st=startMoment(S.race,S.start), aw=accWarn(m);
   const acc=typeof m.acc==='number'&&m.acc>0?'±'+Math.round(m.acc)+' m'+(aw?', '+aw:''):'';
-  return ['R'+m.race+' '+(m.time||'no time'),acc,whoOf(m),estOf(m)?'estimate: '+estWords(estOf(m)).replace(/^\S+( \S+)? placed /,''):'',
+  return ['R'+m.race+' '+(m.time||'no time'),acc,whoOf(m),
     (w==='cb'||w==='pin')&&t!==null&&st!==null&&t>st?'after this start':''].filter(Boolean).join(' · ');}
 // while auto uses an estimate (A58), the latest recorded end of that type at or before this start, if there is one
-function realEnd(w,m){if(!m||!estOf(m)||(w!=='cb'&&w!=='pin'))return null;const t=startMoment(S.race,S.start);if(t===null)return null;
-  const l=candidates(w,S.race).filter(x=>x!==m&&!estOf(x)&&fixMoment(x)!==null&&fixMoment(x)<=t);return l[l.length-1]||null;}
+function realEnd(w,m){if(!m||!helpOf(m)||(w!=='cb'&&w!=='pin'))return null;const t=startMoment(S.race,S.start);if(t===null)return null;
+  const l=candidates(w,S.race).filter(x=>x!==m&&!helpOf(x)&&fixMoment(x)!==null&&fixMoment(x)<=t);return l[l.length-1]||null;}
 // auto finding nothing: the latest line end estimated in an earlier race, at or before this start, offered (A58)
 function estEarlier(w){if(w!=='cb'&&w!=='pin')return null;const t=startMoment(S.race,S.start);if(t===null)return null;
-  const l=S.marks.filter(m=>!m.card&&m.race<S.race&&END_TEST[w](m.name)&&estOf(m)&&fixMoment(m)!==null&&fixMoment(m)<=t)
+  const l=S.marks.filter(m=>!m.card&&m.race<S.race&&END_TEST[w](m.name)&&helpOf(m)&&fixMoment(m)!==null&&fixMoment(m)<=t)
     .sort((a,b)=>a.race-b.race||fixMoment(a)-fixMoment(b));return l[l.length-1]||null;}
 // the list offers every race's fix of the end's type (endChoices); auto keeps its own rule (autoEnd, candidates)
 function endPicker(w,cardStandIn){
@@ -1828,14 +1841,15 @@ function endPicker(w,cardStandIn){
   const sel=e.how==='none'?'none':e.how==='chosen'?v:'auto', opt=(val,txt)=>'<option value="'+esc(val)+'"'+(sel===val?' selected':'')+'>'+esc(txt)+'</option>';
   const phones=e.m?phoneCount(e.m):0, re=e.how==='auto'?realEnd(w,e.m):null, eo=!e.m&&e.how==='unset'?estEarlier(w):null;
   return esc(label)+' <select class="endSel" data-w="'+w+'" aria-label="'+esc(label)+' fix">'+
-    opt('auto',a.reason+(a.m?': '+fixText(a.m,w):''))+opt('none','None: this end not used')+
+    opt('auto',a.m&&helpOf(a.m)?helpLong(a.m):a.reason+(a.m?': '+fixText(a.m,w):''))+opt('none','None: this end not used')+
     list.map(m=>opt(refFor(m),fixText(m,w))).join('')+'</select>'+
-    '<div class="meta" style="font-size:.85rem">'+esc(e.reason)+(e.m?': '+esc(fixText(e.m,w)):'')+
+    '<div class="meta" style="font-size:.85rem">'+(e.m&&helpOf(e.m)&&e.how!=='chosen'?esc(helpLong(e.m)):esc(e.reason)+(e.m?': '+esc(fixText(e.m,w)):''))+
       (e.how==='chosen'||e.how==='none'?' <button type="button" class="ghost endAuto" data-w="'+w+'">Back to auto</button>':'')+'</div>'+
     (e.warn?'<div class="meta warnTxt">⚠ '+esc(e.warn)+'</div>':'')+
+    (e.m&&helpWarn(e.m)?'<div class="meta warnTxt">⚠ '+esc(helpWarn(e.m))+'</div>':'')+
     (re?'<div class="newer">A recorded '+(w==='cb'?'committee boat':'Start Pin')+' is now available – use it? '+esc(fixText(re,w))+
       ' <button type="button" class="endLive" data-w="'+w+'" data-f="'+esc(refFor(re))+'">Use it</button></div>':
-     eo?'<div class="newer">A start line estimate from Race '+eo.race+' is available – use it? '+esc(fixText(eo,w))+
+     eo?'<div class="newer">'+(estOf(eo)?'A start line estimate from Race '+eo.race:'A Start Pin set in Race '+eo.race)+' is available – use it? '+esc(fixText(eo,w))+
       ' <button type="button" class="endLive" data-w="'+w+'" data-f="'+esc(refFor(eo))+'">Use it</button></div>':
      e.saved&&e.live?'<div class="newer">'+((fixMoment(e.live)||0)>(fixMoment(e.m)||0)?'A newer fix: ':'Auto now gives: ')+esc(label)+' '+esc(fixText(e.live,w))+
       ' – use it? <button type="button" class="endLive" data-w="'+w+'" data-f="'+esc(refFor(e.live))+'">Use it</button></div>':'')+
@@ -1894,18 +1908,18 @@ function estRef(v){const c=/^card:/.test(v)&&CARD.marks[v.slice(5)];return c?{na
 function estOffer(){if(!startTime()||lineOff()||midLine())return '';
   const cb=endPick('cb').m, pin=endPick('pin').m;if(!!cb===!!pin)return '';
   const have=cb||pin, w=cb?'pin':'cb', missing=w==='cb'?'committee boat':'Start Pin', k=ckey(S.race,S.start), d=estDraftFor(k);
-  const own=estOf(have), ownUndo=own&&(S.lineEst[k]||S.linePinAt[k]);
+  const own=helpOf(have), ownUndo=own&&(S.lineEst[k]||S.linePinAt[k]), sp=setOf(have);
   const sg=estSuggest(have,w,d), fromEnd=!d.ref, ph=sg&&sg.brg!==undefined&&fromEnd?pad(sg.brg,3):'°M';
   const note=d.sq&&!fromEnd?'<div class="meta">The suggested bearing is from the recorded end: choose the recorded end under "from" to see it.</div>':
     sg&&sg.warn?'<div class="meta warnTxt">⚠ '+esc(sg.warn)+'</div>':
     '<div class="meta sugTxt">Suggested: 200 m'+(sg&&sg.brg!==undefined?' at '+pad(sg.brg,3)+'°M ('+esc(sg.why)+', committee boat at the '+(d.port==='1'?'port':'starboard')+' end)':'')+
       '. The grey figures are only suggestions: type them in to use them.</div>';
-  return (own?'<div class="meta warnTxt">'+esc(estWords(own).replace(/^./,c=>c.toUpperCase()))+' – estimate.'+(ownUndo?' <button type="button" class="ghost estAct" data-act="undoPlaced">Undo</button>':'')+'</div>':'')+
-    '<div class="meta warnTxt">Only the '+(cb?'committee boat':'Start Pin')+' ('+esc(fixWords2(have))+') is recorded for this start: no start line. '+
+  return (own?'<div class="meta'+(estOf(have)?' warnTxt':'')+'">'+esc(helpLong(have))+'.'+(ownUndo?' <button type="button" class="ghost estAct" data-act="undoPlaced">Undo</button>':'')+'</div>':'')+
+    '<div class="meta warnTxt">Only the '+(cb?'committee boat':'Start Pin')+' ('+esc(sp?sp.at+', '+fixWhen(have):fixWords2(have))+') is '+(sp?'set':'recorded')+' for this start: no start line. '+
     'Estimate the line, or record the '+missing+'.</div>'+
     '<div class="meta estBox">1. Place the '+missing+': <input class="estIn" data-f="dist" type="number" min="1" inputmode="numeric" placeholder="200" value="'+esc(d.dist)+'" style="width:5.5em"> m at '+
     '<input class="estIn" data-f="brg" type="number" min="0" max="360" inputmode="numeric" placeholder="'+ph+'" value="'+esc(d.brg)+'" style="width:5em">°M from '+
-    '<select class="estIn" data-f="ref"><option value=""'+(d.ref?'':' selected')+'>'+esc(fixWords2(have))+' (the recorded end)</option>'+raceMarkOpts(d.ref,have.id)+fixedOpts(d.ref)+'</select> time on the water '+
+    '<select class="estIn" data-f="ref"><option value=""'+(d.ref?'':' selected')+'>'+esc(sp?'Start Pin '+sp.at+' ('+fixWhen(have)+'), the end set':fixWords2(have)+' (the recorded end)')+'</option>'+raceMarkOpts(d.ref,have.id)+fixedOpts(d.ref)+'</select> time on the water '+
     '<input class="estIn" data-f="time" type="text" inputmode="numeric" placeholder="'+esc(String(have.time||'').replace(/ on .*$/,''))+'" value="'+esc(d.time)+'" style="width:4.5em"> '+
     '<button type="button" class="estAct" data-act="place" data-w="'+w+'">Place '+missing+'</button></div>'+
     '<div class="meta estBox">Suggest a bearing: <button type="button" class="ghost estAct" data-act="sqWind" aria-pressed="'+(d.sq==='wind')+'">Square to wind</button> '+
@@ -1920,7 +1934,7 @@ function bothOffer(){if(!startTime()||lineOff()||midLine())return '';
     '<div class="meta estBox">Start Pin at <select class="estIn" data-f="at"><option value="">choose a mark</option>'+raceMarkOpts(d.at,'')+fixedOpts(d.at)+'</select> time on the water '+
     '<input class="estIn" data-f="ptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.ptime)+'" style="width:4.5em"> '+
     '<button type="button" class="estAct" data-act="pinAt">Set Start Pin here</button></div>'+
-    '<div class="meta sugTxt">The Start Pin is saved as a typed position at that mark, an estimate; then place the committee boat from it.</div>';}
+    '<div class="meta sugTxt">The Start Pin is saved at that mark\'s position as this start\'s pin; then place the committee boat from it.</div>';}
 function lineInfo(){if(gsOf())return '';   // the Grassy start is said in the Start line row
   const vA=varW(), tw=S.twd===''?null:((+S.twd-vA)%360+360)%360, est=lineEstNow(), k=ckey(S.race,S.start);
   if(est&&est.kind==='mid'){const both=startLine();
@@ -2157,7 +2171,7 @@ function buildLegs(){
   // only one end of the start line found and no line in use: that end is drawn, named an estimate when it is one (Pat,
   // 14 October 2026); drawing only, no leg starts from it
   const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];
-  const solo=one.length===1?one.map(m=>Object.assign({},m,{name:m.name+(estOf(m)?' (estimate)':'')})):[];
+  const solo=one.length===1?one:[];   // named on the drawing by courseMarks (helpShort)
   lastPlot={pts,lines:plotLines,legs:L.legs,slUnused:lineOffWhy(),solo};
   plot(pts,plotLines,solo);
   buildShift(cs);
@@ -2303,7 +2317,7 @@ function courseMarks(cs,segs){
   const marks=cs.filter(m=>!m.virtual&&!m.missing).concat(...segs.filter(g=>!g.a.drawn).map(g=>[g.a,g.b]));
   const nameCount={}; [...new Map(marks.map(m=>[m.id,m])).values()].forEach(m=>{const k=m.name.toLowerCase();nameCount[k]=(nameCount[k]||0)+1;});
   const seen=new Set(), out=[];
-  marks.forEach(m=>{if(seen.has(m.id))return;seen.add(m.id);out.push({m,label:m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'')});});
+  marks.forEach(m=>{if(seen.has(m.id))return;seen.add(m.id);out.push({m,label:helpShort(m)||m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'')});});
   return out;}
 let plotEst='';   // buildLegs: the start line is the RO's estimate (A58), said beside the start in the sketch
 function plot(pts,segs,solo){
@@ -2620,7 +2634,7 @@ function renderFix(){
   const ph=phoneLetters();
   const car=m=>fxAll?!on(m.race):m.race<r, into=m=>fxAll?(usedBy.get(refFor(m))||[]).join(', '):r;
   // "E4 pasted position" (with its time and accuracy when they were pasted); "E4 10:15 typed position"
-  const lab1=m=>(m.card?[m.name,'Course Card']:isPasted(m)?[m.name,'pasted position',m.time,accOf(m)]:[m.name,m.time,isTypedPos(m)?'typed position':accOf(m)]).filter(Boolean).join(' ');
+  const lab1=m=>helpOf(m)?helpLong(m):(m.card?[m.name,'Course Card']:isPasted(m)?[m.name,'pasted position',m.time,accOf(m)]:[m.name,m.time,isTypedPos(m)?'typed position':accOf(m)]).filter(Boolean).join(' ');   // T7: a helper end by what the RO did
   const lab2=m=>[fxAll?'Race '+m.race+(car(m)?', used by Race '+into(m):''):car(m)?'carried from Race '+m.race:'',cset.has(refFor(m))?'candidate':'',
     m.recorder||(m.device?'Phone '+ph[m.device]:''),m.notSent?'not sent: refused':m.pending?'waiting to send':''].filter(Boolean).join(' · ');
   $('fxPlot').hidden=fxChart; $('fxMapWrap').hidden=!fxChart;
@@ -2669,7 +2683,7 @@ function renderFix(){
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+pickHtml(sm)+'</div>':
     sm?'<div class="note"><b>'+esc(sm.name)+'</b> · Race '+sm.race+' · '+
     (isPasted(sm)?'pasted position, on this device only · '+(sm.time?'time '+esc(sm.time):'time not given')+' · '+(accOf(sm)?'accuracy '+esc(accOf(sm)):'accuracy not given'):
-    esc(fxHms(sm)||'time not known')+' · '+(isTypedPos(sm)?'typed position, an estimate':esc(accOf(sm)||'accuracy not known'))+' · Phone '+(sm.device?esc(ph[sm.device]):'none'))+
+    esc(fxHms(sm)||'time not known')+' · '+(helpOf(sm)?esc(helpLong(sm)):isTypedPos(sm)?'typed position, an estimate':esc(accOf(sm)||'accuracy not known'))+' · Phone '+(sm.device?esc(ph[sm.device]):'none'))+
     '<br>'+ddm(sm.lat,true)+' '+ddm(sm.lon,false)+(car(sm)?' · carried into Race '+esc(String(into(sm))):'')+(sm.notSent?' · not sent: refused by the server, kept on this device in the "Not sent" list':sm.pending?' · waiting to send from this phone':'')+pickHtml(sm)+'</div>':
     !seen.length?'<p class="empty">'+(shown.length?'Every race is switched off above.':'No recorded fixes for '+(fxAll?'this day':'Race '+r)+' yet.')+'</p>':'';
   $('fxListBox').hidden=!seen.length; $('fxListSum').textContent=(seen.some(m=>isOtherMark(m)||m.card)?'All fixes and marks (':'All fixes (')+seen.length+')';
@@ -2747,7 +2761,7 @@ function fxSketch(shown,fl,lab1,lab2,car,short,res,cset,pk,ov,r){
   labs.forEach((a,i)=>{for(let j=0;j<i;j++){const b=labs[j];if(a.right===b.right&&Math.abs(a.p.x-b.p.x)<130&&a.y-b.y<25)a.y=b.y+25;}});
   labs.forEach(a=>{const p=a.p, x=a.right?p.x+11:p.x-11, an=a.right?'':' text-anchor="end"', l2=lab2(p.m);
     if(a.y-p.y>12)t+='<line x1="'+p.x+'" y1="'+p.y+'" x2="'+x+'" y2="'+(a.y-4)+'" stroke="var(--muted)" stroke-width=".8"/>';
-    t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+halo+an+'>'+esc(lab1(p.m))+'</text>'+
+    t+='<text x="'+x+'" y="'+a.y+'" font-size="11" fill="var(--ink)"'+halo+an+'>'+esc(helpShort(p.m)||lab1(p.m))+'</text>'+
       (l2?'<text x="'+x+'" y="'+(a.y+12)+'" font-size="10" fill="var(--muted)"'+halo+an+'>'+esc(l2)+'</text>':'');});
   }
   const mpx=s/111320; let bar=20; [50,100,200,500,1000,2000].forEach(b=>{if(b*mpx<=W*.35)bar=b;});
@@ -3408,7 +3422,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     S.linePinAt[k]={ref:'s:'+id,at};
     S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});
     estDraft={};stamp(k);commit();sendOutbox();
-    say('Start Pin set at '+at+' as an estimate ('+ddm(src.lat,true)+' '+ddm(src.lon,false)+'), saved as a typed position: sending… Now place the committee boat from it.',true);return;}
+    say('Start Pin set at '+at+' ('+ddm(src.lat,true)+' '+ddm(src.lon,false)+'), saved to the race record: sending… Now place the committee boat from it.',true);return;}
   if(act==='place'){const w=b.dataset.w, have=endPick(w==='cb'?'pin':'cb').m;if(!have)return;
     const dist=+estDraft.dist, brgM=+estDraft.brg;
     if(!(dist>0&&dist<=5000)||String(estDraft.brg).trim()===''||!(brgM>=0&&brgM<=360)){say('Type a distance in metres (1 to 5000) and a bearing from 0 to 360 °M (the grey figures are only suggestions): nothing placed.',false);return;}
@@ -3423,7 +3437,8 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     const id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
     S.outbox.push({action:'add',id,date:day,race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:t});
     push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(t),pending:true,pid:id});
-    S.lineEst[k]={w,ref:'s:'+id,from:ref.card&&!ref.atFix?ref.name:fixWords2(ref),m:Math.round(dist),brgM:Math.round(brgM)%360};
+    const rp=setOf(ref);   // placed from a Start Pin set at a mark: named by the mark (T7)
+    S.lineEst[k]={w,ref:'s:'+id,from:rp?'Start Pin '+rp.at:ref.card&&!ref.atFix?ref.name:fixWords2(ref),m:Math.round(dist),brgM:Math.round(brgM)%360};
     S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});
     estDraft={};stamp(k);commit();sendOutbox();
     say(nm+' placed as an estimate: '+estWords(S.lineEst[k])+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',true);return;}

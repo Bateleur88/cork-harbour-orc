@@ -697,9 +697,10 @@ def t15_start_line_setup_guards():
     g('the first mark skips routing waypoints', 'if(m&&isRwCard(m)){rw=true;continue;}' in fn_body(code, 'function firstMarkOf('))
     g('the "from" list and the Start Pin list offer the full Fixed marks list', eo.count('fixedOpts(d.ref)') == 1 and bo.count('fixedOpts(d.at)') == 1
       and 'Object.keys(CARD.marks).forEach' in fn_body(code, 'function fixedOpts('))
-    g('a Start Pin set at a mark: a typed position, this start\'s pin, flagged as an estimate', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
+    g('a Start Pin set at a mark: a typed position and this start\'s pin, the RO\'s choice, not an estimate (answer 2 corrected)', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
       and "S.linePinAt[k]={ref:'s:'+id,at};" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
-      and "return p?{w:'pin',ref:p.ref,at:p.at}:null;" in code and "'Start Pin at '+e.at" in code)
+      and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}" in code
+      and "function estOf(m){return m?Object.values(S.lineEst||{}).find(refHit(m))||null:null;}" in code)
     g('its time defaults to the start time', "tt=String(d.ptime||'').trim()||startTime()" in code)
     g('one Undo withdraws every estimate of the start, committee boat first, after one confirmation', "sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1))" in code
       and code.count("reason:'estimate undone by the RO'") == 1)
@@ -720,8 +721,16 @@ def t15_start_line_setup_guards():
       and "drawn:true},kind:'start',est:true}" in bl and '!g.a.drawn' in fn_body(code, 'function courseMarks('))
     g('the chart labels an estimated line', "ln.est?'Start line: estimate'" in code and "permanent:true,direction:'bottom',offset:[0,12],className:'estTip'" in code)
     g('decision 2a: an estimated end carries forward only within its race; a later race is offered it, never given it by auto',
-      "&&!(m.race<r&&estOf(m))).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
-      and "A start line estimate from Race '+eo.race+' is available – use it? '" in code)
+      "&&!(m.race<r&&helpOf(m))).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
+      and "(estOf(eo)?'A start line estimate from Race '+eo.race:'A Start Pin set in Race '+eo.race)+' is available – use it? '" in code)
+    g('T7: a helper end named by what the RO did, time last, in lists, notes and Check recorded marks; short on the drawings',
+      "'Start Pin: '+p.at+' ('+fixWhen(m)+')'" in code and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+' ('+fixWhen(m)+')'" in code
+      and "'Start Pin ('+p.at+')'" in code and "' (est.)'" in code and "function fixText(m,w){if(helpOf(m))return helpLong(m);" in code
+      and "const lab1=m=>helpOf(m)?helpLong(m):" in code)
+    g('T7: no "unattributed": a typed position, pasted, or phone not known', "'unattributed'" not in code
+      and "isPasted(m)?'pasted':isTypedPos(m)?'typed position':'phone not known'" in code)
+    g('T7: a pin at a mark with an uncertain card position, or a laid mark at its planning position, keeps its warning',
+      "c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'')" in code and code.count('helpWarn(') >= 3)
     so = fn_body(code, 'function setOut(')
     g('the WhatsApp text still carries no estimate note', 'estimate' not in so and 'Grassy' not in so)
 
@@ -749,7 +758,7 @@ def t16_day_guards():
     g('T1: no comma before "time on the water"', "</select>, time on the water" not in code and code.count("</select> time on the water '") == 2)
     g('Q1: one end found and no line in use is drawn on the sketch and the chart, named an estimate when it is one',
       "const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];" in code
-      and "(estOf(m)?' (estimate)':'')" in code and "plot(pts,plotLines,solo);" in code and "(P.solo||[]).map(m=>({a:m,b:m}))" in code)
+      and "label:helpShort(m)||m.name" in code and "plot(pts,plotLines,solo);" in code and "(P.solo||[]).map(m=>({a:m,b:m}))" in code)
 
 
 def main():
