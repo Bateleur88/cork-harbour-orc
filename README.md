@@ -357,6 +357,23 @@ footer "© 2026 Pat Tanner ORC Ireland".
   The legs follow the box as it is typed; the direction is saved with the course only
   when the RO leaves the box (or presses Enter), so a half-typed one is never saved. The
   start line note under the Start line lists always matches section 4's.
+- *A start line with one end recorded* (`STATUS.md` A58, from PAGE_VERSION 2026-10-06.36):
+  when a start has a start time and only the committee boat or only the Start Pin is
+  found, the Start line row offers two estimates, both the RO's choice: 1. place the
+  missing end by distance (m) and bearing (°M) from the recorded end or another mark of
+  the race; it is saved as a typed position named for the missing end ("Committee boat"
+  or "Start Pin"), its time on the water the reference's unless changed, and as this
+  start's line end, labelled "estimate: 200 m at 270°M from Start Pin R1 11:09"; from
+  then on the line is a normal two-end line; 2. "Use Start Pin (R1 11:09) as the line
+  midpoint – estimate": the first leg runs from that end and, with the Finish on the
+  start line, the last leg to it; no line length, off-square or favoured end. Both are
+  saved with the course (`lineEst`, `lineMid`) and undone with one tap (option 1
+  withdraws the placed position). They are flagged "Start line: estimate – …" in
+  sections 3 and 4, the leg table and the sketch, and Copy for Sail Scoring adds
+  `"x-estimate"`; the WhatsApp text carries no estimate note, and there is no "Send
+  anyway?". A real end recorded later, at or before the start, is offered ("A recorded
+  committee boat is now available – use it?"), never taken by itself. A finish line with
+  one end missing is not covered. The WhatsApp text gives each leg in °M only.
 - *Choices kept on a device by an older page* (A10): a laid-mark choice made on a page
   before .35 was kept on that device only. It stays in use there, but is saved with the
   course only when the RO changes it, sends the course, or shows it on the race day,
