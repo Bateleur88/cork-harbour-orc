@@ -974,6 +974,24 @@ live page for the check. To roll back, upload `index.html.live-2026-10-12` as
 stored format (course rows saved from pasted positions are hidden on .26, as before,
 and fixes in a device's "Not sent" list stay on that device).
 
+**15 October 2026 upload of PAGE_VERSION 2026-10-06.37.** No race was within 12 hours
+(the next is Sunday 18 October 2026, first warning 10:55). Steps:
+`build/release/RELEASE_STEPS_37.md`; essentials in PROJECT_HISTORY section 24. The
+backups were taken first, outside the repository in `release_2026-10-15_37`:
+`index.html.live-2026-10-15` (the live .36,
+`6da55fc18cd1fd05592b1ff3af504d4d917fdc9b6fa945116ca84d5dfe8a62f1`),
+`marks-data-2026-10-15` (file count checked, with `marks-data-2026-10-15.sha256.csv`)
+and `marks.php.live-2026-10-15`. Then only the page: `course_v8.html` at 2830692,
+PAGE_VERSION 2026-10-06.37 (440,766 bytes,
+`d0d1cf39820a6c7d6122af664c4c64fb3a53e044687a2d377acebd6f743988eb`), uploaded as
+`/course/index.html` in Binary mode; re-downloaded, the hash matched. `marks.php` is
+unchanged (`5c86088c36ca191765be45db441d0af62a5f939fa06ea79f78d194ae8c69e176`). The
+PC, tablet, phone and laptop were checked on .37 by wording only .37 shows, and
+`/record/` opened unchanged. To roll back, upload `index.html.live-2026-10-15` as
+`/course/index.html` and restore `marks-data-2026-10-15` to `/marks/data/`: .36 cannot
+read a start saved by .37 with both ends of its start line placed, and drops a Grassy
+start or a Start Pin set at a mark on its next save.
+
 ## Before any release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
