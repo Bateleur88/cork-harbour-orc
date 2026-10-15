@@ -668,7 +668,7 @@ def t14_one_end_line_guards():
       and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});" in code and 'geoDest(ref,((brgM-varW())%360+360)%360,dist)' in code)
     g('option 2: the recorded end as midpoint, for the start and a start-line finish', "(midLine(r,st)||startLine(r,st,sel))" in code
       and "return midLine(r,st)||startLine(r,st,sel);}" in code)
-    g('both saved with the course and read back', "{lineMid:Object.assign({},S.lineMid[k])}" in code and "{lineEst:Object.assign({},S.lineEst[k])}" in code
+    g('both saved with the course and read back', "{lineMid:Object.assign({},S.lineMid[k])}" in code and "{lineEst:estSaved(k)}" in code
       and 'S.lineMid[k]={w:lm.w,ref:lm.ref}' in code)
     g('a real end recorded later is offered, never taken', "' is now available – use it? '" in code)
     g('Copy for Sail Scoring says x-estimate; the WhatsApp text does not', "'  \"x-estimate\": '+JSON.stringify(lineEstNow(r,st).x)" in code
@@ -700,7 +700,7 @@ def t15_start_line_setup_guards():
     g('a Start Pin set at a mark: a typed position and this start\'s pin, the RO\'s choice, not an estimate (answer 2 corrected)', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
       and "S.linePinAt[k]={ref:'s:'+id,at};" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
       and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}" in code
-      and "function estOf(m){return m?Object.values(S.lineEst||{}).find(refHit(m))||null:null;}" in code)
+      and "function estOf(m){return m?estAll().find(refHit(m))||null:null;}" in code)
     g('its time defaults to the start time', "tt=String(d.ptime||'').trim()||startTime()" in code)
     g('one Undo withdraws every estimate of the start, committee boat first, after one confirmation', "sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1))" in code
       and code.count("reason:'estimate undone by the RO'") == 1)
@@ -803,6 +803,49 @@ def t17_reopen_names_guards():
     g('4 a RIB phone with no recorder name is "phone with no name"', "return m.recorder||'phone with no name';" in code and "'unnamed phone'" not in code)
 
 
+def t18_gone_start_guards():
+    """.37, Pat's decisions of 15 October 2026 after the start line analysis: a start that has gone never loses its line
+    through an action on another start, and no estimate label is lost (a to e)."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('18 .37 gone starts: ' + name, ok)
+    lu = fn_body(code, 'function lineUsers(')
+    g('lineUsers: a start using the fix by its choice, saved auto, its estimate, set-pin or midpoint record, or auto right now',
+      "Object.values(S.lineSel[k]||{}).concat(Object.values(S.lineAuto[k]||{})).some(v=>refIs(v,m))" in lu
+      and "estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[],S.lineMid[k]?[S.lineMid[k]]:[]).some(e=>refIs(e.ref,m))" in lu
+      and "['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m)" in lu and "if(k===skip)return;" in lu)
+    g('lineUsers looks at every start of the day',
+      "['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid'].forEach(f=>" in fn_body(code, 'function startKeys('))
+    g('a: Undo is refused, naming the starts, while any other start uses the estimate',
+      "const others=[...new Set(its.reduce((a,i)=>a.concat(lineUsers(i.m,k)),[]))];" in code
+      and "'Not undone: this estimate is also used by '+others.join(', ')+'. Undo would change '" in code
+      and code.index("const others=[...new Set(") < code.index("await postFix({action:'withdraw',date:S.pulledDay,id:i.m.sid,reason:'estimate undone by the RO'}"))
+    g('b: placing an end or setting the pin clears that end\'s "None" on the start',
+      "if((S.lineSel[k]||{})[w]==='none')delete S.lineSel[k][w];" in code and "if((S.lineSel[k]||{}).pin==='none')delete S.lineSel[k].pin;" in code)
+    g('c: a placed end\'s time on the water defaults to the start\'s own time, as the set pin does',
+      "const tt=String(estDraft.time||'').trim()||startTime();" in code and "String(ref.time||have.time||'')" not in code
+      and """data-f="time" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'\"""" in code)
+    g('d: one estimate record per end of a start; placing one end keeps the other',
+      "S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});" in code
+      and "function estsOf(k){const o=(S.lineEst||{})[k];return o?[o.cb,o.pin].filter(Boolean):[];}" in code
+      and "function estOf(m){return m?estAll().find(refHit(m))||null:null;}" in code)
+    g('d: the old shape is read as that end\'s, from the server and from this device',
+      "function estNorm(v){const one=estRec(v);if(one)return {[one.w]:one};" in code
+      and "const le=estNorm(rec.lineEst); if(le)S.lineEst[k]=le; else delete S.lineEst[k];" in code
+      and "Object.keys(S.lineEst).forEach(k=>{const n=estNorm(S.lineEst[k]);if(n)S.lineEst[k]=n;else delete S.lineEst[k];});" in code)
+    g('d: a start with one placed end is saved in the old shape; only both ends as {cb, pin}',
+      "function estSaved(k){const l=estsOf(k);return l.length===1?Object.assign({},l[0]):l.length?{cb:Object.assign({},l[0]),pin:Object.assign({},l[1])}:null;}" in code
+      and "...(estSaved(k)?{lineEst:estSaved(k)}:{})," in code
+      and "{w:le.w,ref:le.ref,from:String(le.from||''),m:+le.m||0,brgM:+le.brgM||0}" in fn_body(code, 'function estRec('))
+    g('d: Undo withdraws each end\'s record and keeps the rest', "estDrop(i.e);" in code
+      and "let ts=estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[]);" in code)
+    g('e: Withdraw counts every line end use (saved auto, estimate and set-pin records, auto right now)',
+      "return [...new Set(out.concat(lineUsers(m)))];" in fn_body(code, 'function usesOf(')
+      and "const u=usesOf(m);" in fn_body(code, 'async function typedAct('))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -823,6 +866,7 @@ def main():
         t15_start_line_setup_guards()
         t16_day_guards()
         t17_reopen_names_guards()
+        t18_gone_start_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
