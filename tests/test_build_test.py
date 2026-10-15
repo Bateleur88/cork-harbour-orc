@@ -869,6 +869,34 @@ def t19_remove_start_guards():
     g('a helper draft is not carried to another start', "estDraft={};" in rs)
 
 
+def t20_time_and_remove_guards():
+    """.37, Pat's decisions of 15 October 2026 after the 37b test: a start's auto line-end choices are saved only once its
+    start time is complete (fix 1); Remove Start withdraws the removed start's own helper fixes, or is refused (fix 2)."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('20 .37 time and Remove Start: ' + name, ok)
+    fl = fn_body(code, 'function freezeLines(')
+    g('1: nothing is saved for the open start while its time box has focus (a half-typed time)',
+      "if(k===ckey(S.race,S.start)&&document.activeElement===$('startTime'))return;" in fl
+      and fl.index("document.activeElement===$('startTime')") < fl.index("['cb','pin','fpin'].forEach"))
+    g('1: leaving the box saves the choices for the time as set, redrawing only when something is saved',
+      "$('startTime').addEventListener('blur',()=>{if(startTime()&&freezeNow()){render();scheduleSave();}});" in code)
+    g('1: the start time itself is still saved on every change', "$('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};" in code)
+    ra = fn_body(code, 'async function removeStartAsked(')
+    g('2: the Remove Start button goes through removeStartAsked', "if(rm)rm.onclick=()=>removeStartAsked(S.start);" in code
+      and "rm.onclick=()=>{removeStart(" not in code)
+    g('2: the removed start\'s own placed ends and set pin are found', "estsOf(k).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[])" in ra)
+    g('2: refused, naming the starts, while any other start uses one of them',
+      "const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];" in ra
+      and "' not removed: its '" in ra and ra.index('const others=') < ra.index("action:'withdraw'"))
+    g('2: each is withdrawn (kept, marked withdrawn) before the start is removed; a failed withdrawal removes nothing',
+      "await postFix({action:'withdraw',date:S.pulledDay,id:x.m.sid,reason:'start removed by the RO'},OUTBOX_TIMEOUT_MS);" in ra
+      and "catch(err){commit();say('Start '+(i+1)+' not removed: '" in ra
+      and ra.index("action:'withdraw'") < ra.index('removeStart(i);'))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -891,6 +919,7 @@ def main():
         t17_reopen_names_guards()
         t18_gone_start_guards()
         t19_remove_start_guards()
+        t20_time_and_remove_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

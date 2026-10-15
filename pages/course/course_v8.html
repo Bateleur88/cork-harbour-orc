@@ -884,6 +884,9 @@ function freezeLaid(r){let ch=false;
     if(st.sel==='auto'&&!S.laidFrz[st.key]&&st.latest&&st.latest.sid){S.laidFrz[st.key]=fkey(st.latest);ch=true;}});
   return ch;}
 function freezeLines(k,r,st){const v=S.lineSel[k]||{}, fz=Object.assign({},S.lineAuto[k]||{});
+  // fix 1 (Pat, 15 October 2026): while the open start's time is being typed or picked, its value may be half-typed
+  // (12:04 on the way to 12:40), so nothing is saved until the RO leaves the box (startTime blur, below)
+  if(k===ckey(S.race,S.start)&&document.activeElement===$('startTime'))return;
   ['cb','pin','fpin'].forEach(w=>{if((v[w]&&v[w]!=='auto')||fz[w])return;const e=endPick(w,r,st);
     if(e.how==='auto'&&!e.saved&&e.m&&e.m.sid)fz[w]=refFor(e.m);});
   if(Object.keys(fz).length)S.lineAuto[k]=fz;}
@@ -1318,7 +1321,7 @@ function render(){
       const g=editClasses(), l=g[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{g[S.start]=l.filter(x=>x!==cb.value);}
       g[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
     $('classDone').onclick=()=>{classOpen=false;commit();};
-    const rm=$('classRm'); if(rm)rm.onclick=()=>{removeStart(S.start);S.start=0;classOpen=false;commit();};
+    const rm=$('classRm'); if(rm)rm.onclick=()=>removeStartAsked(S.start);
   }else pk.hidden=true;
   const cp=$('copyStart'), src=S.starts.findIndex((n,i)=>i!==S.start&&course(S.race,i).length);
   if(!course().length&&src>=0){cp.hidden=false;cp.textContent='Use '+S.starts[src]+' course';cp.onclick=()=>{S.courses[ckey(S.race,S.start)]=course(S.race,src).map(e=>({...e}));stamp();commit();};}
@@ -1493,6 +1496,24 @@ function renderCardSum(){
    2026): before .37 the saved auto choices (lineAuto), estimates (lineEst, either shape) and midpoints (lineMid) stayed at
    the old start number. Any new per-start record must be added here. */
 const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt'];
+/* fix 2 (Pat, 15 October 2026): the removed start's own helper fixes (a Start Pin set at a mark, an end placed by distance
+   and bearing) are withdrawn with it (kept, marked withdrawn), as Undo does, so they never stay behind as unlabelled
+   typed positions offered to other starts. Refused, naming the starts, while any other start uses one of them (lineUsers);
+   not removed at all if a withdrawal fails. */
+async function removeStartAsked(i){const r=S.race, k=ckey(r,i), st=$('readStatus'), say=(t,ok)=>{st.textContent=t;st.className='status '+(ok?'ok':'err');};
+  const its=estsOf(k).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[]).map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)
+    .sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1));
+  if(its.length){
+    const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];
+    if(others.length){say('Start '+(i+1)+' not removed: its '+its.map(x=>x.m.name).join(' and ')+' '+(its.length>1?'are':'is')+' also used by '+others.join(', ')+'.',false);return;}
+    if(its.some(x=>x.m.pending||!x.m.sid)){say('Start '+(i+1)+' not removed: its line ends are still being sent. Try again in a moment.',false);return;}
+    if(!confirm('Remove Start '+(i+1)+'? Its '+its.map(x=>x.m.name+' '+('at' in x.e?'set at '+x.e.at:'placed '+x.e.m+' m at '+pad(x.e.brgM,3)+'°M')).join(' and ')+
+      (its.length>1?' are':' is')+' withdrawn from the race record (kept, marked withdrawn).'))return;
+    for(const x of its){
+      try{await postFix({action:'withdraw',date:S.pulledDay,id:x.m.sid,reason:'start removed by the RO'},OUTBOX_TIMEOUT_MS);}
+      catch(err){commit();say('Start '+(i+1)+' not removed: '+((err&&err.text)||(err&&err.message)||'no reply')+'.',false);return;}}}
+  removeStart(i);S.start=0;classOpen=false;commit();
+  if(its.length){await pull(true);commit();say('Start '+(i+1)+' removed; its '+its.map(x=>x.m.name).join(' and ')+' withdrawn.',true);}}
 function removeStart(i){
   const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
   let last=classesOf().length-1;
@@ -3536,6 +3557,9 @@ $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)retur
   commit();};
 $('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
 $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
+// the start time is complete once the RO leaves the box (keyboard, or a phone or tablet time picker): only then are the
+// start's auto line-end choices saved, for the time as finally set (freezeLines; fix 1)
+$('startTime').addEventListener('blur',()=>{if(startTime()&&freezeNow()){render();scheduleSave();}});
 $('read').onclick=()=>{
   const t=$('paste').value;
   if(!t.trim()){$('readStatus').textContent='Paste a message first.';$('readStatus').className='status err';return;}
