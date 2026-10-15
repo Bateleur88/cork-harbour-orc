@@ -426,6 +426,12 @@ def t7_a40_guards():
             # .37: a hand-built Grassy start gets the STAND-IN note beside the button, as an imported one does (A58 part 2)
             body = body.replace('if(L.sPt&&!L.sl&&L.ccfg)', 'if(L.sPt&&!L.sl)')
             body = chr(10).join(x for x in body.split(chr(10)) if 'gsOf(r,st))cardSti.push(' not in x)
+            # .37 T14 (Pat, 15 October 2026): the Grassy start notes beside the button, plain and orange, not STAND-IN;
+            # the copied text is unchanged
+            body = chr(10).join(x for x in body.split(chr(10)) if 'gsN.push(' not in x and 'const gsN=[]' not in x)
+            body = body.replace("side),\n    notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])};}", 'side)};}')
+        if head == 'function setCC(':   # .37 T14: the plain and orange notes after the warnings
+            body = body.replace("+(d.notes||[]).map(n=>'<p class=\"'+n.cls+'\">'+esc(n.t)+'</p>').join('')", '')
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -712,7 +718,7 @@ def t15_start_line_setup_guards():
       and "return lineOff(r,st)?null:(midLine(r,st)||startLine(r,st,sel));" in code
       and "gsOf(r,st)&&finishMode(r,st)==='start'?cardEnd('Grassy Mid','Finish'):null" in code)
     cc = fn_body(code, 'function ccDoc(')
-    g('Grassy start: the STAND-IN note beside Copy for Sail Scoring, never in the name', "measured from Grassy Mid (Grassy start chosen)');" in cc
+    g('Grassy start: its note beside Copy for Sail Scoring, never in the name (T14: not a STAND-IN)', "measured from Grassy Mid, the midpoint of the Grassy Walk line');" in cc
       and 'gsOf' not in cc.split('const pre=')[1].split('const name=')[0])
     g('the new fields are written only when used, so other records save exactly as before',
       "...(S.startPt&&S.startPt[k]?{startPt:S.startPt[k]}:{})," in code and "...(S.linePinAt&&S.linePinAt[k]?{linePinAt:" in code)
@@ -897,6 +903,28 @@ def t20_time_and_remove_guards():
       and ra.index("action:'withdraw'") < ra.index('removeStart(i);'))
 
 
+def t21_t14_guards():
+    """.37 T14 (Pat, 15 October 2026): the Grassy start is the Grassy Walk line, measured from Grassy Mid, not a stand-in;
+    wording only: nothing a leg, figure, finish point or save uses changes."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('21 .37 T14: ' + name, ok)
+    g('no "standing in for the Grassy Walk line" and no Grassy STAND-IN in the page code (the workbook\'s own flag text aside)',
+      'standing in for the Grassy Walk line' not in code.replace(code[code.index('const CARD='):code.index('\n', code.index('const CARD='))], '')
+      and "'STAND-IN - '+cardSti" in code and 'gsOf(r,st))cardSti.push(' not in code)
+    g('Start line row: the Grassy Walk line, measured from Grassy Mid; a recorded line not used said in orange',
+      "'<div class=\"meta\">Start: <b>Grassy start</b>: the start line is the Grassy Walk line, measured from Grassy Mid. " in code
+      and "'<div class=\"meta amberTxt\">Grassy start chosen; the recorded line (committee boat '" in code and ".amberTxt{color:var(--r2)}" in page)
+    g('beside Copy for Sail Scoring: a plain note, and the orange line when a recorded line is not used, never STAND-IN',
+      "notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])" in code
+      and "(d.notes||[]).map(n=>'<p class=\"'+n.cls+'\">'+esc(n.t)+'</p>').join('')" in fn_body(code, 'function setCC('))
+    g('real stand-ins keep their wording and colour', "'from the card\\'s '+ccfg.s+' start, standing in because no start line is recorded'" in code
+      and "warns.map(t=>'<p class=\"cardnote flag\">'+esc(t)+'</p>')" in fn_body(code, 'function setCC('))
+    g('the Grassy start point and finish point are found exactly as before', "gsOf(r,st)?cardEnd('Grassy Mid','Start')" in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -920,6 +948,7 @@ def main():
         t18_gone_start_guards()
         t19_remove_start_guards()
         t20_time_and_remove_guards()
+        t21_t14_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

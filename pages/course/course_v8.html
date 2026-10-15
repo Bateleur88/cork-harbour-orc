@@ -182,6 +182,7 @@ body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,body.dayH
 .newer button{margin-left:6px;padding:4px 10px;border-radius:8px;border:1px solid currentColor;background:var(--surface);font-size:.85rem;font-weight:700}
 .disc.line{background:var(--ink);color:var(--paper)}
 .warnTxt{color:var(--warn)!important}
+.amberTxt{color:var(--r2)}   /* T14: said plainly, not a warning: e.g. a recorded line not used because the Grassy start is chosen */
 select{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
 .endSel{display:inline-block;width:auto;margin:2px 4px;padding:4px 8px;font-size:.9rem}
 .movefix{margin:0 0 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:8px 12px}
@@ -1382,9 +1383,11 @@ function render(){
   const ends=sm==='card'?'<div class="meta">Card mark: the card\'s '+esc(ccfg0.s)+' start point is used.'+
       (slRec?' Recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+') shown, not used.':'')+'</div>':
     // the Grassy start on a hand-built start (A58 part 2): said here, with Undo; a recorded line is offered, never taken
-    gs0?'<div class="meta">Start: <b>Grassy start</b> (Grassy Mid, standing in for the Grassy Walk line). <button type="button" class="ghost estAct" data-act="ungrassy">Undo</button></div>'+
-      (slRec?'<div class="newer">A start line is available (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+(estOf(slRec.cb)||estOf(slRec.pin)?', estimate':'')+') – use it instead? '+
-        '<button type="button" class="estAct" data-act="ungrassy">Use it</button></div>':''):
+    // T14 (Pat, 15 October 2026): the Grassy start is a proper start line, the Grassy Walk line, measured from its calculated
+    // midpoint, Grassy Mid; it is not a stand-in. A recorded line not used is said plainly, in orange
+    gs0?'<div class="meta">Start: <b>Grassy start</b>: the start line is the Grassy Walk line, measured from Grassy Mid. <button type="button" class="ghost estAct" data-act="ungrassy">Undo</button></div>'+
+      (slRec?'<div class="meta amberTxt">Grassy start chosen; the recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+(estOf(slRec.cb)||estOf(slRec.pin)?', estimate':'')+') is not used. '+
+        '<button type="button" class="ghost estAct" data-act="ungrassy">Use the recorded line instead</button></div>':''):
     cardS&&!nPins&&!nCbs?'':
     '<div class="meta">'+endPicker('cb',!!cardS)+'</div><div class="meta">↔ '+endPicker('pin',!!cardS)+'</div>'+
       // a hand-built start may use the Grassy start instead: a small link once a line end is found
@@ -2196,7 +2199,7 @@ function buildLegs(){
   const from=estL&&estL.kind==='mid'?'from '+fixWords2(sl.end)+', used as the start line midpoint (start line: estimate – one end missing)':
     estL?'from the midpoint of the start line (start line: estimate – '+estL.text+')':
     sl?'from the midpoint of the recorded start line (committee boat and pin)':
-    sPt&&gsOf()?'from Grassy Mid, standing in for the Grassy Walk line (Grassy start chosen'+(slRec?'; the recorded line is not used)':')'):
+    sPt&&gsOf()?'from Grassy Mid, the midpoint of the Grassy Walk line (Grassy start chosen'+(slRec?'; the recorded line is not used)':')'):
     sPt&&cardEndMode('s')==='card'?'from the card\'s '+ccfg.s+' start (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
       (CARD.marks[ccfg.s]&&CARD.marks[ccfg.s].type!=='Start/finish modelling point'?' (a '+ccfg.s+' start is a committee boat line near the mark, not the mark itself)':''):
@@ -2205,7 +2208,7 @@ function buildLegs(){
     fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+ccfg.f+' finish (Card mark chosen)':
     ccfg&&fsx.kind==='mark'?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
-    fPt&&gsOf()?'at Grassy Mid, standing in for the Grassy Walk line (Grassy start chosen)':
+    fPt&&gsOf()?'at Grassy Mid, the midpoint of the Grassy Walk line (Grassy start chosen)':
     fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
   // Course Card marks in the course: their position is the card's (STATUS A40); said in the leg table and above the SailScoring lines
@@ -2214,7 +2217,7 @@ function buildLegs(){
     (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   setCC();
   const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(orphanText(L)?[orphanText(L)+'. Move it between two marks.']:[],farLine,checks(ents,cs));
-  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+pastedHtml(L)+an.html+(cardEnds&&!gsOf()?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(gsOf()?'<p class="note">Grassy start: the first leg is measured from Grassy Mid, standing in for the Grassy Walk line'+(fPt&&!fl?', and the last leg to it':'')+'. No line length or bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
+  host.innerHTML='<div class="info">'+(warn.length?'<p class="note flag">⚠ '+warn.map(esc).join('<br>⚠ ')+'</p>':'')+pastedHtml(L)+an.html+(cardEnds&&!gsOf()?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(gsOf()?'<p class="note">Grassy start: the start line is the Grassy Walk line; the first leg is measured from its midpoint, Grassy Mid'+(fPt&&!fl?', and the last leg to it':'')+'. No line length or bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>'+(ml?'Total of measured legs':'Total')+'</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
@@ -2308,8 +2311,9 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   if(L.fsx&&L.fsx.kind==='startline'&&L.fsx.warn)sti.push('finish line not recorded, last leg ('+last+' - Finish) measured to the start line');
   if(L.fPt&&!L.fl&&L.fsx&&L.fsx.kind==='cardpt')cardSti.push('finish line not recorded, last leg ('+last+' - '+L.fPt.name+') measured to the card\'s '+L.ccfg.f+' finish point'+
     (cardEndMode('f',r,st)==='card'?' (Card mark chosen)':''));
-  if(L.sPt&&!L.sl&&!L.ccfg&&gsOf(r,st))cardSti.push('start line '+(L.slRec?'recorded but not used':'not recorded')+', first leg ('+L.sPt.name+' - '+first+') measured from Grassy Mid (Grassy start chosen)');
-  if(L.fPt&&!L.fl&&!L.ccfg&&gsOf(r,st))cardSti.push('last leg ('+last+' - '+L.fPt.name+') measured to Grassy Mid (Grassy start chosen)');
+  const gsN=[], gsA=L.slRec&&!L.ccfg&&gsOf(r,st)?'Grassy start chosen; the recorded line (committee boat '+(L.slRec.cb.time||'?')+' ↔ pin '+(L.slRec.pin.time||'?')+(estOf(L.slRec.cb)||estOf(L.slRec.pin)?', estimate':'')+') is not used.':'';
+  if(L.sPt&&!L.sl&&!L.ccfg&&gsOf(r,st))gsN.push('first leg ('+L.sPt.name+' - '+first+') measured from Grassy Mid, the midpoint of the Grassy Walk line');
+  if(L.fPt&&!L.fl&&!L.ccfg&&gsOf(r,st))gsN.push('last leg ('+last+' - '+L.fPt.name+') measured to Grassy Mid');   // T14: the Grassy start is the Grassy Walk line, measured from Grassy Mid, said beside the button as a plain note (a recorded line not used in orange), never STAND-IN; nothing copied changes
   const w=(S.winds||{})[k]||{}, num=v=>v!==''&&v!=null&&isFinite(+v)?+v:null, twd=num(w.twd), tws=num(w.tws);
   if(tws!==null&&twd===null)side.push('Wind speed not copied: no wind direction entered.');
   const ser=String(series.name||'').trim();
@@ -2330,12 +2334,13 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   const text='{\n  "format": "orc-constructed-course",\n  "version": 1,\n  "name": '+JSON.stringify(name)+',\n'+
     (ser?'  "x-series": '+JSON.stringify(ser)+',\n':'')+(lineEstNow(r,st)?'  "x-estimate": '+JSON.stringify(lineEstNow(r,st).x)+',\n':'')+'  "north": "magnetic",\n'+
     '  "anchor": { "lat": '+a.lat.toFixed(6)+', "lng": '+a.lon.toFixed(6)+' },\n  "legs": [\n'+legs.join(',\n')+'\n  ]\n}\n';
-  return {text,warns:pre.map(t=>t+'.').concat(cardSti.length?['STAND-IN - '+cardSti.join('; ')+'.']:[],side)};}
+  return {text,warns:pre.map(t=>t+'.').concat(cardSti.length?['STAND-IN - '+cardSti.join('; ')+'.']:[],side),
+    notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])};}
 let ccText='';
 function setCC(){const d=ccDoc(), b=$('ccCopy');
   ccText=d.block?'':d.text; b.disabled=!ccText;
   $('ccWarn').innerHTML=d.block?'<p class="'+(d.err?'status err':'cardnote')+'">'+esc(d.block)+'</p>':
-    d.warns.map(t=>'<p class="cardnote flag">'+esc(t)+'</p>').join('');
+    d.warns.map(t=>'<p class="cardnote flag">'+esc(t)+'</p>').join('')+(d.notes||[]).map(n=>'<p class="'+n.cls+'">'+esc(n.t)+'</p>').join('');
   // a copy that failed shows the text to copy by hand: keep it in step, and take it away when there is nothing to copy
   if(!ccText)$('ccFallback').hidden=true; else if(!$('ccFallback').hidden)$('ccText').value=ccText;}
 // none (optional): what to say instead of "Build a course…" when there is no text, e.g. every mark of the course missing
