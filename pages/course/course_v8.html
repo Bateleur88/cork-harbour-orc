@@ -2844,6 +2844,8 @@ let pullOk=false, pullSeq=0, dayGen=0;   // dayGen counts changes of loaded day;
 // A64: the page was reopened on the day it had loaded: its stored copy is shown and refreshed from the server in the
 // background whenever there is signal, until one load succeeds
 let reopenWait=false;
+// A64: the page was reopened on another day and held: the day loaded before, until Race day is set back to it (reopenBack)
+let reopenFrom='';
 // a typed position (accuracy 0, no phone) whose time is on another date than its race day: before 2026-10-06.36 a typed
 // position took the time it was typed, so one typed on another day says that date, e.g. " on Tue 13 Oct" (STATUS A49)
 function otherDate(m,day){if(m.acc!==0||typeof m.device==='string'&&m.device||typeof m.time!=='number')return '';
@@ -2942,7 +2944,7 @@ async function pull(quiet){
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
     if(!stale())checkLineRefs(ln);
-    if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false;}
+    if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false; reopenFrom='';}
     // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
     // then was edited while the day was not loaded
     if(!stale()){if(!wasOk)allKeys().filter(isDirty).forEach(k=>{if(!ln[k])ln[k]=LOAD_WHY[3];});
@@ -2961,9 +2963,15 @@ async function pull(quiet){
 $('day').value=todayISO();
 reopenWait=!!S.pulledDay&&S.pulledDay===$('day').value;   // A64: set before the first render, which then saves no auto choice
 // the WhatsApp heading follows the Race day box at once (buildLegs), before the day is loaded
-$('day').addEventListener('change',()=>render());
+$('day').addEventListener('change',()=>{render();reopenBack();});
+/* A64 (Pat, 15 October 2026): after a reopen on another day, Race day set back to the day loaded before shows its stored
+   copy at once and refreshes it in the background, as a reopen on the same day does (reopenWait) */
+function reopenBack(){if(!reopenFrom||dayHeld()||$('day').value!==reopenFrom)return;
+  reopenFrom='';reopenWait=true;
+  $('readStatus').textContent='The page was reopened: showing what this device holds for '+longDate(S.pulledDay)+'. It refreshes from the server when there is signal.';
+  $('readStatus').className='status';pull(true);}
 $('pull').onclick=()=>{$('reopenNote').hidden=true;pull(false);};
-setInterval(()=>{if(!document.hidden&&(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);},30000);
+setInterval(()=>{if(!document.hidden&&!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);},30000);
 window.addEventListener('online',()=>{if(reopenWait&&!dayHeld())pull(true);});
 
 /* ---------- move a fix that was recorded under the wrong race ---------- */
@@ -3631,7 +3639,7 @@ $('copy').onclick=async()=>{if(!text||!sendOk())return;freezeSend();try{await na
    key (last values seen). Nothing here is sent to the server. */
 function clearPageState(){
   pullSeq++; pullOk=false; lastPullAt=0; dayGen++; clearTimeout(saveTimer);   // a load or save under way changes nothing now
-  reopenWait=false; $('reopenNote').hidden=true;                              // A64: nothing stored is left to refresh
+  reopenWait=false; reopenFrom=''; $('reopenNote').hidden=true;               // A64: nothing stored is left to refresh
   if(cbWatch!==null&&cbStop)cbStop();                                         // a committee boat fix in progress is dropped
   fxAll=false; $('fxAll').checked=false; fxHide.clear(); fxSel=''; fxChart=false; fxFit='';   // Check recorded marks
   $('fxSketchB').setAttribute('aria-pressed','true'); $('fxChartB').setAttribute('aria-pressed','false'); $('fxStatus').textContent='';
@@ -3682,9 +3690,10 @@ window.addEventListener('online',syncSeries);
    once with nothing held, and refreshed from the server in the background whenever there is signal (reopenWait), so a
    reload with no signal never leaves the RO with no course on screen; the race-day save of A10 (a) waits for that refresh.
    Another day: the page is held (dayHeld) and nothing is loaded by itself; it says which day was loaded, so a course left
-   over from another day is never shown or changed until the RO loads the box's day or sets the box back. */
+   over from another day is never shown or changed until the RO loads the box's day or sets the box back; set back, it is
+   shown and refreshed as on the same day (reopenFrom, reopenBack; Pat, 15 October 2026). */
 if(S.pulledDay){const was=S.pulledDay, now=$('day').value;
-  if(was!==now){$('reopenNote').hidden=false;$('reopenNote').textContent='The page was reopened: Race day is back to today, '+longDate(now)+'. '+
+  if(was!==now){reopenFrom=was;$('reopenNote').hidden=false;$('reopenNote').textContent='The page was reopened: Race day is back to today, '+longDate(now)+'. '+
     longDate(was)+' was loaded before and is still on this device: to carry on with it, set Race day back to it. To load today, tap Get latest marks.';}
   else{$('readStatus').textContent='The page was reopened: showing what this device holds for '+longDate(was)+'. It refreshes from the server when there is signal.';
     $('readStatus').className='status';pull(true);}}

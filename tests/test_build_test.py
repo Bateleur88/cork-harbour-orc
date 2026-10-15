@@ -490,7 +490,7 @@ def t9_fixes32_guards():
     g('1 the WhatsApp date is the day loaded, never S.date',
       "const head=[series.name,S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';" in bl
       and 'S.date' not in bl)
-    g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>render());" in code)
+    g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>{render();" in code)
     g('2 routing waypoints are not carried either', 'm.race<S.race&&!isCourseCard(m)&&!isRwCard(m)' in fn_body(code, 'function bank('))
     g('4 one line per refused name', "refused.map(cardRefusal));" in code and "$('readStatus').innerHTML=said.map(esc).join('<br>');" in code)
     cr = fn_body(code, 'function cardRefusal(')
@@ -752,7 +752,7 @@ def t16_day_guards():
     g('while held the loaded day is hidden and every other control does nothing', 'body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,' in page
       and "['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;" in code
       and "#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote" in code)
-    g('the 30-second refresh never loads a day by itself while held', "(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code)
+    g('the 30-second refresh never loads a day by itself while held', "!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);" in code)
     g('reopening the page when a day was loaded before says so when that was another day (changed by group 17)',
       "if(S.pulledDay){const was=S.pulledDay, now=$('day').value;" in code and "'The page was reopened: Race day is back to today, '" in code)
     g('T1: no comma before "time on the water"', "</select>, time on the water" not in code and code.count("</select> time on the water '") == 2)
@@ -773,21 +773,30 @@ def t17_reopen_names_guards():
     tail = code[code.index("if(S.pulledDay){const was=S.pulledDay, now=$('day').value;"):]
     tail = tail[:tail.index('})();')]
     g('3 reopened on another day: held, nothing loaded by itself, said with the way back',
-      "if(was!==now){$('reopenNote').hidden=false;" in tail and 'pull(false)' not in tail
+      "if(was!==now){reopenFrom=was;$('reopenNote').hidden=false;" in tail and 'pull(false)' not in tail
       and "' was loaded before and is still on this device: to carry on with it, set Race day back to it. To load today, tap Get latest marks.'" in tail)
     g('3 reopened on the same day: the stored copy shown at once, refreshed quietly in the background',
       "else{$('readStatus').textContent='The page was reopened: showing what this device holds for '+longDate(was)+'. It refreshes from the server when there is signal.';" in tail
       and tail.count('pull(true);') == 1)
     g('3 the background refresh is retried every 30 seconds and when the signal comes back, until one load succeeds',
       "reopenWait=!!S.pulledDay&&S.pulledDay===$('day').value;" in code
-      and "(pullOk||reopenWait)&&!dayHeld()&&$('day').value===todayISO())pull(true);" in code
+      and "!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);" in code
       and "window.addEventListener('online',()=>{if(reopenWait&&!dayHeld())pull(true);});" in code
-      and "pullOk=true; lastPullAt=Date.now(); reopenWait=false;" in code)
+      and "pullOk=true; lastPullAt=Date.now(); reopenWait=false; reopenFrom='';" in code)
     g('3 the race-day save of A10 (a) waits for that refresh',
       "if(!reopenWait&&S.pulledDay&&S.pulledDay===todayISO()&&$('day').value===S.pulledDay&&freezeNow())scheduleSave();" in fn_body(code, 'function render('))
     g('3 the first render comes after reopenWait is set', 0 <= code.index("reopenWait=!!S.pulledDay") < code.index('\nrender();\n'))
     g('3 the reopen note goes once the box and the day loaded agree', "if(!h)$('reopenNote').hidden=true;" in fn_body(code, 'function heldSay('))
-    g('3 Clear everything leaves nothing to refresh', "reopenWait=false; $('reopenNote').hidden=true;" in fn_body(code, 'function clearPageState('))
+    g('3 Clear everything leaves nothing to refresh', "reopenWait=false; reopenFrom=''; $('reopenNote').hidden=true;" in fn_body(code, 'function clearPageState('))
+    rb = fn_body(code, 'function reopenBack(')
+    g('3 (15 October) held on another day, the day loaded before is kept until Race day is set back to it',
+      "if(was!==now){reopenFrom=was;" in tail and "$('day').addEventListener('change',()=>{render();reopenBack();});" in code)
+    g('3 (15 October) Race day set back to it: shown at once and refreshed in the background, as on the same day',
+      "if(!reopenFrom||dayHeld()||$('day').value!==reopenFrom)return;" in rb and "reopenFrom='';reopenWait=true;" in rb
+      and "'The page was reopened: showing what this device holds for '+longDate(S.pulledDay)+'. It refreshes from the server when there is signal.'" in rb
+      and rb.count('pull(true);') == 1)
+    g('3 (15 October) the 30-second retry is not limited to today while a reopened day waits for its refresh',
+      "setInterval(()=>{if(!document.hidden&&!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);},30000);" in code)
     hl = fn_body(code, 'function helpLong(')
     g('2 the time in brackets is left out when the reference already ends with it',
       "f.endsWith(' '+w)?'':' ('+w+')'" in hl and "'°M from '+e.from+' ('+fixWhen(m)+')'" not in code)
