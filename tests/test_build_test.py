@@ -846,6 +846,29 @@ def t18_gone_start_guards():
       and "const u=usesOf(m);" in fn_body(code, 'async function typedAct('))
 
 
+def t19_remove_start_guards():
+    """.37, Remove Start (Pat, 15 October 2026): every record kept per start moves with its start; nothing of the removed
+    start passes to another."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('19 .37 Remove Start: ' + name, ok)
+    m = re.search(r"const START_KEYED=\[([^\]]*)\];", code)
+    keyed = set(re.findall(r"'(\w+)'", m.group(1))) if m else set()
+    g('the saved auto choices, estimates, midpoints, Grassy starts and set pins move with their start',
+      {'lineAuto', 'lineMid', 'lineEst', 'startPt', 'linePinAt'} <= keyed)
+    rf = fn_body(code, 'function recordFor(')
+    used = set(re.findall(r"S\.(\w+)\[k\]", rf)) | ({'lineEst'} if 'estSaved(k)' in rf else set())
+    g('every per-start record a course saves is moved by Remove Start', bool(used) and used <= keyed)
+    rs = fn_body(code, 'function removeStart(')
+    g('the removed start\'s records are deleted, later ones moved down one, the rest left',
+      "START_KEYED.forEach(f=>{const o=S[f]=S[f]||{};delete o[ckey(r,i)];" in rs
+      and "for(let j=i+1;j<=last;j++){const a=ckey(r,j);if(a in o){o[ckey(r,j-1)]=o[a];delete o[a];}}});" in rs
+      and "START_KEYED.forEach(f=>Object.keys(S[f]||{}).filter(own).forEach(k=>{last=Math.max(last,+k.split('|')[1]);}));" in rs)
+    g('a helper draft is not carried to another start', "estDraft={};" in rs)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -867,6 +890,7 @@ def main():
         t16_day_guards()
         t17_reopen_names_guards()
         t18_gone_start_guards()
+        t19_remove_start_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

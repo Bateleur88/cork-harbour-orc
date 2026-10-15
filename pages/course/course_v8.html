@@ -1488,8 +1488,11 @@ function renderCardSum(){
 }
 /* Remove start i of the current race only. Its groups, course and settings go, and the race's later starts move down one,
    each taking everything kept for it. Other races are not touched. The server keeps one record per race|start, so the
-   race's last start number, left vacant, is saved empty if the server had it, and no old course comes back on loading. */
-const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay'];
+   race's last start number, left vacant, is saved empty if the server had it, and no old course comes back on loading.
+   Every record kept per start moves with its start, so nothing of the removed start passes to another (Pat, 15 October
+   2026): before .37 the saved auto choices (lineAuto), estimates (lineEst, either shape) and midpoints (lineMid) stayed at
+   the old start number. Any new per-start record must be added here. */
+const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt'];
 function removeStart(i){
   const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
   let last=classesOf().length-1;
@@ -1497,6 +1500,7 @@ function removeStart(i){
   editClasses().splice(i,1);
   START_KEYED.forEach(f=>{const o=S[f]=S[f]||{};delete o[ckey(r,i)];
     for(let j=i+1;j<=last;j++){const a=ckey(r,j);if(a in o){o[ckey(r,j-1)]=o[a];delete o[a];}}});
+  estDraft={};   // a helper draft typed for a start that moved or went is not carried to another
   const gone=ckey(r,last); if(S.synced[gone]!==undefined){S.courses[gone]=[];stamp(gone);}
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
