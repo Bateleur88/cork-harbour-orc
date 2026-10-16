@@ -101,6 +101,14 @@ altered in ways it must refuse and checks that it writes nothing:
                 folder's caches and unregisters. Refusals: a worker with no key.js line, a stray /marks/ path, a
                 "record-" cache or no own-version check, and a page registering a worker twice or in any other form;
                 the one registration form builds. Guards, not proof: no JavaScript is run
+ 24  .39        static guards for A65 in the page (group 24): it registers the worker in exactly the one form, once; the
+                font stylesheet does not hold the page; saveCourses holds every save until the version is confirmed and
+                starts the check, before anything is sent; the change of day checks the version first and stops with its
+                own message and no "Change day anyway"; withdraw, correct, move, Undo's and Remove Start's withdrawals
+                wait for it (verReady) before they post; new fixes (sendOutbox) and Send (freezeSend) never wait; once
+                confirmed the check never runs again; a newer page reloads at most once a minute and twice in all, and
+                never where sessionStorage fails; the waiting and stuck lines and the Reload button. Guards, not proof:
+                no JavaScript is run
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -406,8 +414,9 @@ def t3_allowed(tmp):
         "regex literal with ' and //": inject("const rx=/a'b\\/\\//;try{localStorage.setItem(STORE+'rx',String(rx));}catch(e){}"),
         'division then setItem with STORE': inject("(a+b)/2;localStorage.setItem(STORE+'x',1)"),
         'division then getItem with STORE': inject("var h=x/y;sessionStorage.getItem(STORE+'z')"),
-        'the one service worker registration': inject(SW_REGISTER),
     }
+    cases['the one service worker registration, moved'] = inject(SW_REGISTER).replace(SW_REGISTER, '', 1) \
+        if SW_REGISTER in live else inject(SW_REGISTER)
     for name, text in cases.items():
         p = os.path.join(tmp, 'ok.html')
         with open(p, 'w', encoding='utf-8', newline='') as f:
@@ -1068,6 +1077,58 @@ def t23_worker_guards():
       [k for k in names if own(k, '/course/')] == ['coursepage|/course/|2026-10-06.39', 'coursepage|/course/|2026-10-06.40'])
 
 
+def t24_version_gate_guards():
+    """A65 in the page (2026-10-06.39). Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('24 A65: ' + name, ok, detail)
+    font = 'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap'
+    g('the worker registered in the one form, once', code.count(SW_REGISTER) == 1 and code.count('serviceWorker.register(') == 1)
+    g('the font stylesheet does not hold the page',
+      f'<link href="{font}" rel="stylesheet" media="print" onload="this.media=\'all\'">' in page
+      and f'<noscript><link href="{font}" rel="stylesheet"></noscript>' in page and page.count(f'href="{font}"') == 2)
+    ev = fn_body(code, 'function ensureVersion(')
+    g('once confirmed, the check never runs again', ev.startswith('function ensureVersion(){\n  if(verOk)return Promise.resolve(true);'))
+    g('the check: the page itself, no cache, a 20 s limit; confirmed only by its own PAGE_VERSION',
+      "fetch(location.pathname+'?check='+Date.now(),{cache:'no-store',signal:ac.signal})" in ev and 'VER_TIMEOUT_MS=20000' in code
+      and "if(m[1]===PAGE_VERSION){verOk=true;" in ev and 'if(!m)return false;' in ev)
+    nv = fn_body(code, 'function verNewer(')
+    g('a newer page: at most once a minute and twice in all, never where sessionStorage fails',
+      'VER_GAP_MS=60000' in code and 'VER_TRIES=2' in code and "const pvKey=STORE+'pv-'+v;" in nv
+      and '}catch(_){go=false;}' in nv and nv.count('location.replace(') == 1 and 'if(go){location.replace(' in nv)
+    g('rechecked when the signal returns', "window.addEventListener('online',()=>{if(!verOk)ensureVersion();});" in code)
+    sc = fn_body(code, 'async function saveCourses(')
+    i, j = sc.find('if(!verOk){ensureVersion();'), sc.find('savingC=true')
+    g('saveCourses holds every save and starts the check before anything is sent', 0 < i < j and sc.find('postFix(') > j)
+    g('confirmed: the save line is redrawn whether held or stuck, and what was held is sent',
+      'function verConfirmed(){saveState.verHeld=false;showSave();saveCourses();}' in code
+      and "if(m[1]===PAGE_VERSION){verOk=true;verStuck='';verConfirmed();return true;}" in ev)
+    pl = fn_body(code, 'async function pull(')
+    a, b = pl.find('if(!verOk){await ensureVersion();if(stale())return;}'), pl.find('res=await saveCourses(true,k=>!mine(k),true);')
+    g('a change of day checks the version first', 0 < a < b
+      and "if(res.err&&res.err.kind==='version'){blockDay(oldDay,day,'version',[],[],quiet);return;}" in pl)
+    bd = fn_body(code, 'function blockDay(')
+    g('and stops with its own message, no "Change day anyway"',
+      "else if(res==='version')msg='Still on '+F+': waiting to check the page version. Try again when there is signal.';" in bd)
+    for head, name in (('async function typedAct(', 'withdraw and correct'), ('async function removeStartAsked(', "Remove Start's withdrawals"),
+                       ('async function moveFix(', 'move to another race')):
+        f = fn_body(code, head)
+        k = f.find('if(!verReady(')
+        g(name + ' wait for the version before posting', 0 < k < f.find('postFix('))
+    u = code.find("if(act==='undoPlaced'){")
+    g("Undo's withdrawals wait for the version before posting", u > 0 and u < code.find('if(!verReady(say))return;', u)
+      < code.find("postFix({action:'withdraw',date:S.pulledDay,id:i.m.sid,reason:'estimate undone by the RO'}", u))
+    g('verReady used exactly four times', code.count('if(!verReady(') == 4)
+    g('new fixes never wait', 'verOk' not in fn_body(code, 'async function sendOutbox(') and 'verReady' not in fn_body(code, 'async function sendOutbox('))
+    g('Send never waits', 'function freezeSend(){if(freezeNow()){render();saveCourses();}}' in code and 'await saveCourses' not in fn_body(code, 'function freezeSend('))
+    g('the waiting and stuck lines', "['','Waiting: checking the page version']" in code
+      and 'A newer page is on the server but this device keeps getting the old one.' in code)
+    g('"All course changes saved" never while held', '!st.verHeld&&!verStuck&&st.okAt&&!n' in code)
+    g('the Reload button, once, shown only when stuck', page.count('id="verReload"') == 1 and "$('verReload').hidden=!verStuck;" in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1094,6 +1155,7 @@ def main():
         t21_t14_guards()
         t22_day_series_guards()
         t23_worker_guards()
+        t24_version_gate_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

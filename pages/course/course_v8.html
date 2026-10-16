@@ -6,7 +6,9 @@
 <title>Course plot – race officer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<!-- A65: the font never holds the page: it shows at once in the fallback font and switches when this arrives -->
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet"></noscript>
 <script src="/marks/key.js"></script>
 <style>
 #map{height:360px;border-radius:12px;overflow:hidden}
@@ -284,6 +286,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <!-- what happened to this device's course saves (saveLines): refused saves, why a load or a change of day sends, and
        "Change day anyway" when a change of day stopped on changes the server refused or failed -->
   <p class="status" id="saveStatus" role="status" aria-live="polite"></p>
+  <!-- A65: a newer page is on the server but this device keeps getting the old one (verStuck) -->
+  <button class="ghost" id="verReload" type="button" hidden>Reload</button>
   <button class="ghost" id="dayAnyway" type="button" hidden></button>
   <button class="ghost" id="recCB">Record committee boat here</button>
   <p class="status" id="cbStatus" role="status" aria-live="polite"></p>
@@ -425,16 +429,53 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
-   if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.38';
-(async()=>{try{
-  const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
-  const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
-  if(m&&m[1]!==PAGE_VERSION){
-    let done=false;try{done=sessionStorage.getItem(STORE+'pv-'+m[1])==='1';sessionStorage.setItem(STORE+'pv-'+m[1],'1');}catch(_){}
-    if(!done)location.replace(location.pathname+'?v='+encodeURIComponent(m[1]));
-  }
-}catch(_){}})();
+   if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
+const PAGE_VERSION='2026-10-06.39';
+/* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
+   move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
+   with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
+   checked again. Until then the check runs on opening, when the signal returns, before a save or an action, and with the
+   15 s save timer while a save is held. Not confirmed: no answer, a server error, or a page with no PAGE_VERSION.
+   A newer page on the server reloads this one silently, at most once a minute for the same version and twice in all
+   (sessionStorage, STORE+'pv-'+version); after that, or where sessionStorage cannot be used, the page never reloads by
+   itself: saves stay held under a red line with a Reload button (verStuck), so no reload loop is possible. */
+let verOk=false, verStuck='', verP=null;
+const VER_TIMEOUT_MS=20000, VER_GAP_MS=60000, VER_TRIES=2;
+function ensureVersion(){
+  if(verOk)return Promise.resolve(true);
+  if(verP)return verP;
+  verP=(async()=>{try{
+    const ac=new AbortController(), t=setTimeout(()=>ac.abort(),VER_TIMEOUT_MS);
+    let txt='';
+    try{const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store',signal:ac.signal});txt=r.ok?await r.text():'';}
+    finally{clearTimeout(t);}
+    const m=txt.match(/PAGE_VERSION='([^']+)'/);
+    if(!m)return false;
+    if(m[1]===PAGE_VERSION){verOk=true;verStuck='';verConfirmed();return true;}
+    verNewer(m[1]);return false;
+  }catch(_){return false;}finally{verP=null;}})();
+  return verP;}
+// the server has version v, not this one: reload to it if the guard allows, otherwise stay held with the Reload button
+function verNewer(v){
+  let go=false;
+  try{const pvKey=STORE+'pv-'+v;let o=null;try{o=JSON.parse(sessionStorage.getItem(pvKey)||'null');}catch(_){o=1;}
+    if(!o||typeof o!=='object')o={n:o?1:0,at:0};
+    if(o.n<VER_TRIES&&Date.now()-o.at<VER_GAP_MS)return;               // tried less than a minute ago: the next check retries
+    if(o.n<VER_TRIES){sessionStorage.setItem(pvKey,JSON.stringify({n:o.n+1,at:Date.now()}));
+      go=JSON.parse(sessionStorage.getItem(pvKey)).n===o.n+1;}        // only if the guard was really written
+  }catch(_){go=false;}
+  if(go){location.replace(location.pathname+'?v='+encodeURIComponent(v));return;}
+  if(verStuck!==v){verStuck=v;showSave();}}
+// confirmed: the save line is redrawn (a held save or a stuck page, its red line and Reload button, go) and what was held is sent
+function verConfirmed(){saveState.verHeld=false;showSave();saveCourses();}
+// the direct fix actions: true when they may go ahead; otherwise the check is started and the RO is told where they tapped
+function verReady(say){if(verOk)return true;ensureVersion();
+  say(verStuck?'Not done: a newer page is on the server. Tap Reload under Get latest marks.':'Waiting: checking the page version. Try again in a moment.',false);
+  return false;}
+ensureVersion();
+window.addEventListener('online',()=>{if(!verOk)ensureVersion();});
+// the saved copy for opening with no signal (sw.js, this folder only), registered only from the folder or index.html
+if('serviceWorker' in navigator&&(location.pathname.endsWith('/')||location.pathname.endsWith('/index.html')))navigator.serviceWorker.register('sw.js?v='+encodeURIComponent(PAGE_VERSION),{scope:'./'}).catch(()=>{});
 
 /* ---------- settings: must match marks.php ---------- */
 const ENDPOINT=MARKS_BASE+'marks.php';
@@ -655,6 +696,7 @@ function typedSays(t,ok){$('fxStatus').className='status'+(ok?' ok':' err');$('f
 async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S.pulledDay;
   if(!m||!isTypedPos(m)||!m.sid||m.pending)return;
   if(!day){typedSays('Load the day first.',false);return;}
+  if(!verReady(typedSays))return;   // A65
   const who=m.name+', Race '+m.race+', typed at '+(m.time||'an unknown time')+', '+geo(HARBOUR_CENTRE,m).nm.toFixed(1)+' nm from the map centre (51.82 N, 8.27 W)';
   if(act==='withdraw'){
     const u=usesOf(m);
@@ -1526,6 +1568,7 @@ async function removeStartAsked(i){const r=S.race, k=ckey(r,i), st=$('readStatus
     const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];
     if(others.length){say('Start '+(i+1)+' not removed: its '+its.map(x=>x.m.name).join(' and ')+' '+(its.length>1?'are':'is')+' also used by '+others.join(', ')+'.',false);return;}
     if(its.some(x=>x.m.pending||!x.m.sid)){say('Start '+(i+1)+' not removed: its line ends are still being sent. Try again in a moment.',false);return;}
+    if(!verReady(say))return;   // A65
     if(!confirm('Remove Start '+(i+1)+'? Its '+its.map(x=>x.m.name+' '+('at' in x.e?'set at '+x.e.at:'placed '+x.e.m+' m at '+pad(x.e.brgM,3)+'°M')).join(' and ')+
       (its.length>1?' are':' is')+' withdrawn from the race record (kept, marked withdrawn).'))return;
     for(const x of its){
@@ -2962,8 +3005,10 @@ async function pull(quiet){
           saveState.waiting='';showSave();
           if(stale())return;
           if(!done){blockDay(oldDay,day,'busy',[],[],quiet);return;}}
+        if(!verOk){await ensureVersion();if(stale())return;}   // A65: the version check first
         res=await saveCourses(true,k=>!mine(k),true);
         if(stale())return;
+        if(res.err&&res.err.kind==='version'){blockDay(oldDay,day,'version',[],[],quiet);return;}
         left=allKeys().filter(isDirty).filter(k=>(!cd[k]||cd[k]===oldDay)&&!mine(k));
       }else await saveCourses(true,k=>!mine(k));   // no day loaded before: nothing to send, as before
       // records made on this device for a third day (neither the old day nor this one) are not sent from here and would be
@@ -3079,6 +3124,7 @@ function renderMover(){
 async function moveFix(sid,newRace){
   const m=S.marks.find(x=>x.sid===sid); if(!m||newRace===m.race)return;
   const st=$('readStatus');
+  if(!verReady((t,ok)=>{st.textContent=t;st.className='status '+(ok?'ok':'err');}))return;   // A65
   st.textContent='Moving '+m.name+' to Race '+newRace+'…'; st.className='status';
   const day=workDay();
   const t=m.tms||Date.now();
@@ -3172,7 +3218,7 @@ function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses
 const SAVE_TIMEOUT_MS=20000, DAY_WAIT_MS=25000;
 const LOAD_WHY=['a course built before this day was loaded','a line end whose fix is gone was cleared',
   "a fix reference updated to the server's copy",'edits made while the day was not loaded'];
-let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};
+let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:'',verHeld:false};
 function nOf(n,one,many){return n+' '+(n===1?one:many);}
 function saveLabel(k){const p=k.split('|');return k==='_day'?'Series name':k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
 function saveKind(e){if(e&&e.message==='no race key')return 'key';if(e&&e.name==='AbortError')return 'noreply';
@@ -3186,6 +3232,10 @@ function otherDayKeys(cd,old,day){return allKeys().filter(k=>cd[k]&&cd[k]!==old&
 function sendable(k){const cd=S.courseDay||{};return isDirty(k)&&(!cd[k]||cd[k]===S.pulledDay)&&!refusedSame(k);}
 // the lines of #saveStatus and the Race view alerts, as [class, text]
 function saveLines(){const L=[], st=saveState, n=allKeys().filter(isDirty).length;
+  // A65: saves held until the page's version is confirmed; red when a newer page cannot be reached (verStuck)
+  if(verStuck)L.push(['err','A newer page is on the server but this device keeps getting the old one. Course changes are kept on '+
+    'this device and not sent until it reloads: tap Reload when there is signal.']);
+  else if(st.verHeld&&!verOk)L.push(['','Waiting: checking the page version']);
   if(st.waiting)L.push(['',st.waiting]);
   if(st.dayBlock)L.push(['err',st.dayBlock.msg]);
   if(st.dayNote)L.push(['',st.dayNote]);
@@ -3196,11 +3246,12 @@ function saveLines(){const L=[], st=saveState, n=allKeys().filter(isDirty).lengt
   Object.keys(st.refused).forEach(k=>{const r=st.refused[k];L.push(['err',saveLabel(k)+' not saved: '+(r.kind==='full'?
     'this day already has 200 courses on the server. It stays on this device; ask whoever manages the server.':
     (r.text||'refused by the server')+'. It stays on this device and is not sent again until it is changed.')]);});
-  if(!st.err&&!st.dayBlock&&!st.waiting&&st.okAt&&!n)L.push(['ok','All course changes saved · '+hhmm(st.okAt)]);
+  if(!st.err&&!st.dayBlock&&!st.waiting&&!st.verHeld&&!verStuck&&st.okAt&&!n)L.push(['ok','All course changes saved · '+hhmm(st.okAt)]);
   return L;}
 function showSave(){const L=saveLines(), el=$('saveStatus'), db=saveState.dayBlock, b=$('dayAnyway');
   el.innerHTML=L.map(x=>esc(x[1])).join('<br>');
   el.className='status'+(L.some(x=>x[0]==='err')?' err':L.length&&L.every(x=>x[0]==='ok')?' ok':'');
+  $('verReload').hidden=!verStuck;   // A65
   b.hidden=!(db&&db.drop); if(db&&db.drop)b.textContent='Change day anyway and lose '+(db.keys.length===1?'this change':'these '+db.keys.length+' changes');
   renderRaceAlerts(); showSeries();}   // A8: the line under the Series name box follows its save
 /* a change of day that stopped (pull): the old day stays loaded and the day box goes back to it (with no day loaded before,
@@ -3217,6 +3268,7 @@ function blockDay(from,to,res,left,other,quiet){
     ' not been sent ('+list+')', send=m===1?'to send it, load that day first':'to send them, load each of those days first';
   let msg, drop=false;
   if(res==='busy')msg='Still on '+F+': a course save on this device did not finish within 25 s. '+T+' was not loaded. Tap Get latest marks again in a moment.';
+  else if(res==='version')msg='Still on '+F+': waiting to check the page version. Try again when there is signal.';   // A65
   else{let head='', close='';drop=true;
     if(n){const kinds=left.map(k=>R[k]?R[k].kind:''), hard=res.err?res.err.kind:kinds.find(x=>!['refused','full','server'].includes(x));
       if(hard!==undefined){drop=false;
@@ -3261,6 +3313,10 @@ async function saveCourses(force,only,dayMode){
   // nothing to send: the 15 s timer reports only when it clears an earlier failure or load note, so "All course changes
   // saved" follows a real save or recovery, never an idle tick
   if(!ks.length){if(!dayMode&&(st.err||st.loadNote))saveDone(res);return res;}
+  // A65: nothing is sent until this page's version is confirmed with the server; the check is started (or retried) here,
+  // and verConfirmed runs this again once it succeeds
+  if(!verOk){ensureVersion();if(dayMode){res.err={kind:'version',status:0,text:''};return res;}
+    if(!st.verHeld){st.verHeld=true;showSave();}return res;}
   savingC=true; let fin; savingP=new Promise(r=>{fin=r;});
   // each record is taken now, before any send: a load of another day may clear these courses while they are being sent,
   // and what was built for this day must still reach this day's file, never an emptied copy
@@ -3497,6 +3553,7 @@ $('recCB').onclick=()=>{
   const tm=setTimeout(done,12000);
 };
 setInterval(()=>{sendOutbox();saveCourses();},15000);
+$('verReload').onclick=()=>{if(verStuck)location.replace(location.pathname+'?v='+encodeURIComponent(verStuck));};   // A65: the RO's own tap
 // "Change day anyway": the change of day that stopped goes ahead, dropping only the records named in its message
 $('dayAnyway').onclick=()=>{const db=saveState.dayBlock;if(!db||!db.drop)return;
   dayDrop={from:db.from,to:db.to,keys:db.keys.slice()};$('day').value=db.to;pull(false);};
@@ -3573,6 +3630,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     const others=[...new Set(its.reduce((a,i)=>a.concat(lineUsers(i.m,k)),[]))];
     if(others.length){say('Not undone: this estimate is also used by '+others.join(', ')+'. Undo would change '+(others.length>1?'their':'its')+' start line too.',false);return;}
     if(its.some(i=>i.m.pending||!i.m.sid)){say('The estimate is still being sent: try again in a moment.',false);return;}
+    if(!verReady(say))return;   // A65
     const one=its.length===1&&!('at' in its[0].e)?its[0]:null;
     if(!confirm(one?'Undo the estimate? The '+one.m.name+' placed '+one.e.m+' m at '+pad(one.e.brgM,3)+'°M is withdrawn from the race record (kept, marked withdrawn), and this start has one end again.':
       'Undo the estimate? '+its.map((i,j)=>(j?'the ':'The ')+i.m.name+' '+('at' in i.e?'set at '+i.e.at:'placed '+i.e.m+' m at '+pad(i.e.brgM,3)+'°M')).join(' and ')+
@@ -3757,7 +3815,7 @@ function clearPageState(){
   $('plot').hidden=false; $('mapWrap').hidden=true; $('mapStatus').textContent=''; $('mapStatus').className='status';
   cardOpen=false; classOpen=false; $('cardSec').open=false; $('moveWrap').open=false; document.querySelector('details.backup').open=false;
   $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
-  saveStop=false; dayDrop=null; saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};   // course saves
+  saveStop=false; dayDrop=null; saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:'',verHeld:false};   // course saves
   $('dayAnyway').hidden=true;
   seriesAskDay=''; $('seriesAsk').hidden=true;                                 // A8: the first save's question
   ['readStatus','cbStatus','seriesStatus','saveStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
