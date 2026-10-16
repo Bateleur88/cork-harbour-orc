@@ -30,7 +30,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Then:** A63 (finish line), A60 (copy a course from any start).
 
-**Then:** A7, A12, A13, A39, A17 to A19 (RIB page and server; tested on the water).
+**Then:** A7, A12, A13, A39, A17 to A19, A81 (RIB page and server; tested on the water).
 
 **Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A78 (layout, wording and line-end fixes); A24 (script tests). A79 goes with the next workbook release.
 
@@ -45,6 +45,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A26 | Live host: `X-RO-Key` header pass-through not yet checked | Check when C9 part 2 is built |
 | A67, A68 | Design points to settle before building | — |
 | C6 | Repository name and what counts as a venue | Parked; ties to the per-venue direction |
+| A80 | Home-screen icon (manifest) for the course page. On iPhone an icon avoids Safari clearing the copy after about a week, but keeps its own storage, separate from Safari's | None until taken up |
 
 ---
 
@@ -88,6 +89,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A17 | RIB page uses absolute `/marks/` paths | NOT STARTED | `/record-test/` path |
 | A18 | RIB service worker deletes every `record-` cache on the origin | NOT STARTED | |
 | A19 | RIB localStorage keys unprefixed | NOT STARTED | |
+| A81 | RIB worker can keep an older page as its offline copy: it installs from `/record/` and accepts any page with the version marker, so a host-cached older page can be saved by a newer worker, or replace a newer copy | NOT STARTED | Fix to match the course page worker (A65) once its design is agreed |
 | A20 | Snapshot embedded per build; one build and `marks.php` folder per venue | NOT STARTED | |
 | A21 | Cork constants in the RO page | NOT STARTED | |
 | A22 | No venue, club or course-area identifier in stored files | NOT STARTED | |
@@ -155,6 +157,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
 | A78 | A placed line end replaced by placing again can't be withdrawn on its own | DECIDED | Add a way to withdraw a placed end no start uses |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
+| A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
 
