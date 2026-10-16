@@ -102,6 +102,13 @@ ol.course li{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-ite
 .fields label{flex:1 1 130px;font-size:.85rem;color:var(--muted)}
 .fields input{display:block;width:100%;margin-top:4px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
 #series::placeholder{color:var(--warn)}#series:placeholder-shown{border:2px solid var(--warn)}
+/* A8: a series carried from an earlier day, shown for the RO to check, and the first save's question */
+#series.carried{border:2px solid var(--r2);color:var(--r2)}
+#seriesConfirm{margin-left:6px;padding:4px 10px;border-radius:8px;border:1px solid currentColor;background:var(--surface);color:var(--r2);font-size:.85rem;font-weight:700}
+#seriesAsk{position:fixed;left:0;right:0;bottom:0;z-index:2000;padding:12px 16px;background:var(--surface);border-top:2px solid var(--r2);box-shadow:0 -4px 14px rgba(0,0,0,.18)}
+#seriesAsk p{margin:0 0 8px;max-width:760px}
+#seriesAsk button{margin-right:8px;padding:10px 16px;border-radius:10px;border:1px solid var(--sea);background:var(--surface);color:var(--sea);font-weight:700}
+#seriesAsk button#seriesUse{background:var(--sea);color:var(--paper)}
 table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.95rem}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
 th{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -173,7 +180,7 @@ pre.fxTxt{white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:8px 0 
 .classpick .rm{margin-top:8px;width:100%;padding:8px;background:none;border:none;color:var(--warn);text-decoration:underline}
 .starts .edit{border-style:dashed;font-weight:400}
 /* A64: while the Race day box and the day loaded differ, nothing of the loaded day is shown or changed (Pat, 14 October 2026) */
-body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,body.dayHeld .wrap>.setupOnly~*:not(#clear):not(.foot){display:none!important}
+body.dayHeld .wrap>.raceOnly,body.dayHeld #seriesBox,body.dayHeld #seriesAsk,body.dayHeld #recCB,body.dayHeld #recCB~*,body.dayHeld .wrap>.setupOnly~*:not(#clear):not(.foot){display:none!important}
 .linkBtn{background:none;border:0;padding:0;color:var(--sea);text-decoration:underline;font-size:.85rem;cursor:pointer}
 .sugTxt{color:var(--muted)}
 .leaflet-tooltip.estTip{color:#B3261E;font-weight:600}
@@ -243,6 +250,8 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
 <div class="wrap">
   <!-- A64: the Race day box and the day loaded differ: said here in both views, everything else held until Get latest marks -->
   <p class="status err" id="dayHeldNote" role="status" hidden></p>
+  <!-- A8: asked once, at the day's first course save, while the day shows a carried series -->
+  <div id="seriesAsk" role="alertdialog" aria-labelledby="seriesAskTxt" hidden><p id="seriesAskTxt"></p><button type="button" id="seriesUse">Use it</button><button type="button" id="seriesChange">Change</button></div>
   <div class="modebar" role="group" aria-label="View"><button type="button" data-mode="setup">Setup</button><button type="button" data-mode="race">Race</button></div>
   <!-- race view: what is needed after the gun. Shared controls (laid-mark notices, wind, committee boat) move into the slots here -->
   <div class="raceOnly">
@@ -253,10 +262,14 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <div class="setupOnly">
   <h1>Course plot</h1>
   <p class="lede">Get the marks from the RIBs, tap them in rounding order, and get the legs with bearings and distances.</p>
+  <!-- A8: the series of the day loaded (its _day record), never one name for every day -->
+  <div id="seriesBox">
   <div class="fields" style="margin-top:0">
-    <label>Series name<input id="series" maxlength="60" autocomplete="off" placeholder="Not set – type the series name"></label>
+    <label>Series Name for Message heading<input id="series" maxlength="60" autocomplete="off" placeholder="Not set – type the series name"></label>
   </div>
   <p class="status" id="seriesStatus" role="status" aria-live="polite"></p>
+  <p class="status amberTxt" id="seriesCarry" hidden><span id="seriesCarryTxt"></span><button type="button" id="seriesConfirm">Confirm</button></p>
+  </div>
   <h2>1 · Marks from the RIBs</h2>
   <div class="fields" style="margin-top:0">
     <label>Race day<input id="day" type="date"></label>
@@ -413,7 +426,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads once from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.37';
+const PAGE_VERSION='2026-10-06.38';
 (async()=>{try{
   const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});
   const m=(await r.text()).match(/PAGE_VERSION='([^']+)'/);
@@ -456,13 +469,15 @@ function save(){try{localStorage.setItem(K,JSON.stringify(S));}catch(e){}}
 let S=load(),text='';
 // the page's two layout breakpoints (see the CSS media queries), set before anything can render
 const MQ_MID=window.matchMedia('(min-width:700px)'), MQ_WIDE=window.matchMedia('(min-width:1100px)');
-/* The series name belongs to the whole series and is kept on the server (marks.php ?type=series); it is set here, by the RO.
-   The last value seen is kept on this phone outside S, so Clear everything keeps it and it shows without signal.
-   An edit not yet sent ("dirty") wins over the server's copy until it has been sent. */
-const SERIES_KEY=STORE+'course-series';
-let series=(()=>{try{const o=JSON.parse(localStorage.getItem(SERIES_KEY)||'{}');
-  if(o&&typeof o.name==='string')return{name:o.name,dirty:!!o.dirty};}catch(e){}return{name:'',dirty:false};})();
-function saveSeries(){try{localStorage.setItem(SERIES_KEY,JSON.stringify(series));}catch(e){}}
+/* A8 (Pat, 16 October 2026): the series name belongs to the race day. It is the day's "_day" record, {series}, saved and
+   loaded with the day's courses by the course-save machinery (S.daySeries, S.courseDay._day; recordFor, applyServerCourses),
+   so an edit with no signal waits, is retried and is sent before a change of day, and changing it changes only that day.
+   A day with none of its own shows the series of the latest earlier day that has one (marks.php ?type=seriesbefore,
+   S.carry), for the RO to check: Confirm, or the first course save's question, saves it to the day. Opening a day writes
+   nothing. The site-wide series.json is no longer read or written, and the name this phone kept for it up to .37
+   ("course-series", with its unsent mark) is removed. */
+try{localStorage.removeItem(STORE+'course-series');}catch(e){}
+let seriesAskDay='';   // the day the first save's question is on screen for ('' when it is not); page state only
 
 
 /* ---------- geometry ----------
@@ -543,7 +558,7 @@ function parsePos(str){
    saved from one never matches a server fix, even one later recorded with the same race, name and order (STATUS A38).
    Returns the marks read, in order. */
 function readPaste(txt){
-  let race=1, date=S.date; const added=[];   // a pasted header never sets the series: it is set on this page only
+  let race=1, date=S.date; const added=[];   // a pasted header never sets the series: it is set in Setup, for the day
   const hdr=txt.match(/^\s*\*(.+?)\s*[–-]\s*(.+?)\*/m);
   if(hdr)date=hdr[2].trim();
   // a line naming a card mark is refused and stores nothing (cardNameOf); the other lines are read as before
@@ -1274,6 +1289,7 @@ function cardImport(){
 /* ---------- render ---------- */
 function render(){
   heldSay();   // A64
+  showSeries();   // A8
   // on the race day, the fixes the open course's auto choices use are saved with it as soon as it is shown (A10 (a)),
   // before anything is drawn, so the rows say "saved with the course" at once; after a reopen, only once the refresh from
   // the server has succeeded (reopenWait, A64; Pat, 14 October 2026)
@@ -2238,7 +2254,7 @@ function buildLegs(){
   buildShift(cs);
   // the date is the day loaded, whether or not it has fixes, whatever was pasted; a Race day changed but not loaded is said
   // above Send and holds it back (setSendWarn; Pat, 13 October 2026)
-  const head=[series.name,S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';
+  const head=[daySeries(),S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';   // A8: the day's series
   // the WhatsApp text: a clean course list for competitors (STATUS A40). Routing waypoints are left out of the course line,
   // the mark list and the positions; the line, squaring and wind analysis stay on the page only
   const wRows=L.rows.filter(e=>!isRwCard(markById(e.id)));
@@ -2316,11 +2332,12 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   if(L.fPt&&!L.fl&&!L.ccfg&&gsOf(r,st))gsN.push('last leg ('+last+' - '+L.fPt.name+') measured to Grassy Mid');   // T14: the Grassy start is the Grassy Walk line, measured from Grassy Mid, said beside the button as a plain note (a recorded line not used in orange), never STAND-IN; nothing copied changes
   const w=(S.winds||{})[k]||{}, num=v=>v!==''&&v!=null&&isFinite(+v)?+v:null, twd=num(w.twd), tws=num(w.tws);
   if(tws!==null&&twd===null)side.push('Wind speed not copied: no wind direction entered.');
-  const ser=String(series.name||'').trim();
-  if(!ser)side.push('Series name not set: the copy has no series. Set it at the top of Setup.');
+  const ser=daySeries();   // A8: the day's own series, never one carried and not yet confirmed
+  if(!ser)side.push('Series not set for this day: the copy has no series.');
   const pre=[inc.length&&'INCOMPLETE - '+inc.join('; '),sti.length&&'STAND-IN - '+sti.join('; ')].filter(Boolean);
   const preS=[incS.length&&'INCOMPLETE - '+incS.join('; '),sti.length&&'STAND-IN - '+sti.join('; ')].filter(Boolean);
-  const label=[ser,ccDate(S.pulledDay||$('day').value),'Race '+r,'Start '+(st+1)].filter(Boolean).join(', ');
+  // A8 (Pat, 16 October 2026): the series goes to Sail Scoring as "x-series" only, never in the name
+  const label=[ccDate(S.pulledDay||$('day').value),'Race '+r,'Start '+(st+1)].filter(Boolean).join(', ');
   // the race name first, then the warnings in short form (the full ones are beside the button)
   const name=label+(preS.length?' - '+preS.join('. '):'');
   const wind=(twd!==null?', "windDirection": '+twd:'')+(twd!==null&&tws!==null?', "windSpeed": '+tws:'');
@@ -2926,6 +2943,7 @@ async function pull(quiet){
     // a withdrawn typed position stays in the record but is never loaded; a corrected one names its replacement (A46)
     const rpl={}; j.marks.forEach(m=>{if(m&&m.withdrawn&&typeof m.replaced_by==='string')rpl[m.id]=m.replaced_by;});
     const list=j.marks.filter(m=>!m.withdrawn).sort((a,b)=>a.time-b.time);
+    const newDay=day!==S.pulledDay;   // T20: a different day opens Start 1, or the first start with a course
     if(day!==S.pulledDay){
       /* A different day is being loaded. Clear only what belongs to another day: a course built for this day before it
          could be loaded (imported at the dock, before signal) is kept, on a new phone or one last used on another day.
@@ -2970,6 +2988,9 @@ async function pull(quiet){
       saveState.okAt=0; showSave();
       ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
+      // A8: the day's series likewise: one set for this day before it could be loaded stays, unsent; nothing carries over
+      if(!mine('_day')||!S.daySeries){delete S.daySeries;delete S.courseDay._day;}
+      S.carry=null; seriesAskDay='';
       // start groups likewise: only a race's groups set for this day stay; the old day-wide groups come from this day's file only
       Object.keys(S.raceClasses).forEach(r=>{if(!mine('_starts|'+r))delete S.raceClasses[r];});
       S.dayClasses=[];
@@ -2980,6 +3001,7 @@ async function pull(quiet){
       // any copy already on the server (the rule for unsent edits) and are saved once this load finishes
       S.synced={}; Object.keys(S.courses).forEach(k=>{if((S.courses[k]||[]).length)S.synced[k]='';}); dayGen++; S.lineFlags={};
       new Set(Object.keys(S.raceClasses).concat(Object.keys(S.picked))).forEach(r=>{S.synced['_starts|'+r]='';});
+      if(S.daySeries)S.synced._day='';
       Object.keys(S.synced).forEach(k=>{ln[k]=LOAD_WHY[0];});
       S.marks=S.marks.filter(m=>m.pending||(m.card&&kept.has(m.race)));
       ['laidSel','laidNo','laidAck','laidFrz'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!kept.has(+k.split('|')[0]))delete o[k];});});
@@ -3002,6 +3024,14 @@ async function pull(quiet){
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
+    // T20 (Pat, 16 October 2026): in the race the rule above chose, Start 1, or the first start that has a course
+    if(newDay&&!stale()){const sts=Object.keys(S.courses).filter(k=>/^\d+\|\d+$/.test(k)&&+k.split('|')[0]===S.race&&(S.courses[k]||[]).length)
+      .map(k=>+k.split('|')[1]); S.start=sts.length?Math.min(...sts):0;}
+    // A8: a day with no series of its own is offered the latest earlier day's, for the RO to check; nothing is written
+    if(!stale()&&!daySeries()){try{
+      const rq=await keyFetch(ENDPOINT+'?type=seriesbefore&date='+encodeURIComponent(day),{}), jq=await rq.json();
+      if(rq.ok&&jq.ok&&!stale()&&typeof jq.series==='string'&&typeof jq.from==='string')S.carry={day,series:jq.series,from:jq.series?jq.from:''};
+    }catch(_){}}
     if(!stale())checkLineRefs(ln);
     if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false; reopenFrom='';}
     // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
@@ -3109,6 +3139,7 @@ function missName(id){const p=String(id).split('|');
   return Object.keys(CARD.marks).find(x=>x.toLowerCase()===nm)||nm;}
 function recordFor(k){
   if(k==='_starts')return {classes:S.dayClasses};
+  if(k==='_day')return {series:S.daySeries||''};   // A8: the day's series
   // a race's start groups, and its picked chips as "picked" only when it has any, so a race without picks saves exactly as before
   if(k.indexOf('_starts|')===0){const pk=S.picked[k.slice(8)]||[], ld=laidRec(k.slice(8)), o={classes:S.raceClasses[k.slice(8)]||[]};
     if(pk.length)o.picked=pk.slice(); if(Object.keys(ld).length)o.laid=ld; return o;}
@@ -3125,9 +3156,9 @@ function recordFor(k){
           ...(S.startPt&&S.startPt[k]?{startPt:S.startPt[k]}:{}),
           ...(S.linePinAt&&S.linePinAt[k]?{linePinAt:Object.assign({},S.linePinAt[k])}:{})};
 }
-function isEmptyRec(k,r){if(r.lineMid||r.lineEst||r.startPt||r.linePinAt)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
-// the day-wide _starts is never sent: only each race's own groups are
-function allKeys(){return [...new Set(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{})))];}
+function isEmptyRec(k,r){if(k==='_day')return !r.series;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
+// the day-wide _starts is never sent: only each race's own groups are; the day's series is _day (A8)
+function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}))))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null, savingP=null, saveStop=false, dayDrop=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
@@ -3143,7 +3174,7 @@ const LOAD_WHY=['a course built before this day was loaded','a line end whose fi
   "a fix reference updated to the server's copy",'edits made while the day was not loaded'];
 let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};
 function nOf(n,one,many){return n+' '+(n===1?one:many);}
-function saveLabel(k){const p=k.split('|');return k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
+function saveLabel(k){const p=k.split('|');return k==='_day'?'Series name':k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
 function saveKind(e){if(e&&e.message==='no race key')return 'key';if(e&&e.name==='AbortError')return 'noreply';
   if(e&&typeof e.status==='number')return e.status===400?'refused':e.status===429?'full':e.status===403?'auth':'server';
   return 'nosignal';}
@@ -3171,7 +3202,7 @@ function showSave(){const L=saveLines(), el=$('saveStatus'), db=saveState.dayBlo
   el.innerHTML=L.map(x=>esc(x[1])).join('<br>');
   el.className='status'+(L.some(x=>x[0]==='err')?' err':L.length&&L.every(x=>x[0]==='ok')?' ok':'');
   b.hidden=!(db&&db.drop); if(db&&db.drop)b.textContent='Change day anyway and lose '+(db.keys.length===1?'this change':'these '+db.keys.length+' changes');
-  renderRaceAlerts();}
+  renderRaceAlerts(); showSeries();}   // A8: the line under the Series name box follows its save
 /* a change of day that stopped (pull): the old day stays loaded and the day box goes back to it (with no day loaded before,
    it stays as set). left: the old day's records not sent; other: records made for third days (otherDayKeys). The button
    is offered when the old day's records all ended in 400, 429 or 500 (or there are none); third-day records can always
@@ -3224,6 +3255,9 @@ async function saveCourses(force,only,dayMode){
   all.forEach(k=>{if(st.refused[k]&&!refusedSame(k))delete st.refused[k];});
   all.filter(k=>st.refused[k]).forEach(k=>{res.results[k]={kind:st.refused[k].kind,status:0,text:st.refused[k].text};});
   const ks=all.filter(k=>!st.refused[k]);
+  // A8: the day's first course save, on a day showing a carried series, asks once whether to use it (never for a change
+  // of day's save of the day being left, never while held); the course is saved whatever the answer
+  if(!dayMode&&!dayHeld()&&ks.some(k=>k!=='_day')&&carried()&&S.seriesAsked!==day){S.seriesAsked=day;save();askSeries();}
   // nothing to send: the 15 s timer reports only when it clears an earlier failure or load note, so "All course changes
   // saved" follows a real save or recovery, never an idle tick
   if(!ks.length){if(!dayMode&&(st.err||st.loadNote))saveDone(res);return res;}
@@ -3259,6 +3293,9 @@ function applyServerCourses(obj){
     if(k==='_starts'){S.dayClasses=Array.isArray(rec.classes)?rec.classes:[];S.synced[k]=JSON.stringify(recordFor(k));return;}
     // a device that has never synced this course takes the server's version; otherwise unsent local edits win until saved
     if(S.synced[k]!==undefined&&isDirty(k))return;
+    // A8: the day's series, the day it came from
+    if(k==='_day'){if(typeof rec.series!=='string')return;S.daySeries=rec.series;S.courseDay=S.courseDay||{};S.courseDay._day=S.pulledDay;
+      S.synced[k]=JSON.stringify(recordFor(k));return;}
     if(k.indexOf('_starts|')===0){const r=k.slice(8);
       // picked chips: the server's list replaces this phone's (unsent edits returned above); a record without one (an
       // older page, or a race with none) is an empty list; a pick whose fix is no longer on the server is dropped, as a
@@ -3318,9 +3355,9 @@ if(S.recShape!==2){Object.keys(S.synced||{}).forEach(k=>{const v=S.synced[k];
 if(!Array.isArray(S.outbox))S.outbox=[];
 if(!Array.isArray(S.notSent))S.notSent=[];
 function cbLabel(){return 'Record committee boat here – Race '+S.race;}
-/* A refused reply throws 'server <status>' as before (syncSeries tests for 'server 400'), with e.status and e.text, the
+/* A refused reply throws 'server <status>' as before, with e.status and e.text, the
    server's own error text cut to 120 characters (shown escaped). ms: abandon the request after ms milliseconds, an
-   AbortError ("no reply"); course saves and the queue (sendOutbox) pass it, the series name does not. */
+   AbortError ("no reply"); course saves (the day's series among them, A8) and the queue (sendOutbox) pass it. */
 async function postFix(body,ms){
   const ac=ms&&typeof AbortController==='function'?new AbortController():null, tm=ac?setTimeout(()=>ac.abort(),ms):0;
   try{
@@ -3406,30 +3443,35 @@ $('notSent').onclick=e=>{const b=e.target.closest('button[data-ns]');if(!b)retur
   $('cbStatus').textContent=outName(x.f)+': removed from this device.';$('cbStatus').className='status';
   readSays(x.f,outName(x.f)+': removed from this device.','');commit();};
 
-/* ---------- series name: send an unsent edit, then take the server's copy ---------- */
-function showSeries(msg,cls){
-  if(document.activeElement!==$('series'))$('series').value=series.name;
-  if(msg!==undefined){$('seriesStatus').textContent=msg;$('seriesStatus').className='status'+(cls?' '+cls:'');}
-}
-let seriesBusy=false;
-async function syncSeries(){
-  if(seriesBusy)return; seriesBusy=true;
-  let refused=false, sent;
-  try{
-    while(series.dirty){sent=series.name;                // edited again while sending: send the newer one too
-      await postFix({action:'series',name:sent});
-      if(series.name===sent){series.dirty=false;saveSeries();showSeries(sent?'Series name saved for every RO device.':'Series name cleared.','ok');}}
-    const r=await keyFetch(ENDPOINT+'?type=series',{}), j=await r.json();
-    if(r.ok&&j.ok&&!series.dirty&&typeof j.name==='string'&&j.name!==series.name){series.name=j.name;saveSeries();showSeries();render();}
-  }catch(e){
-    if(/server 400/.test(e.message)){refused=true;      // only the refused name is dropped; a newer edit is sent by the rerun below
-      if(series.name===sent){series.dirty=false;saveSeries();showSeries('The server refused that series name. Use up to 60 characters.','err');}}
-    else if(series.dirty)showSeries('Series name kept on this phone. It is saved for every RO device once there is signal.');
-  }
-  seriesBusy=false;
-  if(refused)syncSeries();   // put the saved name back now, not at the next refresh
-}
-$('series').onchange=e=>{series.name=e.target.value.trim();series.dirty=true;saveSeries();showSeries();render();syncSeries();};
+/* ---------- series name for the day (A8) ----------
+   daySeries: the day's own series (its _day record), '' if none. carried: a series offered from an earlier day while the
+   day has none (S.carry, from the last load of this day). The box shows the day's own, or the carried one in orange with
+   "carried from dd/mm/yyyy: check" and Confirm; with no earlier day, "No series set for this day" in orange. */
+function dmy(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[3]+'/'+m[2]+'/'+m[1]:String(iso||'');}
+function daySeries(){return typeof S.daySeries==='string'&&(S.courseDay||{})._day===workDay()?S.daySeries:'';}
+function carried(){const c=S.carry;return !daySeries()&&c&&c.day===workDay()&&c.series?c:null;}
+function seriesSet(v){S.daySeries=v;stamp('_day',true);commit();}
+function askSeries(){const c=carried();if(!c)return;seriesAskDay=c.day;
+  $('seriesAskTxt').textContent='Series for this day: '+c.series+' (carried from '+dmy(c.from)+'). Use it?';$('seriesAsk').hidden=false;}
+function showSeries(){const own=daySeries(), c=carried(), el=$('series'), d=workDay();
+  if(document.activeElement!==el)el.value=own||(c?c.series:'');
+  el.classList.toggle('carried',!own&&!!c);
+  $('seriesCarry').hidden=!c; $('seriesCarryTxt').textContent=c?'carried from '+dmy(c.from)+': check':'';
+  const none=!own&&!c&&S.carry&&S.carry.day===d&&!S.carry.series, st=$('seriesStatus');
+  st.textContent=none?'No series set for this day':own?(isDirty('_day')?'Series for '+longDate(d)+': not saved yet. It is saved with the course changes when there is signal.':
+    'Saved for '+longDate(d)+' only.'):'';
+  st.className='status'+(none?' amberTxt':'');
+  if(seriesAskDay&&(seriesAskDay!==d||!c))seriesAskDay='';   // another day, or the day now has its own series
+  $('seriesAsk').hidden=!seriesAskDay;}
+// the box saves the day's series when the RO leaves it; Confirm saves the carried one; the question's two answers
+$('series').onchange=e=>{const v=e.target.value.replace(/\s+/g,' ').trim(), c=carried();
+  if(!daySeries()&&c&&v===c.series)return showSeries();   // the carried name left as shown: Confirm saves it
+  if(seriesAskDay){seriesAskDay='';$('seriesAsk').hidden=true;}
+  seriesSet(v);};
+$('seriesConfirm').onclick=()=>{const c=carried();if(!c)return;S.seriesAsked=c.day;seriesSet(c.series);};
+$('seriesUse').onclick=()=>{const c=carried();seriesAskDay='';$('seriesAsk').hidden=true;if(c)seriesSet(c.series);};
+$('seriesChange').onclick=()=>{seriesAskDay='';$('seriesAsk').hidden=true;setMode('setup');
+  const el=$('series');el.scrollIntoView({block:'center'});el.focus();el.select();};
 var cbWatch=null, cbStop=null;   // cbStop ends a committee boat fix in progress without saving it (Clear everything)
 $('recCB').onclick=()=>{
   if(cbWatch!==null)return;
@@ -3698,8 +3740,8 @@ $('copy').onclick=async()=>{if(!text||!sendOk())return;freezeSend();try{await na
    S=fresh() resets what is saved on this phone; clearPageState() resets what a fresh load starts with that is NOT in S
    (module variables, inputs and panels render() does not set, work under way). Together they must leave the page as a
    reload would. THE ONE PLACE TO UPDATE: a change that adds page state outside S resets it in clearPageState(), or Clear
-   everything leaves it on screen until the page is reloaded. Kept on purpose, outside S: the series name and the race
-   key (last values seen). Nothing here is sent to the server. */
+   everything leaves it on screen until the page is reloaded. Kept on purpose, outside S: the race key (last value seen).
+   The day's series is in S (A8), so a clear removes it from this phone like the courses. Nothing here is sent to the server. */
 function clearPageState(){
   pullSeq++; pullOk=false; lastPullAt=0; dayGen++; clearTimeout(saveTimer);   // a load or save under way changes nothing now
   reopenWait=false; reopenFrom=''; $('reopenNote').hidden=true;               // A64: nothing stored is left to refresh
@@ -3717,11 +3759,12 @@ function clearPageState(){
   $('day').value=todayISO(); $('newWind').value=''; $('paste').value='';
   saveStop=false; dayDrop=null; saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:''};   // course saves
   $('dayAnyway').hidden=true;
+  seriesAskDay=''; $('seriesAsk').hidden=true;                                 // A8: the first save's question
   ['readStatus','cbStatus','seriesStatus','saveStatus'].forEach(id=>{const el=$(id);if(el){el.textContent='';el.className='status';}});
 }
 // what this phone holds that the server does not have yet, which a clear would lose: fixes waiting to send (committee
 // boat and typed marks) and course edits not yet saved (one per race and start, start groups one per race), counted as
-// saveCourses would send them; '' when there is none. The series name is not counted: a clear keeps it. An unsent change
+// saveCourses would send them; '' when there is none. An unsent change of the day's series counts as one (A8). An unsent change
 // of a race's picked chips counts as a course edit (it is saved in that race's _starts|race record).
 // Also counted (STATUS A38): fixes in the "Not sent" list, and pasted positions, which are on this device only.
 function unsentText(){const n=S.outbox.length, c=allKeys().filter(isDirty).length, count=(x,one,many)=>x+' '+(x===1?one:many);
@@ -3738,12 +3781,10 @@ $('clear').onclick=()=>{if(!armed){armed=true;const u=unsentText();$('clear').te
 render();
 $('recCB').textContent=cbLabel();
 sendOutbox();
-showSeries(); syncSeries();
-setInterval(()=>{if(!document.hidden)syncSeries();},30000);
-window.addEventListener('online',syncSeries);
 /* A64: while held, a tap, a change or typing anywhere but the Race day box, Get latest marks, "Change day anyway", Clear
-   everything, the series name and the view buttons does nothing (the held parts are hidden as well) */
-{const ok=t=>!!t.closest('#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote');
+   everything and the view buttons does nothing (the held parts are hidden as well); the series name is the loaded day's
+   (A8), so it is held and hidden too */
+{const ok=t=>!!t.closest('#day,#pull,#heldPull,#dayAnyway,#clear,.modebar,#dayHeldNote');
  ['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;
    const t=e.target&&e.target.closest&&e.target.closest('button,a,input,select,textarea');if(!t||ok(t))return;
    e.preventDefault();e.stopImmediatePropagation();},true));

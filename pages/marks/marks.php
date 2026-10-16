@@ -2,10 +2,15 @@
 /*
  * Laid-mark and course store for the RIB record page and the RO course page.
  * Marks go in data/marks-YYYY-MM-DD.json, built courses in data/courses-YYYY-MM-DD.json.
- * The series name, one for the whole series and set from the RO page, goes in data/series.json. Fixes no longer
- * carry a series: a "series" sent by a page not yet reloaded is ignored, never a reason to refuse the fix.
- * Courses are keyed race|start; each race's start groups are _starts|race. The older day-wide _starts
- * (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
+ * The series name belongs to the race day (STATUS A8, Pat 16 October 2026): the "_day" record of that day's courses
+ * file, {"data": {"series": "<name>"}}, saved like a course (the race key, the lock, the course history), with a series
+ * of 60 characters or fewer (spaces collapsed; no < or >; "" leaves the day with none). GET ?type=seriesbefore&date=
+ * gives the series of the most recent earlier day whose _day record has one, and that day ("" and "" if none): the RO
+ * page offers it as carried, for the RO to check. data/series.json (one name for every day, action "series" and GET
+ * ?type=series) is kept exactly as before for pages up to 2026-10-06.37; the page from .38 neither reads nor writes it.
+ * Fixes no longer carry a series: a "series" sent by a page not yet reloaded is ignored, never a reason to refuse the fix.
+ * Courses are keyed race|start; each race's start groups are _starts|race; the day's series is _day. The older day-wide
+ * _starts (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
  * Upload it as /marks/marks.php. It creates a "data" folder next to itself.
  * The race key is not in this file or the repository. It is read from key.js next to this file, the same
  * file both pages load, so the key is set in one place. Copy key.example.js to key.js, set the key, and
@@ -231,6 +236,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (file_exists($f)) { $j = json_decode(file_get_contents($f), true); if (is_array($j)) $r = $j; }
     out(200, array('ok' => true, 'date' => $d, 'decisions' => array_values($r)));
   }
+  if (arg($_GET, 'type', '') === 'seriesbefore') {   // the series carried to this day: the latest earlier day with one
+    $names = @scandir($dir);
+    $names = is_array($names) ? $names : array();
+    rsort($names);
+    foreach ($names as $fn) {
+      if (!preg_match('/^courses-(\d{4}-\d{2}-\d{2})\.json$/D', $fn, $m) || strcmp($m[1], $d) >= 0) continue;
+      $j = json_decode((string)@file_get_contents($dir . '/' . $fn), true);
+      $r = (is_array($j) && isset($j['_day']) && is_array($j['_day'])) ? arg($j['_day'], 'data', null) : null;
+      $s = is_array($r) ? arg($r, 'series', '') : '';
+      if (is_string($s) && trim($s) !== '') out(200, array('ok' => true, 'date' => $d, 'series' => $s, 'from' => $m[1]));
+    }
+    out(200, array('ok' => true, 'date' => $d, 'series' => '', 'from' => ''));
+  }
   if (arg($_GET, 'type', '') === 'courses') {
     $f = $dir . '/courses-' . $d . '.json';
     $c = array();
@@ -267,12 +285,18 @@ $d      = arg($in, 'date', '');
 $id     = arg($in, 'id', '');
 if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
 
-/* ---------- POST action "course": save one built course (race|start) or one race's start groups (_starts|race) ---------- */
+/* ---------- POST action "course": save one built course (race|start), one race's start groups (_starts|race) or the
+   day's series (_day) ---------- */
 if ($action === 'course') {
   $k    = arg($in, 'key', '');
   $data = arg($in, 'data', null);
-  if (!is_string($k) || !preg_match('/^(\d{1,2}\|\d{1,2}|_starts(\|[1-9])?)$/D', $k)) out(400, array('ok' => false, 'error' => 'bad course name'));
+  if (!is_string($k) || !preg_match('/^(\d{1,2}\|\d{1,2}|_starts(\|[1-9])?|_day)$/D', $k)) out(400, array('ok' => false, 'error' => 'bad course name'));
   if (!is_array($data) || strlen(json_encode($data)) > 50000) out(400, array('ok' => false, 'error' => 'bad course'));
+  if ($k === '_day') {               // exactly {"series": text of 60 characters or fewer}, stored as the server reads it
+    $s = (count($data) === 1 && array_key_exists('series', $data)) ? name_text($data['series'], 60) : null;
+    if ($s === null) out(400, array('ok' => false, 'error' => 'bad series: up to 60 characters, no < or >'));
+    $data = array('series' => $s);
+  }
   $by = name_text(arg($in, 'by', null), 10000);     // optional: who saved this version; cut to NAME_MAX, else dropped
   $by = ($by !== null && preg_match('/^.{0,' . NAME_MAX . '}/us', $by, $mm)) ? trim($mm[0]) : '';
   $f  = $dir . '/courses-' . $d . '.json';

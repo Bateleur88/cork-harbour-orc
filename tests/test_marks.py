@@ -66,6 +66,15 @@ still present and unchanged:
                 and time, "corrected_from") and withdraws the old one ("replaced by correction", "replaced_by") in one
                 write; a retry writes nothing; a bad position, a used new id, a withdrawn fix or a RIB fix is refused and
                 writes nothing; a re-post of a withdrawn fix keeps it withdrawn; GET returns both; the fixture is untouched
+ 19  _day       the day's series (STATUS A8) as the "_day" record of the courses file: saved with spaces collapsed (60
+                characters, not bytes), read back by GET ?type=courses, replaced versions in the course history, an
+                identical save writes nothing, "" accepted; refused 400 (61 characters, not a string, null, no series,
+                another field, a list, < or >, a control character, "_day|1", "_days") or 403 (wrong key), each
+                writing nothing; the other courses and series.json untouched
+ 20  carried    GET ?type=seriesbefore&date=: the series and date of the latest earlier day whose _day has a series;
+                the day itself, a later day, a _day with "" or a malformed series, a damaged courses file and a history
+                file are not counted; "" and "" with none; a bad or missing date 400, a wrong key 403; nothing written;
+                ?type=series still reads series.json
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -796,6 +805,80 @@ def t18_withdraw():
            f'correct {s_cor} {cor_ok}; retry {cretry_ok}; GET {get_ok}; {detail}')
 
 
+def t19_day_series():
+    d = setup('t19')
+    _, want = fixture()
+    s = [req(d, body=course('_day', {'series': '  Autumn \t League '}))[0]]
+    c = load(course_file(d))
+    stored = c.get('_day', {}).get('data')
+    others = all(c.get(k) == v for k, v in want.items())
+    before = (sha(course_file(d)), sha(history_file(d)))
+    s_same, j_same = req(d, body=course('_day', {'series': 'Autumn League'}))
+    unchanged = (sha(course_file(d)), sha(history_file(d))) == before and j_same.get('unchanged') is True
+    s.append(req(d, body=course('_day', {'series': 'é' * 60}))[0])     # 60 characters, 120 bytes
+    sixty = load(course_file(d))['_day']['data']
+    s.append(req(d, body=course('_day', {'series': 'August / September'}))[0])
+    hist = [e['data'] for e in load(history_file(d)).get('_day', [])]
+    s.append(req(d, body=course('_day', {'series': ''}))[0])          # the day left with no series
+    cleared = load(course_file(d))['_day']['data']
+    s.append(req(d, body=course('_day', {'series': 'Autumn League'}))[0])
+    before = (sha(course_file(d)), sha(history_file(d)), sha(series_file(d)))
+    bad = {'61 chars': {'series': 'x' * 61}, 'not a string': {'series': 5}, 'null': {'series': None},
+           'no series': {}, 'other field': {'series': 'A', 'x': 1}, 'list': ['Autumn League'],
+           'angle brackets': {'series': '<b>A</b>'}, 'control character': {'series': 'A\u0007B'}}
+    got = {n: req(d, body=course('_day', v))[0] for n, v in bad.items()}
+    got['wrong key'] = req(d, body=course('_day', {'series': 'Frostbite'}), key='wrong-key')[0]
+    got['_day|1'] = req(d, body=course('_day|1', {'series': 'Frostbite'}))[0]
+    got['_days'] = req(d, body=course('_days', {'series': 'Frostbite'}))[0]
+    refused = (all(v == 400 for n, v in got.items() if n != 'wrong key') and got['wrong key'] == 403
+               and (sha(course_file(d)), sha(history_file(d)), sha(series_file(d))) == before)
+    s_get, g = req(d, 'GET', query=f'type=courses&date={DAY}')
+    read = g.get('courses', {}).get('_day', {}).get('data')
+    ok, detail = intact(d)
+    report('19 day series (_day)', ok and s == [200] * 5 and stored == {'series': 'Autumn League'} and others
+           and s_same == 200 and unchanged and sixty == {'series': 'é' * 60}
+           and hist == [{'series': 'Autumn League'}, {'series': 'é' * 60}] and cleared == {'series': ''}
+           and refused and s_get == 200 and read == {'series': 'Autumn League'} and not os.path.exists(series_file(d))
+           and not leftovers(d),
+           f'statuses {s}; stored {stored}; courses kept {others}; identical save wrote nothing {unchanged}; '
+           f'history {hist}; cleared {cleared}; refused {got}, files {"unchanged" if refused else "CHANGED"}; '
+           f'GET {s_get} {read}; series.json {"absent" if not os.path.exists(series_file(d)) else "WRITTEN"}; {detail}')
+
+
+def t20_series_before():
+    d = setup('t20')
+    data = os.path.join(d, 'data')
+    def day(date, rec):
+        json.dump(rec, open(os.path.join(data, f'courses-{date}.json'), 'w', encoding='utf-8'))
+    c11 = {'1|0': {'data': {'entries': []}, 'updated': 1}}
+    day('2026-09-27', {'_day': {'data': {'series': 'Autumn League'}, 'updated': 1}, **c11})
+    day('2026-10-04', c11)                                                          # no _day
+    day('2026-10-11', {'_day': {'data': {'series': ''}, 'updated': 1}, **c11})     # a _day with no series
+    day('2026-10-18', {'_day': {'data': {'series': 'Triple Crown'}, 'updated': 1}})
+    day('2026-10-25', {'_day': {'data': {'series': 5}, 'updated': 1}})             # malformed: not a series
+    open(os.path.join(data, 'courses-2026-11-01.json'), 'w').write('{damaged')      # unreadable: skipped
+    json.dump({'_day': [{'data': {'series': 'History only'}}]}, open(os.path.join(data, 'courses-history-2026-11-02.json'), 'w'))
+    json.dump({'name': 'Site wide', 'updated': 1}, open(series_file(d), 'w'))
+    req(d, 'GET', query=f'date={DAY}')                       # the first request writes data/.htaccess
+    files = {f: sha(os.path.join(data, f)) for f in os.listdir(data)}
+    q = lambda date, key=KEY: req(d, 'GET', query=f'type=seriesbefore&date={date}', key=key)
+    cases = {'2026-09-27': ('', ''), '2026-09-28': ('Autumn League', '2026-09-27'),
+             '2026-10-11': ('Autumn League', '2026-09-27'), '2026-10-18': ('Autumn League', '2026-09-27'),
+             '2026-10-19': ('Triple Crown', '2026-10-18'), '2026-11-03': ('Triple Crown', '2026-10-18'),
+             '2026-01-01': ('', '')}
+    got = {}
+    for date in cases:
+        st, j = q(date)
+        got[date] = (j.get('series'), j.get('from')) if st == 200 and j.get('ok') and j.get('date') == date else (st, j)
+    bad = {'bad date': q('2026-1-01')[0], 'no date': req(d, 'GET', query='type=seriesbefore')[0],
+           'wrong key': q('2026-10-19', key='wrong-key')[0]}
+    old_series = req(d, 'GET', query='type=series')[1].get('name')
+    nothing_written = {f: sha(os.path.join(data, f)) for f in os.listdir(data)} == files
+    report('20 series carried (seriesbefore)', got == cases and bad == {'bad date': 400, 'no date': 400, 'wrong key': 403}
+           and old_series == 'Site wide' and nothing_written,
+           f'{got}; refused {bad}; series.json still read {old_series!r}; nothing written {nothing_written}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
@@ -804,7 +887,7 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages, t17_picked, t18_withdraw):
+                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

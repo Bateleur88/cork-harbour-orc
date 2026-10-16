@@ -886,6 +886,8 @@ Race-day precautions once .37 is live: 1 stays (the page cannot open with no sig
 
 **T22 (Pat, 16 October 2026), found while preparing the orc-ireland.org install package.** `marks.php` still accepts the race key in the address (`?key=`, `arg($_GET, 'key', '')`) as well as in the `X-Race-Key` header, and a key in the address can reach the web server's access logs. Stop accepting it, key by header only, on both sites (tradboats.ie and orc-ireland.org), in the next release. Neither page sends `?key=`, and `tests/test_marks.py` sends the header only. This is A25 (decided by Pat 13 October 2026, moved to .38 on 14 October); T22 adds that it applies to orc-ireland.org as well.
 
+**.38: the series name per race day (A8) and A71 (16 October 2026).** The series is each day's `_day` record in its courses file, saved like a course with the race key, so changing it changes only that day; `series.json` stays for .37. A day with no series of its own shows the latest earlier day's, to confirm or change at its first course save. The box is "Series Name for Message heading"; Sail Scoring gets the series as "x-series" only. A loaded day opens Start 1, or its first start with a course (A71, was T20). On copies of the live and test backups .38 matched .37 apart from the series, with identical saves, and .37 reads days holding `_day` unchanged. Pat's test: all 30 steps of TEST_STEPS_A8.md passed (PC and tablet). Not released: after the 18 October race; the backfill (`scripts/backfill_day_series.py`: 27 September, 4, 11 and 18 October) runs at release.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues

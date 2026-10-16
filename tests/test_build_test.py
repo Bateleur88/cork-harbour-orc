@@ -87,6 +87,11 @@ altered in ways it must refuse and checks that it writes nothing:
                 never checked for their age; a leg through RO-chosen waypoints names a laid mark's fix on the physical leg
                 touching it; every start with a saved course is shown. Guards, not proof: no JavaScript is run
 
+ 22  .38        static guards for A8 (the series name per race day, T21) and T20 (group 22): the day's _day record
+                saved and loaded by the course-save machinery; no series.json and no series refresh; the device's old
+                series name removed; carried from the latest earlier day with Confirm, the first save's question,
+                "No series set for this day"; the outputs use the day's own series; a day loaded opens Start 1 or its
+                first start with a course. Guards, not proof: no JavaScript is run
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -100,7 +105,8 @@ SCRIPT = os.path.join(ROOT, 'scripts', 'build_test.py')
 PAGE = os.path.join(ROOT, 'pages', 'course', 'course_v8.html')
 MARKS = os.path.join(ROOT, 'pages', 'marks', 'marks.php')
 # every browser storage key name the page writes after STORE ('pv-' is followed by a PAGE_VERSION). The Review name and
-# RO key (ro-name, ro-key) went with the review decisions in 2026-10-06.20; the page no longer reads or writes them
+# RO key (ro-name, ro-key) went with the review decisions in 2026-10-06.20; the page no longer reads or writes them.
+# From 2026-10-06.38 (A8) course-series is only removed, never read or written
 STORE_NAMES = {'pv-', 'race-key', 'course-plot-v1', 'course-series'}
 failed = []
 
@@ -429,6 +435,12 @@ def t7_a40_guards():
             # .37 T14 (Pat, 15 October 2026): the Grassy start notes beside the button, plain and orange, not STAND-IN;
             # the copied text is unchanged
             body = chr(10).join(x for x in body.split(chr(10)) if 'gsN.push(' not in x and 'const gsN=[]' not in x)
+            # .38 A8 (Pat, 16 October 2026): the series is the day's (daySeries), with the warning for the day
+            body = re.sub(r"const ser=daySeries\(\);[ ]*\n", "const ser=String(series.name||'').trim();\n", body)
+            body = body.replace("side.push('Series not set for this day: the copy has no series.');",
+                                "side.push('Series name not set: the copy has no series. Set it at the top of Setup.');")
+            # and the series out of the name: "x-series" only (Pat, 16 October 2026)
+            body = re.sub(r"\n[ ]*\n  const label=\[ccDate\(", "\n  const label=[ser,ccDate(", body)
             body = body.replace("side),\n    notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])};}", 'side)};}')
         if head == 'function setCC(':   # .37 T14: the plain and orange notes after the warnings
             body = body.replace("+(d.notes||[]).map(n=>'<p class=\"'+n.cls+'\">'+esc(n.t)+'</p>').join('')", '')
@@ -494,7 +506,8 @@ def t9_fixes32_guards():
     bl = fn_body(code, 'function buildLegs(')
     # .34 (Pat, 13 October 2026): the date is the day loaded, and a Race day changed but not loaded holds Send back (group 11)
     g('1 the WhatsApp date is the day loaded, never S.date',
-      "const head=[series.name,S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';" in bl
+      # .38 A8: the series is the day's (daySeries), the date as before
+      "const head=[daySeries(),S.pulledDay?longDate(S.pulledDay):''].filter(Boolean).join(' – ')||'Course';" in bl
       and 'S.date' not in bl)
     g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>{render();" in code)
     g('2 routing waypoints are not carried either', 'm.race<S.race&&!isCourseCard(m)&&!isRwCard(m)' in fn_body(code, 'function bank('))
@@ -755,9 +768,11 @@ def t16_day_guards():
     g('held while the box and the day loaded differ, said in both views', "function dayHeld(){return !!(S.pulledDay&&$('day').value&&$('day').value!==S.pulledDay);}" in code
       and page.count('id="dayHeldNote"') == 1 and "'Race day is '+longDate($('day').value)+' but '+longDate(S.pulledDay)+' is loaded: tap Get latest marks.'" in code
       and "heldSay();" in fn_body(code, 'function render('))
-    g('while held the loaded day is hidden and every other control does nothing', 'body.dayHeld .wrap>.raceOnly,body.dayHeld #recCB,body.dayHeld #recCB~*,' in page
+    # .38 A8: the series name is the loaded day's, so it is held and hidden too (and the first save's question)
+    g('while held the loaded day is hidden and every other control does nothing',
+      'body.dayHeld .wrap>.raceOnly,body.dayHeld #seriesBox,body.dayHeld #seriesAsk,body.dayHeld #recCB,body.dayHeld #recCB~*,' in page
       and "['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev,e=>{if(!dayHeld())return;" in code
-      and "#day,#pull,#heldPull,#dayAnyway,#clear,#series,.modebar,#dayHeldNote" in code)
+      and "#day,#pull,#heldPull,#dayAnyway,#clear,.modebar,#dayHeldNote" in code)
     g('the 30-second refresh never loads a day by itself while held', "!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);" in code)
     g('reopening the page when a day was loaded before says so when that was another day (changed by group 17)',
       "if(S.pulledDay){const was=S.pulledDay, now=$('day').value;" in code and "'The page was reopened: Race day is back to today, '" in code)
@@ -925,6 +940,61 @@ def t21_t14_guards():
     g('the Grassy start point and finish point are found exactly as before', "gsOf(r,st)?cardEnd('Grassy Mid','Start')" in code)
 
 
+def t22_day_series_guards():
+    """.38 A8 (T21, Pat 16 October 2026): the series name per race day, the day's _day record saved by the course-save
+    machinery; carried from the latest earlier day for the RO to check; T20: a day loaded opens Start 1 or its first
+    start with a course."""
+    page = read(PAGE)
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(page)
+    g = lambda name, ok: report('22 .38 A8: ' + name, ok)
+    g('series.json is neither read nor written, and there is no series refresh',
+      "type=series'" not in code and "action:'series'" not in code and 'syncSeries' not in code and 'series.name' not in code)
+    g("the device's old series name and its unsent mark are removed, never read or written",
+      code.count("course-series") == 1 and "try{localStorage.removeItem(STORE+'course-series');}catch(e){}" in code)
+    g('no "saved for every RO device"', 'every RO device' not in page)
+    g("the day's series is the _day record of the course-save machinery",
+      "if(k==='_day')return {series:S.daySeries||''};" in fn_body(code, 'function recordFor(')
+      and "function isEmptyRec(k,r){if(k==='_day')return !r.series;" in code
+      and "function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(" in code
+      and "k==='_day'?'Series name':" in fn_body(code, 'function saveLabel('))
+    ap = fn_body(code, 'function applyServerCourses(')
+    g("a load takes the server's series unless this device has an unsent edit, and labels it with its day",
+      ap.index('if(S.synced[k]!==undefined&&isDirty(k))return;') < ap.index("if(k==='_day'){")
+      and "S.daySeries=rec.series;S.courseDay=S.courseDay||{};S.courseDay._day=S.pulledDay;" in ap)
+    g('an edit of the series is labelled with the day loaded and saved like a course',
+      "function seriesSet(v){S.daySeries=v;stamp('_day',true);commit();}" in code)
+    pl = fn_body(code, 'async function pull(')
+    g('a change of day keeps only a series set for the day being loaded, unsent, and drops the carried one',
+      "if(!mine('_day')||!S.daySeries){delete S.daySeries;delete S.courseDay._day;}" in pl and "S.carry=null; seriesAskDay='';" in pl
+      and "if(S.daySeries)S.synced._day='';" in pl)
+    g('the carried series is looked up only for a day with none of its own, and nothing is written',
+      "if(!stale()&&!daySeries()){try{" in pl and "?type=seriesbefore&date='" in pl and code.count('seriesbefore') == 1)
+    g("outputs use the day's own series: WhatsApp heading and Copy for Sail Scoring",
+      "const head=[daySeries()," in fn_body(code, 'function buildLegs(') and "const ser=daySeries();" in fn_body(code, 'function ccDoc(')
+      and "side.push('Series not set for this day: the copy has no series.');" in code
+      and """(ser?'  "x-series": '+JSON.stringify(ser)+',\\n':'')""" in code)
+    g('the box is labelled "Series Name for Message heading"; the series goes to Sail Scoring as "x-series" only, never in "name"',
+      '<label>Series Name for Message heading<input id="series"' in page
+      and "const label=[ccDate(S.pulledDay||$('day').value),'Race '+r,'Start '+(st+1)]" in fn_body(code, 'function ccDoc('))
+    g('carried: "carried from dd/mm/yyyy: check" with Confirm; none: "No series set for this day" in orange',
+      "'carried from '+dmy(c.from)+': check'" in code and 'id="seriesConfirm">Confirm</button>' in page
+      and "'No series set for this day'" in code and "st.className='status'+(none?' amberTxt':'');" in code)
+    sc = fn_body(code, 'async function saveCourses(')
+    g('the first course save on a day showing a carried series asks once, never on a change of day or while held',
+      "if(!dayMode&&!dayHeld()&&ks.some(k=>k!=='_day')&&carried()&&S.seriesAsked!==day){S.seriesAsked=day;save();askSeries();}" in sc
+      and "'Series for this day: '+c.series+' (carried from '+dmy(c.from)+'). Use it?'" in code
+      and '>Use it</button>' in page and '>Change</button>' in page)
+    g('Confirm marks the day as asked; Change opens the Series name box',
+      "$('seriesConfirm').onclick=()=>{const c=carried();if(!c)return;S.seriesAsked=c.day;seriesSet(c.series);};" in code
+      and "$('seriesChange').onclick=()=>{seriesAskDay='';$('seriesAsk').hidden=true;setMode('setup');" in code)
+    g('Clear everything resets the question', "seriesAskDay=''; $('seriesAsk').hidden=true;" in fn_body(code, 'function clearPageState('))
+    g('T20: a different day opens Start 1, or the first start with a course, in the race chosen as before',
+      pl.index('applyServerCourses(jc.courses)') < pl.index('if(newDay&&!stale()){const sts=') and 'S.start=sts.length?Math.min(...sts):0;' in pl
+      and 'const newDay=day!==S.pulledDay;' in pl and 'if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;' in pl)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -949,6 +1019,7 @@ def main():
         t19_remove_start_guards()
         t20_time_and_remove_guards()
         t21_t14_guards()
+        t22_day_series_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
