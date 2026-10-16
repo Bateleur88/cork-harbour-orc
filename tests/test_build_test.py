@@ -92,6 +92,15 @@ altered in ways it must refuse and checks that it writes nothing:
                 series name removed; carried from the latest earlier day with Confirm, the first save's question,
                 "No series set for this day"; the outputs use the day's own series; a day loaded opens Start 1 or its
                 first start with a course. Guards, not proof: no JavaScript is run
+ 23  worker     the course page's service worker (STATUS A65, group 23): the test build writes course-test/sw.js, the
+                live worker with only its key.js line changed to /marks-test/key.js, and BUILD.txt names its hash; the
+                live worker names /marks/ only in that line; neither names a "record-" cache; the cache is named
+                "coursepage|"+folder+"|"+version and the clean-up deletes only caches of exactly its own folder, so the
+                test worker's can never match a /course/ cache (the rule also run on sample names); a page is kept only
+                if its PAGE_VERSION is the worker's own, at install and on refresh; the kill switch deletes only its own
+                folder's caches and unregisters. Refusals: a worker with no key.js line, a stray /marks/ path, a
+                "record-" cache or no own-version check, and a page registering a worker twice or in any other form;
+                the one registration form builds. Guards, not proof: no JavaScript is run
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -103,12 +112,16 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, 'scripts', 'build_test.py')
 PAGE = os.path.join(ROOT, 'pages', 'course', 'course_v8.html')
+SW = os.path.join(ROOT, 'pages', 'course', 'sw.js')
+SW_KILL = os.path.join(ROOT, 'pages', 'course', 'sw-kill.js')
 MARKS = os.path.join(ROOT, 'pages', 'marks', 'marks.php')
 # every browser storage key name the page writes after STORE ('pv-' is followed by a PAGE_VERSION). The Review name and
 # RO key (ro-name, ro-key) went with the review decisions in 2026-10-06.20; the page no longer reads or writes them.
 # From 2026-10-06.38 (A8) course-series is only removed, never read or written
 STORE_NAMES = {'pv-', 'race-key', 'course-plot-v1', 'course-series'}
 failed = []
+sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+from build_test import SW_REGISTER, SW_KEY_LIVE  # noqa: E402  the one registration form and the worker's key.js line
 
 
 def report(name, ok, detail=''):
@@ -117,8 +130,8 @@ def report(name, ok, detail=''):
         failed.append(name)
 
 
-def run(page, out):
-    return subprocess.run([sys.executable, SCRIPT, '--page', page, '--marks', MARKS, '--out', out],
+def run(page, out, sw=SW):
+    return subprocess.run([sys.executable, SCRIPT, '--page', page, '--sw', sw, '--marks', MARKS, '--out', out],
                           capture_output=True, text=True, encoding='utf-8')
 
 
@@ -156,6 +169,14 @@ def t0_build(tmp):
                 .replace('<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', '<meta charset="utf-8">'))
     back = re.sub(r'<body>\n<div id="testBanner"[^\n]*</div>', '<body>', back)
     report('0 nothing else changed', back == live)
+    # the worker (STATUS A65): only its key.js line differs from the live one
+    lw, tw = read(SW), read(os.path.join(out, 'course-test', 'sw.js'))
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    report('0 worker: key.js from /marks-test/', tw.count(build_test.SW_KEY_TEST) == 1)
+    report('0 worker: no /marks other than /marks-test/', not re.search(r'/marks(?!-test/)', tw))
+    report('0 worker: nothing else changed', tw.replace(build_test.SW_KEY_TEST, build_test.SW_KEY_LIVE) == lw)
+    report('0 worker: BUILD.txt names its hash', 'course-test/sw.js      sha256 ' in read(os.path.join(out, 'BUILD.txt')))
 
 
 def t1_live_page():
@@ -336,7 +357,8 @@ def t2_refusals(tmp):
         'document.cookie': inject("document.cookie='a=1';"),
         "document['cookie']": inject("const c=document['cookie'];"),
         'Cache API': inject("try{caches.open('x');}catch(e){}"),
-        'service worker': inject("try{navigator.serviceWorker.register('sw.js');}catch(e){}"),
+        'service worker (any other registration)': inject("try{navigator.serviceWorker.register('sw.js');}catch(e){}"),
+        'service worker registered twice': inject(SW_REGISTER + SW_REGISTER),
         'division then setItem, no STORE': inject("(a+b)/2;localStorage.setItem('x',1)"),
         'division then getItem, no STORE': inject("var h=x/y;sessionStorage.getItem('z')"),
         'stray /marks/ path': inject("const OLD='/marks/marks.php';"),
@@ -353,6 +375,23 @@ def t2_refusals(tmp):
         after = read(os.path.join(out, 'course-test', 'index.html'), 'rb')
         report('2 refused: ' + name, r.returncode != 0 and 'REFUSED' in r.stdout and after == before,
                f'exit {r.returncode}; {r.stdout.strip()[:160]}; earlier build {"kept" if after == before else "CHANGED"}')
+    # a worker the build must refuse (STATUS A65), with the good page
+    lw = read(SW)
+    workers = {
+        'worker: key.js line missing': lw.replace(SW_KEY_LIVE, "const KEY='';"),
+        'worker: stray /marks/ path': lw.replace("const WAIT=3000", "const OLD='/marks/marks.php', WAIT=3000"),
+        'worker: a "record-" cache': lw.replace("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
+                                                "const CACHE='record-'+VERSION;"),
+        'worker: no own-version check': lw.replace("return !!m&&m[1]===VERSION;", "return !!m;"),
+    }
+    for name, text in workers.items():
+        p = os.path.join(tmp, 'bad-sw.js')
+        with open(p, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+        r = run(PAGE, out, p)
+        after = read(os.path.join(out, 'course-test', 'index.html'), 'rb')
+        report('2 refused: ' + name, text != lw and r.returncode != 0 and 'REFUSED' in r.stdout and after == before,
+               f'exit {r.returncode}; {r.stdout.strip()[:160]}')
 
 
 def t3_allowed(tmp):
@@ -367,6 +406,7 @@ def t3_allowed(tmp):
         "regex literal with ' and //": inject("const rx=/a'b\\/\\//;try{localStorage.setItem(STORE+'rx',String(rx));}catch(e){}"),
         'division then setItem with STORE': inject("(a+b)/2;localStorage.setItem(STORE+'x',1)"),
         'division then getItem with STORE': inject("var h=x/y;sessionStorage.getItem(STORE+'z')"),
+        'the one service worker registration': inject(SW_REGISTER),
     }
     for name, text in cases.items():
         p = os.path.join(tmp, 'ok.html')
@@ -995,6 +1035,39 @@ def t22_day_series_guards():
       and 'const newDay=day!==S.pulledDay;' in pl and 'if(!kept.has(S.race))S.race=kept.size?Math.min(...kept):1;' in pl)
 
 
+def t23_worker_guards():
+    """The course page's service worker and its kill switch (STATUS A65). Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    g = lambda name, ok, detail='': report('23 worker: ' + name, ok, detail)
+    code, kill = build_test.strip_js(read(SW)), build_test.strip_js(read(SW_KILL))
+    g('the live worker passes worker_problems', not build_test.worker_problems(code), '; '.join(build_test.worker_problems(code)))
+    g('the live worker names /marks/ only in its key.js line', re.findall(r'/marks[^\'"]*', code) == ['/marks/key.js']
+      and code.count(SW_KEY_LIVE) == 1 and '/marks-test' not in code)
+    g('no "record-" cache in the worker or the kill switch', 'record-' not in code and 'record-' not in kill)
+    g('the folder and version come from its own address', "const VERSION=new URL(location.href).searchParams.get('v')||'';" in code
+      and "const PAGE=new URL('./',location.href).href, PAGE_PATH=new URL(PAGE).pathname;" in code)
+    g('install fetches ./?v=<its own version> and keeps it only if it is its own',
+      "fetch(PAGE+'?v='+encodeURIComponent(VERSION),{cache:'reload'})" in code and "if(res.type!=='basic'||!await isOwn(res))throw" in code)
+    g('a refresh keeps only its own version', "(page?await isOwn(res):res.ok)" in code)
+    g('the clean-up deletes only its own folder', "if(ownCache(k)&&k!==CACHE)await caches.delete(k);" in code)
+    g('a navigation to another version waits 10 s', "OTHER_WAIT=10000" in code and "wait=v!==null&&v!==VERSION?OTHER_WAIT:WAIT" in code)
+    g('only the page and its key.js are handled', "const key=page?PAGE:(r.url===KEY?KEY:'');" in code and "if(!key)return;" in code)
+    g('the kill switch deletes only its own folder and unregisters',
+      "p.length===3&&p[0]==='coursepage'&&p[1]===PAGE_PATH" in kill and 'self.registration.unregister()' in kill)
+
+    # the clean-up rule, as the worker states it, run on sample names: the test worker never touches a live cache
+    def own(k, folder):
+        p = k.split('|')
+        return len(p) == 3 and p[0] == 'coursepage' and p[1] == folder
+    names = ['coursepage|/course/|2026-10-06.39', 'coursepage|/course/|2026-10-06.40', 'coursepage|/course-test/|2026-10-06.39-test',
+             'record-2026-10-06.1', 'coursepage|/course|x', 'coursepage|/course/|x|y']
+    g("the test worker's clean-up never matches a /course/ cache", not any(own(k, '/course-test/') for k in names if '|/course/|' in k)
+      and [k for k in names if own(k, '/course-test/')] == ['coursepage|/course-test/|2026-10-06.39-test'])
+    g("the live worker's clean-up never matches a test or RIB cache",
+      [k for k in names if own(k, '/course/')] == ['coursepage|/course/|2026-10-06.39', 'coursepage|/course/|2026-10-06.40'])
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1020,6 +1093,7 @@ def main():
         t20_time_and_remove_guards()
         t21_t14_guards()
         t22_day_series_guards()
+        t23_worker_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

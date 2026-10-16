@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Build a parallel TEST copy of the race officer page and marks.php, for /course-test/ and /marks-test/.
 
-    python scripts/build_test.py [--page pages/course/course_v8.html] [--marks pages/marks/marks.php] [--out build/test]
+    python scripts/build_test.py [--page pages/course/course_v8.html] [--sw pages/course/sw.js] [--marks pages/marks/marks.php]
+                                 [--out build/test]
 
 Writes, and nothing else:
     OUT/course-test/index.html   the RO page, talking only to /marks-test/ and keeping its own browser data
+    OUT/course-test/sw.js        the page's service worker (STATUS A65), keeping /marks-test/key.js instead of /marks/key.js
     OUT/marks-test/marks.php     an unchanged copy of marks.php (it keeps its data next to itself, in /marks-test/data/)
-    OUT/BUILD.txt                source commit, where each file came from (A28), PAGE_VERSION and SHA-256 of both files
+    OUT/BUILD.txt                source commit, where each file came from (A28), PAGE_VERSION and SHA-256 of each file
 
 The test page differs from the live one in exactly these lines, each of which must occur exactly once:
     <script src="/marks/key.js">        -> /marks-test/key.js
@@ -14,16 +16,24 @@ The test page differs from the live one in exactly these lines, each of which mu
     const PAGE_VERSION='X'              -> 'X-test'
     <title>                             -> "TEST – " in front
 plus a noindex meta tag and a red "TEST COPY" banner showing the PAGE_VERSION at the top of the page.
+The test worker differs from the live one in exactly one line, its key.js (/marks/key.js -> /marks-test/key.js). It takes
+its folder (/course-test/) and version from its own address, so its caches ("coursepage|/course-test/|<version>") never
+share a name with the live worker's ("coursepage|/course/|<version>").
 
 Refuses, and writes nothing, if:
     - a line to be replaced is missing or occurs more than once (the page changed: update this script);
     - any mention of localStorage or sessionStorage in the page (live source or test result), outside comments, is not
       a direct getItem, setItem or removeItem whose key is STORE+... or a name defined as STORE+... (a key the test copy
-      would share with live), or the page uses IndexedDB, cookies, the Cache API or a service worker. This is a guard,
-      not proof: the runtime key listing in the test browser stays mandatory for every build (see storage_problems);
+      would share with live), or the page uses IndexedDB, cookies, the Cache API or a service worker other than the one
+      registration SW_REGISTER, at most once. This is a guard, not proof: the runtime key listing in the test browser
+      stays mandatory for every build (see storage_problems);
     - the test page still contains "/marks" anywhere other than "/marks-test/" (it could reach live data);
     - the banner, the TEST title or the noindex tag is missing from the result;
-    - the copied marks.php is not byte-identical to its source.
+    - the copied marks.php is not byte-identical to its source;
+    - the worker's key.js line is missing or doubled, the live worker names /marks/ anywhere but that line, the test
+      worker still contains "/marks" anywhere other than "/marks-test/", or either worker's code names a "record-" cache
+      (the RIB worker deletes those, STATUS A18), names its cache other than "coursepage|"+folder+"|"+version, cleans up
+      other than its own folder, or keeps a page that is not its own version (worker_problems).
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
 """
 import argparse
@@ -42,6 +52,17 @@ CALL = re.compile(r'(localStorage|sessionStorage)\.(getItem|setItem|removeItem)\
 # browser storage the page must not use at all until a later commit gives it a prefixed form and updates this check
 FORBIDDEN = {'indexedDB': r'\bindexedDB\b', 'cookies': r'\bcookie\b', 'the Cache API': r'\bcaches\b',
              'a service worker': r'\bserviceWorker\b'}
+# the one service worker registration the page may hold (STATUS A65), at most once: relative, so the test copy registers
+# /course-test/sw.js, with its own version, and only from the folder or index.html (a page opened as /course with no
+# trailing slash would otherwise register /sw.js with the whole site as its scope)
+SW_REGISTER = ("if('serviceWorker' in navigator&&(location.pathname.endsWith('/')||location.pathname.endsWith('/index.html')))"
+               "navigator.serviceWorker.register('sw.js?v='+encodeURIComponent(PAGE_VERSION),{scope:'./'}).catch(()=>{});")
+# the worker's key.js line, live and test, and the lines every worker must hold once (STATUS A65)
+SW_KEY_LIVE = "const KEY=new URL('/marks/key.js',location.href).href;"
+SW_KEY_TEST = f"const KEY=new URL('{TEST_BASE}key.js',location.href).href;"
+SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
+           "const ownCache=k=>{const p=k.split('|');return p.length===3&&p[0]==='coursepage'&&p[1]===PAGE_PATH;};",
+           "return !!m&&m[1]===VERSION;")
 
 
 class Refused(Exception):
@@ -109,8 +130,11 @@ def storage_problems(text):
     removeItem call whose key is STORE+... or a name defined as STORE+...; anything else (an alias such as
     const ls=localStorage, window['localStorage'], window.localStorage, typeof localStorage, passing it as an
     argument, [..] access, .key(), .clear()) is refused. IndexedDB, cookies, the Cache API and service workers are
-    refused outright."""
+    refused outright, apart from the one registration SW_REGISTER, allowed at most once (STATUS A65)."""
     code = strip_comments(text)
+    if code.count(SW_REGISTER) > 1:
+        return [f'the service worker registration occurs {code.count(SW_REGISTER)} times: at most once']
+    code = code.replace(SW_REGISTER, ' ')
     prefixed = set(re.findall(r'\b([A-Za-z_$][\w$]*)\s*=\s*STORE\s*\+', code))
     out = []
     for w in WORD.finditer(code):
@@ -137,6 +161,34 @@ def replace_once(text, old, new, what):
     if n != 1:
         raise Refused(f'{what}: expected exactly one {old!r}, found {n}')
     return text.replace(old, new)
+
+
+def worker_problems(code):
+    """What is wrong with a worker's code (comments blanked), as readable lines: no "record-" cache, the cache named from
+    its folder and version, clean-up of its own folder only, and only a page of its own version kept (STATUS A65)."""
+    out = [f'it must contain {need!r} exactly once (found {code.count(need)})' for need in SW_NEED if code.count(need) != 1]
+    if 'record-' in code:
+        out.append('it names a "record-" cache, which the RIB worker would delete (STATUS A18)')
+    if code.count('await isOwn(res)') != 2:
+        out.append('it must check isOwn before saving a page, at install and on refresh (2 places)')
+    return out
+
+
+def build_worker(src):
+    code = strip_js(src)
+    problems = worker_problems(code)
+    if re.findall(r'/marks[^\'"]*', code) != ['/marks/key.js']:
+        problems.append('it must name /marks/ in its key.js line only')
+    if problems:
+        raise Refused('the live worker:\n  ' + '\n  '.join(problems))
+    t = replace_once(src, SW_KEY_LIVE, SW_KEY_TEST, "the worker's key.js line")
+    stray = [t[max(0, x.start() - 30):x.start() + 30] for x in re.finditer(r'/marks(?!-test/)', t)]
+    if stray:
+        raise Refused('the test worker still refers to live /marks: ' + '; '.join(repr(s) for s in stray))
+    problems = worker_problems(strip_js(t))
+    if problems:
+        raise Refused('the test worker:\n  ' + '\n  '.join(problems))
+    return t
 
 
 def build_page(src):
@@ -202,12 +254,15 @@ def source_of(path, commit):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--page', default=os.path.join(ROOT, 'pages', 'course', 'course_v8.html'))
+    ap.add_argument('--sw', default=os.path.join(ROOT, 'pages', 'course', 'sw.js'))
     ap.add_argument('--marks', default=os.path.join(ROOT, 'pages', 'marks', 'marks.php'))
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'test'))
     a = ap.parse_args()
     try:
         with open(a.page, encoding='utf-8', newline='') as f:
             page, version = build_page(f.read())
+        with open(a.sw, encoding='utf-8', newline='') as f:
+            worker = build_worker(f.read())
         with open(a.marks, 'rb') as f:
             marks = f.read()
     except Refused as e:
@@ -219,8 +274,8 @@ def main():
     except OSError:
         commit, dirty = '', ''
     commit = commit or 'unknown'
-    page_src, marks_src = source_of(a.page, commit), source_of(a.marks, commit)
-    pb = page.encode('utf-8')
+    page_src, sw_src, marks_src = source_of(a.page, commit), source_of(a.sw, commit), source_of(a.marks, commit)
+    pb, wb = page.encode('utf-8'), worker.encode('utf-8')
     # written to a temporary folder first, then moved into place, so a failure never leaves half a build
     os.makedirs(a.out, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix='.build-', dir=a.out)
@@ -229,6 +284,8 @@ def main():
         os.makedirs(os.path.join(tmp, 'marks-test'))
         with open(os.path.join(tmp, 'course-test', 'index.html'), 'wb') as f:
             f.write(pb)
+        with open(os.path.join(tmp, 'course-test', 'sw.js'), 'wb') as f:
+            f.write(wb)
         shutil.copyfile(a.marks, os.path.join(tmp, 'marks-test', 'marks.php'))
         with open(os.path.join(tmp, 'marks-test', 'marks.php'), 'rb') as f:
             if f.read() != marks:
@@ -236,9 +293,11 @@ def main():
         with open(os.path.join(tmp, 'BUILD.txt'), 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'source commit {commit}{" (pages/ has uncommitted changes)" if dirty else ""}\n'
                     f'page built from {page_src}\n'
+                    f'worker built from {sw_src}\n'
                     f'marks.php copied from {marks_src}\n'
                     f'PAGE_VERSION {version}\n'
                     f'course-test/index.html sha256 {sha(pb)}\n'
+                    f'course-test/sw.js      sha256 {sha(wb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
                     'key.js and data/ro-key.php are not part of the build: place them on the server by hand.\n')
         for name in ('course-test', 'marks-test', 'BUILD.txt'):
@@ -255,8 +314,10 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
     print(f'test build {version} from {commit}{" (uncommitted changes in pages/)" if dirty else ""} written to {a.out}')
     print(f'  page built from {page_src}')
+    print(f'  worker built from {sw_src}')
     print(f'  marks.php copied from {marks_src}')
     print(f'  course-test/index.html  {sha(pb)}')
+    print(f'  course-test/sw.js       {sha(wb)}')
     print(f'  marks-test/marks.php    {sha(marks)}')
     return 0
 
