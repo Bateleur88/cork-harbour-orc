@@ -884,6 +884,8 @@ Race-day precautions once .37 is live: 1 stays (the page cannot open with no sig
 - A63 extended (Pat's specification): a finish line built like the start line, with a Finish Pin set at a mark and a finish committee boat placed by distance and bearing from a mark (e.g. 200 m south of C1A), each with its own time on the water that the RO types (no default from the start time); separate from the start line; it covers a finish with one end missing.
 - Sunday check (18 October): glance at the series name before building the first course.
 
+**T22 (Pat, 16 October 2026), found while preparing the orc-ireland.org install package.** `marks.php` still accepts the race key in the address (`?key=`, `arg($_GET, 'key', '')`) as well as in the `X-Race-Key` header, and a key in the address can reach the web server's access logs. Stop accepting it, key by header only, on both sites (tradboats.ie and orc-ireland.org), in the next release. Neither page sends `?key=`, and `tests/test_marks.py` sends the header only. This is A25 (decided by Pat 13 October 2026, moved to .38 on 14 October); T22 adds that it applies to orc-ireland.org as well.
+
 ------------------------------------------------------------------------
 
 ## Related repositories and issues
