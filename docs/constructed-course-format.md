@@ -1,3 +1,5 @@
+> **Copy.** This is a copy of Sail Scoring's `docs/design/orc/constructed-course-format.md`. The copy date was not recorded: the file was created here on 10 October 2026 (its date on disk) and added to this repository on 16 October 2026. Sail Scoring's version is the authority, and this copy may lag behind it. `constructed-course.schema.json`, linked below, lives in Sail Scoring's repository, not here.
+
 # The ORC constructed course format
 
 A small JSON document for one constructed course as ORC Rating Systems
