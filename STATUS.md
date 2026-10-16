@@ -52,8 +52,8 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 | Ref | Problem | State | Current note |
 |---|---|---|---|
-| L1 | Delay between tap and position; stale fixes | BUILT AND TESTED | Fresh-position rule on the RIB page only; the RO page's "Record committee boat here" has no freshness check |
-| L2 | Marks recorded in wrong positions | BUILT AND TESTED | Check recorded marks plot with advisory flags |
+| L1 | Delay between tap and position; stale fixes | CONFIRMED LIVE | Confirmed live 11 Oct 2026 (RIB page fresh-position rule). The RO page's "Record committee boat here" has no freshness check |
+| L2 | Marks recorded in wrong positions | CONFIRMED LIVE | Confirmed live 11 Oct 2026. Check recorded marks plot with advisory flags |
 | L3 | Recorded marks not visible on the RO page | BUILT AND TESTED | Check recorded marks: plot, details, list |
 | L4 | Several fixes of one mark; choosing which | IN PROGRESS | Any fix of the day can be picked into a race (A29). Known gap: "Newer fix / Tap to use" on rows using an earlier race's fix (held by Pat) |
 | L5 | Distinguishing races and starts | IN PROGRESS | A start can use another race's fix (A29, A30) |
@@ -192,9 +192,10 @@ Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decis
 | 2026-10-09 | .24 and `marks.php` uploaded; 4 October Race 1 repaired on live | First live course save |
 | 2026-10-09 | .25 uploaded | Checks passed on PC and tablet |
 | 2026-10-10 | .26 uploaded | Checks passed on PC and tablet |
+| 2026-10-11 | Race (Autumn League) | L1, L2 confirmed live |
 | 2026-10-12 | .29 uploaded | Checks passed on PC and tablet |
 | 2026-10-14 | .36 and `marks.php` released | Checks passed on PC and tablet |
 | 2026-10-15 | .37 released | Checks passed on PC, tablet, phone and laptop |
 | 2026-10-16 | Test files removed from live | Kept days unchanged |
 
-Nothing is CONFIRMED LIVE yet.
+Confirmed live: L1, L2.
