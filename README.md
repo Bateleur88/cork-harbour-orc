@@ -16,13 +16,13 @@ SailScoring `course-cards` issues #16 to #19.
 | Directed physical chords | 186 |
 | Routing waypoints | 8, plus W2 used as a turning point in 9 passages |
 | Marks used | 38 (by the card's routes) |
-| Marks in the page's snapshot | 63, every mark with a position in the Marks sheet (`STATUS.md` A40) |
+| Marks in the page's snapshot | 63, every mark with a position in the Marks sheet |
 | Routes in the page's snapshot | 262: the 177 authored, plus the exact reverse of each of the 85 authored one way only |
 | Evidence | every chord carries a numeric INFOMAR result; no chord on recovered evidence |
 | Audit | `scripts/audit_workbook.py` passes all 16 checks |
 
-Race officer page: `course_v8.html`, served at `tradboats.ie/course/`, bundling a
-snapshot generated from the workbook above. See [The pages](#the-pages).
+The race officer page (`pages/course/course_v8.html`) bundles a snapshot generated
+from the workbook above. See [The pages](#the-pages).
 
 ## Start here for reviewers
 
@@ -104,578 +104,209 @@ bathymetry only validates the resulting physical chords.
 
 ## The pages
 
-Three files in `pages/`, working together through the web server (see Deploying
-the pages for where each goes).
+Three files in `pages/`, working together through the web server.
 
-**RIB page** (`pages/record/record.html`, served as `/record/`). The RIB crew
-records each mark as it is laid, with the phone's GPS: pick the date and
-race, tap a name (quick picks include the laid marks Curlane, Dutchman and White
-Bay) and record. Fixes are queued on the phone and upload to `marks.php` when there
-is signal, so nothing is lost offline. Each fix carries a random id for the phone
-and an optional "Who's recording?" name. A WhatsApp message is the backup, headed
-"Laid marks – date": the series name is set on the RO page, not here.
-The ORC IRL watermark behind the page is embedded in it as a data URI, so it is
-there offline; `pages/record/assets/orc-irl-watermark.png` is its source and is
-not uploaded.
+### RIB page (`pages/record/index.html`, served as `/record/`)
+
+The RIB crew records each mark as it is laid, with the phone's GPS: pick the date
+and race (Races 1 to 3), tap a name (quick picks include the laid marks Curlane,
+Dutchman and White Bay) and record. Each fix carries a random id for the phone, an
+optional "Who's recording?" name, the position's own time and the moment Record
+was tapped. Fixes queue on the phone and upload to `marks.php` when there is
+signal, so nothing is lost offline. A WhatsApp message headed "Laid marks – date"
+is the backup. (`pages/record/record.html` is an identical copy of the same page.)
 
 *A fresh position only.* Android Chrome can hand over the phone's last known
-position first, with its own old time, even when asked not to (`maximumAge:0`): on
-4 Oct 2026 half the fixes carried a position 24 s to 12.5 minutes old. So every
-position is checked against the moment Record was tapped, and one more than 5 s
-older (`FRESH_MS`) is ignored while the page keeps listening. A fresh position at
-±5 m or better is saved at once, otherwise the most accurate fresh one after 10 s;
-with none by 20 s (`GIVE_UP_MS`) nothing is saved and a red panel asks the driver to
-stay at the mark and tap Record again. Cancel, the screen locking or the page being
-left also stop the fix with nothing saved and the mark name kept. A large panel says
-"HOLD STILL at the mark…" with a countdown while waiting, and "Saved ✓" (green, one
-buzz on Android) only once a fresh position is stored on the phone; sending is shown
-separately, as before. The fix keeps the position's own time (`time`) and the tap
-(`tap`), so the age of a position can be measured exactly.
-*Clock risk:* the check compares GPS time with the phone's clock. A phone whose
-clock is more than 5 s out would refuse every fix; if that happens, set the phone to
-automatic time, or raise `FRESH_MS`. The tap time shows any offset afterwards.
-*Possible later check:* a position taken while the RIB is still moving towards the
-mark is fresh but not at the mark. A later version could also require two fresh
-positions a few metres apart, or a low speed, before saving.
+position first, with its own old time, even when asked not to. So a position more
+than 5 s older than the tap (`FRESH_MS`) is ignored while the page keeps
+listening; a fresh one at ±5 m or better is saved at once, otherwise the most
+accurate fresh one after 10 s; with none by 20 s (`GIVE_UP_MS`) nothing is saved
+and a red panel asks the driver to stay at the mark and tap Record again. "HOLD
+STILL at the mark…" shows while waiting, "Saved ✓" only once a fresh position is
+stored on the phone. *Clock risk:* a phone whose clock is more than 5 s out would
+refuse every fix; set it to automatic time.
 
 *Opening with no signal.* A service worker (`pages/record/sw.js`, served as
-`/record/sw.js`, controlling `/record/` and nothing else on the site) keeps a copy
-of the page and `key.js`. Opening the page always tries the network first. The
-saved copy is used only if the network fails, answers with a server error (5xx), or
-has not answered within 3 seconds; an answer that arrives later still refreshes the
-copy for next time. The saved page is replaced only by a response that contains
-the `PAGE_VERSION` marker, so a maintenance or error page that comes back as 200 is
-shown but never saved over the good copy. `marks.php`, the page's version check,
-Google Fonts and every other request go to the network untouched. Each
-`PAGE_VERSION` registers its own worker (`sw.js?v=<version>`) with its own cache,
-`record-<version>`, and the new worker deletes the older caches when it takes over,
-so `sw.js` itself needs no change for a release.
-**Dock rule:** a new phone must open `https://tradboats.ie/record/` once with
-signal before it can open it without; until then a cold start offline shows
-Chrome's own offline page. Bookmark it with the trailing slash: `/record` without
-it is outside the worker's scope. On iPhones, Safari may clear the copy after about
-a week without a visit, so open the page with signal before each race day.
+`/record/sw.js`, controlling `/record/` only) keeps a copy of the page and
+`key.js`. Opening always tries the network first and uses the saved copy only if
+the network fails, gives a server error, or takes over 3 seconds; only a response
+containing the `PAGE_VERSION` marker replaces the copy. Each `PAGE_VERSION`
+registers its own worker and cache (`record-<version>`), and the new worker
+deletes the older ones. **Dock rule:** a phone must open
+`https://<site>/record/` once with signal before it can open it without; bookmark
+it with the trailing slash. Safari on iPhone may drop the copy after about a week
+without a visit.
 
-**Server** (`pages/marks/marks.php`, served as `/marks/marks.php`). Stores the day's
-fixes and the RO's built courses as JSON in `/marks/data/`, behind the race key in
-`key.js`. It also keeps the series name, one for the whole series and set from the
-RO page, in `/marks/data/series.json`; fixes no longer carry a series, and a
-`series` sent by a phone that has not reloaded is ignored, never refused. Each fix from
-the RIB page also stores `tap`, when Record was tapped (ms, the phone's clock), beside
-`time`, the position's own time, so the age of a position can be measured exactly; a
-fix from an older page has none, a malformed `tap` is dropped rather than refused, and
-moving a fix keeps it. Writes go
-to a temporary file renamed into place, so a failed write cannot empty a day; a
-damaged day file is refused rather than overwritten.
+### Server (`pages/marks/marks.php`, served as `/marks/marks.php`)
 
-*Course history.* Before a course save replaces a version, `marks.php` keeps the
-replaced version in `/marks/data/courses-history-YYYY-MM-DD.json` (never inside the
-courses file, which older pages read course by course), under the same lock: per
-race and start, and per race's start groups, the first version of the day plus the
-last 5 replaced versions; each version is at most 50 KB, as every course is, and the
-file is capped at 5 MB, the oldest versions other than a first of the day going first.
-A save identical to the current version writes nothing. If the history cannot be
-written (a damaged history file, a failed write) the course save is refused too, so
-no course is ever replaced without its earlier version being kept; the page keeps
-the edit and tries again every 15 s. A damaged history file shows on the RO page as
-"Course changes not saved: … Server: courses-history-YYYY-MM-DD.json is damaged, not
-overwritten. Trying again every 15 s." (the edits stay on the device, and Clear
-everything warns about them); to unblock that day's saves,
-put that day's `courses-history-YYYY-MM-DD.json` back from a dated backup of `data/`,
-or remove it (the history then starts again from the next save). A course save may
-carry `by`, the name of whoever saved it (text, cut to 40 characters, dropped if not
-text); it is stored with that version and moves into the history with it. The RO
-page no longer sends one (it did in the decisions experiment; see
-`docs/experimental/decisions-and-review/`); an older `marks.php` ignores it. Read with
-`GET ?type=coursehistory&date=` and the race key; comparing and restoring versions
-is for a later page.
+Stores each day's fixes (`marks-YYYY-MM-DD.json`) and courses
+(`courses-YYYY-MM-DD.json`) in `/marks/data/`, behind the race key in `key.js`.
+Writes go to a temporary file renamed into place, under a lock; a damaged day file
+is refused rather than overwritten. `marks.php` writes an `.htaccess` that denies
+web access to `data/` (Apache or LiteSpeed only: check that a request for a file
+there is refused with 403).
 
-*Decisions endpoint (unused).* `marks.php` still accepts append-only review
-decisions (written only with the RO key, read with the race key through
-`?type=decisions`), but no page uses them since the review UI was taken out of the
-RO page in PAGE_VERSION 2026-10-06.20 (see `docs/experimental/decisions-and-review/`).
-Names and notes in decisions would be readable by anyone with the race key, which is
-public (`key.js`), so they must not contain personal details.
+- *Courses* are keyed `race|start`; each race's start groups and picked chips are
+  `_starts|race`; the day's series name is `_day`, saved like a course. `GET
+  ?type=seriesbefore&date=` returns the series of the latest earlier day that has
+  one. The older single series file, `series.json`, is still served for pages from
+  before series names were per day.
+- *Course history.* Before a course save replaces a version, the replaced version
+  goes to `courses-history-YYYY-MM-DD.json`: per record, the first version of the
+  day plus the last 5 replaced, each at most 50 KB, the file capped at 5 MB. If
+  the history cannot be written the save is refused, so no version is lost. A
+  damaged history file blocks that day's saves until it is put back from a backup
+  or removed. Read with `GET ?type=coursehistory&date=`.
+- *Typed positions* (accuracy 0, no phone) can be withdrawn (`withdraw`, with a
+  reason) or corrected (`correct`, a new position with the old one withdrawn and
+  linked), never deleted. Withdraw is refused while a saved course row or chosen
+  line end uses the position; the course page moves rows to a corrected one. A RIB fix can still be deleted by the RIB page, and the
+  course page's "Fix recorded under the wrong race?" re-posts a fix under a new
+  race.
+- *RO key and decisions endpoint (unused).* `marks.php` still accepts append-only
+  review decisions, written only with an RO key taken from the `X-RO-Key` header
+  and read from `/marks/data/ro-key.php` (template `pages/marks/ro-key.example.php`).
+  No page uses it. A course save may carry
+  `by` (who saved it); the course page does not send it.
+- The race key is also accepted as `?key=` in the address; neither page sends it.
 
-*Withdrawing and correcting a typed position* (`STATUS.md` A46). Action "withdraw"
-(`{action, date, id, reason}`) and action "correct" (`{action, date, id, new_id, lat,
-lon}`) work on typed positions only (accuracy 0 and no phone: never a RIB fix or a
-committee boat fix) and never delete anything. Withdraw adds "withdrawn" (the server's
-time) and "withdrawn_reason" to the record, and is refused (409) while a saved course
-row or line end uses it, naming each race and start. Correct adds the corrected
-position as a new typed position (same race, name and time, with "corrected_from") and
-withdraws the wrong one with the reason "replaced by correction" and "replaced_by", in
-one write. A retry of either writes nothing; a fix re-posted with the same id keeps
-these fields. The RO page leaves withdrawn fixes out, and a course row or line end
-naming a corrected fix follows "replaced_by" to the corrected one.
+### Course page (`pages/course/course_v8.html`, served as `/course/`)
 
-*RO key.* `pages/marks/ro-key.example.php`, copied on the server to
-`/marks/data/ro-key.php` with `CHANGE_ME` replaced: 16 to 64 letters, digits, `-` or
-`_`. `marks.php` reads it as text, never runs it, and takes the RO key only from the
-`X-RO-Key` header, never from the URL. At present it protects only the unused
-decisions endpoint above: while it is missing, malformed or still `CHANGE_ME`, every
-decision write is refused ("RO key not set on the server"), and nothing else needs
-it. It is reserved for a possible lock on the as-sailed course, which is intended,
-not built. The real file is never committed. Backups of `/marks/data/` contain it:
-keep them outside the repository and never share them.
-`tests/test_marks.py` checks all of this.
+The race officer's page, in two views: **Setup** (sections 1 to 3: marks, import,
+building the course) and **Race** (what is needed after the gun: the course and
+total, legs, plot, wind shift, Send and the committee boat button). The course
+card snapshot and an ORC IRL watermark are embedded. From 1100 px wide the page is
+two columns (legs and course on the left; sketch or chart, Check recorded marks,
+wind shift and Send on the right).
 
-**Race officer page** (`pages/course/course_v8.html`, served as `/course/`).
-Offline-first: the course card snapshot from the workbook is embedded in the page.
-The same ORC IRL watermark as the RIB page, embedded, sits behind it, with the
-footer "© 2026 Pat Tanner ORC Ireland".
+**The day.** *Race day* and **Get latest marks** load a day's fixes and courses
+from the server, then refresh every 30 seconds. Every edit, fix and send belongs
+to the day loaded. While the Race day box shows a different day from the one
+loaded, the course is hidden and edits and sends are held ("Race day is X but Y is
+loaded: tap Get latest marks"). A newly loaded day opens Start 1 of its race, or
+its first start with a course. Reopened on the day it had loaded, the page shows
+the copy on the device at once and refreshes in the background when there is
+signal; reopened with Race day set to today and another day loaded before, it
+says so and holds until the RO chooses.
 
-- *Series name*: at the top of Setup, set by the RO and saved on the server, so
-  every RO device shows the same name; it heads the WhatsApp course message. It is
-  never taken from the RIBs' fixes or from a pasted WhatsApp backup. Unset, the
-  field is empty with a red border and says so. An edit made without signal is
-  kept on the phone and saved when there is signal.
-- *Import a harbour course* (section 2) is folded away, closed each time the page
-  opens; its heading names the card in use (e.g. `RCYC_Cork_Harbour_ORC_MASTER_v3_20,
-  40 courses`) and, once a course is imported, that course, with ⚠ when it is flagged.
-  Whether it is open is not saved.
-- *Check recorded marks* (end of section 1, closed by default): a plot, read-only
-  except *Add to Race N chips* (below), of
-  every fix loaded for the race selected, or for all races, for the RO or scorer to
-  spot one out of place. It is one element shown in both views (at the bottom of Race
-  view). Its closed line counts recorded fixes (RIB fixes and the committee boat
-  recorded with this page's button) and other marks (typed and pasted positions, and
-  the Course Card marks in a course of the race, shown hollow and dashed in the sea
-  colour and labelled "Course Card"; a card mark is never a recorded fix) apart, e.g. "5 recorded fixes · 49 other marks"; "2 fixes and marks to check" is two
-  fixes or marks with at least one flag each ("1 fix or mark to check" for one), however
-  many flags they have; a note about the race as a whole (no
-  committee boat of its own) is counted apart as a race note. Shape and colour give the race;
-  a typed position (±0, no phone) is hollow, an estimate; a pasted position (on this
-  device only) is half-filled; a fix carried in from an
-  earlier race (such as Race 1's committee boat) is dashed. With *All races* ticked
-  each fix has a short label (`R2 L 13:21`: race, mark initial, time; CB, SP and FP
-  for the committee boat, start pin and finish pin, with a key under the sketch), a
-  thin line in each race's colour joins its latest Windward and Leeward, and chips
-  (R1, R2, R3…) switch races on and off in the sketch, chart and list; the closed
-  line still counts every race, and the choice is not saved. A switched-off race's
-  committee boat stays, dashed, while a race shown carries it forward, and a selected
-  fix of a switched-off race is deselected. Tapping a fix in the sketch, the chart or
-  the list gives a short detail directly under the sketch or chart, scrolled into
-  view: name, race, time, accuracy, phone (lettered A, B… by first fix of the day),
-  position, and *Add to Race N chips*. The recorder is named in the All fixes list.
-  How old a position was when saved (the fix id starts with the phone's clock, so id
-  time minus the fix's time, falling back to when the server received it) shows only
-  as a check (below), in that list. Under the detail are four folds, *Key*, *Line
-  notes (N)*, *Information (N)* and *All fixes (N)*: closed on every load, left as
-  they were by a redraw or the 30 s refresh, and hidden when empty.
-  The checks, with their thresholds as named constants at the
-  top of that code and tuned to one day's fixes (4 Oct 2026), are advice only and
-  never block anything: a position 20 s to 5 min old (check) or over 5 min (likely
-  wrong, the only one in the warning colour); a Start or Finish Pin within 60 m of a
-  mark of its race; a start line more than 45° off square to the leg to the race's
-  first mark; a mark more than 500 m from the nearest fix of its name in another
-  race (line ends left out); a Start Pin later than its race's Finish Pin (not for
-  a candidate, below: its neutral candidate note is the only message about it, and
-  it is not counted among the fixes to check), or a Finish Pin later than the next
-  race's first start; a race with no committee boat
-  of its own. Each has a WhatsApp, Share or Copy button with a short message asking
-  for the mark to be recorded again. Sketch by default; Chart needs signal.
-  **Recorded lines and the as-sailed course.** The sketch and the chart draw the
-  recorded lines, in the race's colour and under the fixes, from the page's
-  *automatic* rules applied to the recorded fixes, never from the RO's line-end
-  choices or the finish setting. Over them they draw the as-sailed course of the
-  selected race and start, from the same data as the course sketch above (the chips
-  the RO tapped and the line ends the RO chose): each leg solid, heavier than any
-  recorded line, with an arrowhead, and its start and finish lines at full strength.
-  A recorded line of that race and start that the as-sailed course does not use is
-  thin, finely dashed and faded. They differ by weight and dash, not by colour
-  alone. With *All races* the as-sailed course is drawn while its race is switched
-  on. The recorded lines, per start (selected start; with *All races*,
-  every start of each race shown, identical lines drawn once): the start line joins
-  the latest committee boat and the latest Start Pin recorded at or before that
-  start's time (fix time ≤ start time, the start time to the minute); the recorded
-  finish line joins that committee boat to the latest Finish Pin (no time limit; the
-  page's default finish is the start line, so this only shows where a Finish Pin is).
-  Per race: the W–L leg joins the latest Windward and Leeward. Carrying: where a race
-  has no fix of its own, the page by default carries the same mark from an earlier
-  race (committee boat, pin, Windward, Leeward); such a line is drawn and the note
-  says "carried forward by default"; a carried W–L leg is long-dashed. A mark is never
-  used for another type. A committee boat or Start Pin recorded after the start is a
-  *candidate*: shown and labelled, never joined by default, and described neutrally;
-  where a race has no default start line a dotted candidate line shows what it would
-  give. With no start time set nothing is before or after the start, so there is no
-  line and no candidate, only "no start time set". Where a mark has several fixes in
-  a race every one is plotted and listed; the line joins the latest, which has a dark
-  outline, and the note gives the count. A Windward or Leeward recorded after the
-  start (Start 1 with *All races*) is noted, as a fact. A pin can be a candidate for
-  one start and not another, so in single-race mode the closed line's "fixes to
-  check" count can change with the selected start.
-  Anything missing is listed in plain words in the Line notes and Information folds,
-  in both views; the closed line counts candidates apart.
-- *Picked chips*: *Add to Race N chips* under a tapped fix's detail brings any RIB
-  fix of the day on the server (any race; not typed, not a line end) into the chip
-  bank of the selected race as a chip of its own, under "Picked for Race N". It adds
-  and replaces nothing; a fix already a chip of that race says so. Tapping the chip
-  adds an ordinary row to the selected start. Its × removes the chip only, never the
-  fix, and is disabled while a row of any start of the race uses it. A race's picks
-  are saved with its start groups as `picked` (server references, `s:<id>`) in its
-  `_starts|N` record; a race without picks saves exactly as before, and `marks.php`
-  stores the field unchanged. A pick whose fix is no longer on the server is
-  dropped. A save of that record from an older page (the .7 page, live until 9 October 2026) drops the picks;
-  the course history keeps the earlier version. Picked fixes have a dashed ring in
-  the sea colour in Check recorded marks.
-- *Line ends from any race*: the Committee boat, Start Pin and Finish Pin lists
-  offer every recorded fix of that type from every race of the day, earlier races
-  first, then by time, each with its race and time (`R2 13:09`), accuracy, recorder
-  and, for a committee boat or Start Pin, "after this start" where it applies. The
-  choice is saved in `lineSel` as before. *auto* keeps its own rule and never picks a
-  later race's fix. The fix itself is never changed.
-- *Choices saved with the course* (`STATUS.md` A10; Pat, 13 October 2026): when a
-  course is saved, a line end on *auto* saves the fix auto picked then (`lineAuto` in
-  the start's record), and a laid mark's position box saves its choice, on *auto* the
-  fix auto picked then (`laid` in the race's `_starts|N` record, one per race as the
-  box is). So a saved course rebuilds the same on every device and every day. When a
-  newer fix arrives later, the course row says "A newer fix: White Bay at 13:45 – use
-  it?" (for a line end, "A newer fix: Committee boat R1 13:58 … – use it?") and nothing
-  changes until the RO taps "Use it". Auto that finds no fix yet saves nothing; the
-  first fix it uses is saved with the course without a tap (Pat, 13 October 2026,
-  option (a)): as soon as the course is shown on the race day (the day loaded is
-  today), and on any day before it is sent (WhatsApp, Share, Copy text, Copy for Sail
-  Scoring), so a sent course always rebuilds exactly. Opening an old race never writes
-  to it. Only fixes saved on the server are saved as choices; `marks.php` stores the
-  fields unchanged.
-- *One chip per laid mark* (`STATUS.md` A50): a RIB fix or typed position under a laid
-  mark's name (Curlane, Dutchman, White Bay) has no chip of its own; the chip
-  "White Bay · laid mark" stands for it (with no such chip yet, one is offered:
-  "1 fix under this name"), and its Position box lists the fixes. A pasted position
-  keeps its own chip until it is saved to the race record. Course rows already naming
-  a plain fix are left as they are.
-- *Start line under the lists* (`STATUS.md` A54): as soon as both ends are found the
-  Start line row in section 3 gives its length and bearing ("Start line 149 m,
-  070°M"), and once a wind direction is typed how far it is off square and which end is
-  favoured, as section 4 does; with no start time set it says "No start line yet: no
-  start time is set, so auto finds no committee boat or Start Pin".
-- *Wind direction* (`STATUS.md` A56): used only from 0 to 360; anything else is said in
-  red under the box ("Wind direction must be 0 to 360 °M: "1141" is not used or
-  saved."); while the box holds it the page uses no direction (TWA "–", no off-square or
-  favoured end, in sections 3 and 4) and saves nothing; opening another course drops it.
-  The legs follow the box as it is typed; the direction is saved with the course only
-  when the RO leaves the box (or presses Enter), so a half-typed one is never saved. The
-  start line note under the Start line lists always matches section 4's.
-- *A start line with one end recorded* (`STATUS.md` A58, from PAGE_VERSION 2026-10-06.36):
-  when a start has a start time and only the committee boat or only the Start Pin is
-  found, the Start line row offers two estimates, both the RO's choice: 1. place the
-  missing end by distance (m) and bearing (°M) from the recorded end or another mark of
-  the race; it is saved as a typed position named for the missing end ("Committee boat"
-  or "Start Pin"), its time on the water the reference's unless changed, and as this
-  start's line end, labelled "estimate: 200 m at 270°M from Start Pin R1 11:09"; from
-  then on the line is a normal two-end line; 2. "Use Start Pin (R1 11:09) as the line
-  midpoint – estimate": the first leg runs from that end and, with the Finish on the
-  start line, the last leg to it; no line length, off-square or favoured end. Both are
-  saved with the course (`lineEst`, `lineMid`) and undone with one tap (option 1
-  withdraws the placed position). They are flagged "Start line: estimate – …" in
-  sections 3 and 4, the leg table and the sketch, and Copy for Sail Scoring adds
-  `"x-estimate"`; the WhatsApp text carries no estimate note, and there is no "Send
-  anyway?". A real end recorded later, at or before the start, is offered ("A recorded
-  committee boat is now available – use it?"), never taken by itself. A finish line with
-  one end missing is not covered. The WhatsApp text gives each leg in °M only.
-- *Choices kept on a device by an older page* (A10): a laid-mark choice made on a page
-  before .35 was kept on that device only. It stays in use there, but is saved with the
-  course only when the RO changes it, sends the course, or shows it on the race day,
-  never because a day is opened; it gives way to a choice the server has for that mark.
-  A save that a load leads to (a line end's reference updated) saves no auto choice.
-- *Course chart*: the Chart draws what the Sketch draws, from the same data: the
-  legs in order with arrowheads (a leg that follows a card passage goes through the
-  card's waypoints, where the sketch draws it straight), the start and finish lines
-  dashed under them, and the marks and line ends named as on the sketch, with labels
-  that stay on and find new places at each zoom.
-- *Saving courses*: course changes are saved to the server automatically, about a
-  second after each change and every 15 seconds while any is unsent, but only once
-  this device has loaded that day (Get latest marks). The result shows under Get
-  latest marks in Setup and as an alert at the top of Race view.
-  - **Success:** "All course changes saved · hh:mm" shows after a save once nothing
-    is left unsent.
-  - **Run stops:** with no signal, the race key not loaded, a refused race key
-    (403), no reply within 20 s (each course save request is abandoned then) or a
-    server error (500), the line reads "Course changes not saved: N course edits
-    are waiting on this device." with the reason and "Trying again every 15 s.":
-    that run stops and is tried again.
-  - **One record refused:** a record the server refuses (400) or a full day (429,
-    the limit of 200 courses) reads "Race R Start S not saved: …". The other
-    records are still sent, and the refused one is tried again only after it is
-    changed or after a reload. The server's own error text is shown, escaped and
-    cut to 120 characters.
-  - **After a load:** when loading a day leads to a save, the line says "Saving N
-    course changes held on this device:" and why: a course built before this day
-    was loaded, a line end whose fix is gone was cleared, a fix reference updated
-    to the server's copy, or edits made while the day was not loaded.
+**Series name** ("Series Name for Message heading", in Setup) belongs to the day
+and heads the WhatsApp text. A day with none of its own shows the latest earlier
+day's in orange, "carried from dd/mm/yyyy: check", with **Confirm**; the day's
+first course save asks "Use it?" once (Use it or Change). Changing one day's
+series changes no other day.
 
-  *Changing day* (loading a different day):
-  - A save already running is waited for, at most 25 s, and stops after its
-    current record.
-  - Then the old day's unsent changes are sent, every record tried even after a
-    server error, and the line says "Sent N course changes held on this device for
-    ‹day› before loading ‹day›."
-  - If anything was not sent, the change of day stops: the old day stays loaded,
-    the day box goes back to it, nothing is deleted, and the line says why ("Still
-    on ‹day›: …").
-  - Records made on this device for a third day (edited while the day box showed a
-    day that was not loaded) stop a change of day too, also when no day was loaded
-    before. Load that day first to send them there.
-  - "Change day anyway" appears only when every record holding the change up was
-    refused (400 or 429), failed with a server error (500) or was made for a third
-    day. It names each one and says they will be lost from this device and were not
-    saved on the server.
-  - With no signal, a refused race key, no race key or no reply there is no such
-    button: try again when that is resolved.
+**Building a course.** Start groups (classes per start), **+ Start** and
+**Remove Start**; a start time per start. Marks are added by tapping chips:
+recorded fixes of the race, **Fixed marks** (every positioned mark in the Marks
+sheet, labelled "Course Card", plus laid marks and routing waypoints), a card
+course from **Import a harbour course**, a typed position (**Add a mark by typing
+its position**, which asks for the time on the water) or a pasted WhatsApp
+message (**Read marks from a WhatsApp message**). Each mark row has a rounding
+side (P or S); routing waypoints have none. A pasted position stays on the device
+only, shown in red with **Save to the race record**. A card mark's own name is
+refused in the typing and pasting boxes. **Add to Race N chips** in Check recorded
+marks brings any RIB fix of the day into a race as a picked chip.
 
-  Known limits (`STATUS.md` A34, A35, A36): a kept record holding only a start time
-  is sent on loading its day without the "Saving" line; a "Still on" message is not
-  updated when a later save sends the records it names, and clears at the next
-  change-of-day attempt.
-- *Setup view*: get the day's marks (then refreshed every 30 seconds), import a card
-  course or tap marks in rounding order, record the committee boat and pin, set
-  the wind. Until a line is recorded, the card's own start (e.g. Grassy Mid) stands
-  in for it, and the page says so. A course built before the day's marks could be
-  loaded, at the dock say, is kept when they load. A course row whose fix comes
-  from another race, earlier or later, names it, e.g. "Leeward (R3 14:39)"; a second
-  fix of the same race reads "(fix 2)". The line under Get latest marks counts the
-  day's fixes on the server as Check recorded marks does: "5 recorded fixes · 8 typed
-  positions for Sun 11 Oct 2026". A position pasted into the WhatsApp reader stays on
-  this device only and is never sent by itself; a course row saved from one never
-  matches a fix on the server. Wherever a pasted position is used (its chip, the course
-  row, the leg table, and below the warnings beside Copy for Sail Scoring) a red line
-  says it is on this device only and not in the race record, with "Save to the race
-  record", which saves it on the server as a typed position and moves every course row
-  using it to the saved one; a typed position already saved for that race with the same
-  name and position is used instead, and the page says so (`STATUS.md` A47). A pasted
-  line matching a position already saved for that race (same name and position) makes
-  no device-only chip: the reader says "Curlane (Race 3) is already in the race record
-  with the same position". A pasted line with no time of its own asks for the time on
-  the water when it is saved to the race record, and that time is saved (Cancel saves
-  nothing); a line with its own time keeps it. A race shows every start that has a
-  saved course; from PAGE_VERSION 2026-10-06.35 a start added with no classes ticked is
-  saved as a start group too (a race with more than three starts is saved even with no
-  classes), and a race's first + Start adds a start after those shown. What earlier
-  actions said (sent, withdrawn, already in the race record, a card imported) is
-  cleared when a different day is loaded. A typed
-  position can be withdrawn or corrected from its detail in Check recorded marks
-  ("Withdraw…", "Correct position…", A46). On another device it matches a pasted position with the same race and
-  name, if that device has one (decided by Pat 12 October 2026), and otherwise shows as
-  "Mark missing". Any course row whose mark cannot be found is shown as "Mark missing",
-  never hidden, and the legs to and from it are not measured (`STATUS.md` A38).
-- *Race view*: what is needed after the gun. A header with race and start pickers,
-  the course and its total; an alert strip for anything that changes during a race
-  (a laid mark re-pointed, a mark moved, two phones disagreeing, the refresh
-  stopped); the legs table and plot; wind and the wind-shift box; the send buttons;
-  and the committee-boat button. The view never switches by itself.
-- *Legs*: between two card marks the card's own route is used, passages included,
-  with distances and bearings from the workbook; the page never searches for a
-  route. A route the workbook authors one way only is used in reverse from the
-  snapshot ("card route reversed, via RW_…", or "card route reversed" when direct):
-  the same points in reverse order and the same distances, each bearing from the
-  positions with Vincenty. Where the snapshot has no route, the leg is measured
-  straight, labelled "not depth-checked" if it touches a Course Card mark. A routing
-  waypoint the RO places between two marks makes one leg of its physical legs
-  ("routed via RW_… (RO-chosen)"); a physical leg that is exactly a chord the
-  workbook tested takes the workbook's figures, any other is labelled "not
-  depth-checked". The leg table and the note above the SailScoring lines name the
-  Course Card marks of the course: "E4, No.10: position from the course card, not a
-  fix recorded today". With a recorded start line, the leg from it keeps the card's route from
-  the card's start point, and only the first hop (line → first waypoint, or → the
-  first mark on a direct leg) is measured from the line, labelled "from the
-  recorded line, not depth-checked"; the finish leg to a recorded line likewise.
-  A committee boat for a Grassy Walk start sits within a few hundred metres of
-  Grassy Mid, so that water is effectively the validated water; the page warns
-  when the line's midpoint is more than 500 m from the card's start point.
-  The legs of any race and start are worked out by one function that only reads
-  the page's state (it changes no course, choice or output), so anything else that
-  needs a start's legs gets the same figures as the legs table.
-- *Starts and finishes of a card course are deliberately not mirror images* — do
-  not "fix" one into the other:
-  - **Finish:** the card's Finish decides. Grassy Mid stands for the Grassy Walk
-    line: the recorded start line, or Grassy Mid standing in until it is recorded.
-    **No.8 or Dosco is the mark itself:** boats finish as they round or pass it and
-    the committee boat positions itself to time them, so a recorded line is not
-    used for the finish. The workbook ends such a route at the mark (a final
-    rounding of Dosco becomes the finish; there is no zero-length leg).
-  - **Start:** a recorded committee boat and pin always win. The Autumn League SI
-    2026 has committee boat starts in the area of Cage (C1), No.8 or Dosco, so a
-    No.8 or Dosco card start is a committee boat line near that mark, never the
-    mark itself. The card start only picks the workbook configuration and stands
-    in when nothing is recorded.
-  - The Finish selector in section 3 (start line, committee boat and Finish Pin, or
-    at the last mark) is for hand-built courses only; for a card course it is
-    replaced by a statement of the card's finish.
-- *Laid marks* (Curlane, Dutchman, White Bay, from the Marks sheet Type): the
-  latest RIB fix, pasted position or saved typed position (A47) of that race or an
-  earlier one whose name matches the mark's, ignoring case, spaces and punctuation, is
-  used; a pasted or typed one is named as such in the chip, the position box, the leg
-  note and the laid-mark notice; with none, the card position,
-  flagged as a planning position until laid. A near miss such as "Curlane Bank" is
-  suggested, never applied (Curlane Bank is also a name of No.8 and No.10). The RO
-  can pin any fix, or the card position. That choice is kept on this phone only, not
-  saved with the course (`STATUS.md` A10). See the exception to
-  the dumb-viewer rule above. Harp, Ringabella, Dosco and EF4 are permanently
-  moored, not laid: they always use the workbook position, and only their published
-  coordinates are in question. The Marks sheet Type says which is which.
-- *Fixed marks* (section 3, folded, closed on every load): one button per mark with a
-  position in the Marks sheet, under its Type (`STATUS.md` A40). The Course Card
-  headings first, in sheet order, then "Club laid mark", then one "Routing waypoints"
-  heading for all eight. A tap adds the mark to the race being built, at its card
-  position, and a row with no side at the end of the course; the side button sets P
-  or S, and a second rounding is tapped from its chip. A Course Card mark or a
-  routing waypoint is not carried into a later race's chips: there it is tapped from
-  the list again, so a row never names another race's card mark (recorded fixes,
-  typed positions and laid marks are carried as before). A card-mark chip added by
-  mistake has a × while no course row of that race uses it, which removes the chip
-  (it is on the device only); fixes and typed positions never have it.
-  Only a tapped mark is added to
-  the device, never every mark at once. Fixed marks and Grassy Mid read "E4 · Course Card" on chips and
-  rows (Grassy Mid keeps its card warning); Curlane, Dutchman and White Bay read
-  "laid mark" and follow the laid-mark rules below; a routing waypoint reads
-  "routing waypoint", has no side button, has ↓ as well as ↑ and ✕ to move it to its
-  place in the course, and is not shown or counted in Check recorded marks, where the
-  as-sailed course is drawn through it with a small dot. A routing waypoint with
-  nothing on one side (the first row with no start line, or the last with no finish
-  point) belongs to no leg: its row says "routing waypoint must sit between two
-  marks: move it with ↓" (or "↑" when it is last), the leg table says so, no leg is
-  measured to or from it, the WhatsApp text leaves it out, and Copy for Sail Scoring
-  is INCOMPLETE until it is moved. With a start line or a finish point it sits between
-  the line and a mark, as any waypoint between two marks. Marks of an imported card
-  course get the same labels. A saved row naming a card mark is rebuilt from the
-  card on every device; a name not in the card shows "Mark missing". "Read marks
-  from a WhatsApp message" and "Add a mark by typing its position" refuse a card
-  mark's own name (a fixed mark, Grassy Mid or a routing waypoint; capitals, spaces
-  and punctuation ignored, no other names) and store nothing: "E4 is on the course
-  card: tap it under Fixed marks. If the buoy has moved, give it a different name,
-  such as E4 moved." For Grassy Mid and the routing waypoints, which are not buoys,
-  the second sentence is "If you need a different point, give it a different name."
-  Each refused name gets a line of its own. The other lines of a pasted message are
-  read as before, and the message stays in the box. Laid marks are not refused (aliases are for
-  `STATUS.md` A43). Under All races in Check recorded marks every race with anything
-  drawn has its switch, Course Card marks included.
-- *Far positions* (`STATUS.md` A45): a typed or pasted position more than 8 nm from
-  the map centre is left out of the zoom of both Check recorded marks views and not
-  drawn, with a line under the view ("1 position more than 8 nm away is not drawn:
-  FarT (614 nm), see the list below"); it stays in the list with its warning and
-  counts under "to check". In the course sketch and chart a leg to or from it is
-  drawn to the edge of the frame with an arrow and "FarT, 614 nm, off the plot". The
-  leg table, the WhatsApp text and Copy for Sail Scoring keep the real figures.
-  Recorded fixes are always drawn, however far away. A course using such a position
-  is held back in Send, as one with a missing mark is (below).
-- *Magnetic variation* (`STATUS.md` A11): the World Magnetic Model (WMM2025, NOAA NCEI
-  and the British Geological Survey, the model Sail Scoring uses), embedded in the
-  page with its 90 official coefficient lines, worked out as Sail Scoring works it out
-  for the course we copy to it (from PAGE_VERSION 2026-10-06.36): at the course's
-  anchor (the start of its first measured leg, as Copy for Sail Scoring writes it, to
-  6 decimals), at noon UTC on the race date (the day loaded), rounded to 2 decimals as
-  Sail Scoring's `magvar` does. Never from the marks loaded, never for today's date.
-  A course with no measured leg has no anchor; Sail Scoring would then use its series'
-  venue position, which the page does not have, so the page uses the map centre
-  (51.82 N, 8.27 W) and says "variation at the map centre: no leg measured" beside the
-  wind arrow on the chart and the sketch.
-- *Distances and bearings* (`STATUS.md` A15, from PAGE_VERSION 2026-10-06.36):
-  Vincenty on the WGS84 ellipsoid, as the workbook (`scripts/geo.py`), for every
-  figure: legs, mark movement, line length and the 8 nm far-away check. The charts
-  still draw a straight leg as a rhumb line, which is what a straight line on their
-  map is.
-- *Typed positions* (`STATUS.md` A49): "Add a mark by typing its position" asks for
-  the time on the water (filled with the time now on the race day itself) and saves
-  it on the race day; Cancel stores nothing. A position typed before .36 carries the
-  time it was typed; one typed on another date than its race day says that date
-  ("R2 15:50 on Tue 13 Oct") on the RO's page; the WhatsApp text leaves the date out. The message for a typed position far from the map centre
-  is red, as its chip is (A55). The sketch's scale bar is in metres below 0.1 nm.
-  After a change of day, "All course changes saved" speaks only for the day loaded
-  (A48).
-- *Holding back a broken course* (section 6): while the course has a missing mark, a
-  leg not measured (a routing waypoint with nothing on one side), a leg shorter than
-  50 m (flagged "two marks at nearly the same position" in the leg table) or a typed or
-  pasted position more than 8 nm from the map centre, or while the Race day box shows a day
-  that is not the one loaded, a red line above the Send buttons says so ("This course
-  has a missing mark: fix it before sending to competitors."), and "Pick a chat in
-  WhatsApp", Share and Copy text each ask "Send anyway?" first. A Race day changed but
-  not loaded is also said in red under Get latest marks ("Race day changed to Sun 4
-  Oct 2026: tap Get latest marks"). With nothing at all to send, all three buttons
-  are greyed alike. Copy for Sail
-  Scoring is unchanged: it already says INCOMPLETE.
-- *Outputs* (section 6): a WhatsApp message, a clean course list for competitors
-  (the heading, with the date of the day loaded whatever was pasted, the course line, the numbered marks, each leg with its bearing,
-  distance and TWA, the total and the positions; no line, squaring or wind
-  analysis, no route notes or labels, no routing waypoints, a leg through one
-  reading mark to mark with its whole distance, and a laid mark by its name only,
-  its planning-position or RIB-fix status staying on the page); the
-  **leg table for SailScoring**; and **Copy for Sail Scoring**, both below.
-- *Clear everything* (foot of Setup, tap twice within 4 s): clears this phone and
-  leaves the page as a reload would; nothing is sent to the server, and marks and
-  courses saved there come back with Get latest marks. The series name and race key
-  last seen are kept (neither is counted as not sent); an unsent change to a race's
-  picked chips counts as a course edit. If this phone holds fixes not yet sent or course edits not
-  yet saved, the first tap says so ("1 fix and 2 course edits not sent yet – tap
-  again to clear anyway"). A change that adds page state outside the saved state `S`
-  must reset it in `clearPageState()`, the one place the clear is kept in step with
-  a fresh load. It also empties the course save line, and any stopped change of day
-  ("Still on …" and its "Change day anyway" button).
+**Line ends.** The Committee boat, Start Pin and Finish Pin lists offer every
+recorded fix of that type from every race of the day, or **None**. On auto a line
+end takes the latest fix of its race or an earlier one at or before the start
+time (the Finish Pin has no time limit); a fix after the start is shown as a
+candidate, never used by default. When a course is saved, auto's choice is saved
+with it, so the course rebuilds the same on every device; a newer fix is offered
+("A newer fix … – use it?"), never taken by itself. A start's line-end choices are
+saved only once its start time is complete.
 
-**Wide screens.** Under 700 CSS px (phones) the page is one 560 px column, as it
-always was. From 700 px it is one 760 px column with larger sketches. From 1100 px
-(tablet landscape, PC) it is two columns, up to 1400 px in all, centred (the "Check
-recorded marks" sketch is drawn on a larger canvas there, up to 85% of the screen
-height, so its labels have more room), so the scorer
-can check the recorded marks and the legs together: in Setup, sections 1 to 3 and,
-under them, section 4 (Legs) on the left, and the Sketch/Chart, "Check recorded
-marks", wind shift and send on the right; in Race
-view, the legs table on the left and the sketch with "Check recorded marks" on the
-right, and wind, wind shift and send below. The columns depend on element order in
-the page, not on wrapper elements (see the comment above the media queries): moving
-an element into or out of the Setup container, or reordering the column's elements,
-moves it between columns. The watermark stays centred on the screen.
+**Missing start line ends.** With a start time and no usable line, the Start line
+row offers:
+- the **Grassy start** (the Grassy Walk line, measured from Grassy Mid);
+- **Start Pin at** a mark, then **Set Start Pin here**;
+- **Place committee boat** or **Place Start Pin**: the missing end by distance and
+  bearing (°M) from the known end or a mark, with greyed suggestions (200 m,
+  **Square to wind** or **Square to first mark**, committee boat at the starboard
+  or port end) used only if typed in;
+- with one end found, that end **as the line midpoint**, drawn as a 200 m line
+  square to the first leg.
 
-**SailScoring leg table.** The course as sailed, for entering into SailScoring:
-one line per physical leg, in sailing order, from the start to the first mark
-through to the last mark to the finish. A card passage is split into the legs
-actually sailed. Each line is the distance in nautical miles to two decimals, a
-space, and the bearing as three digits, and nothing else. The bearings are given in
-degrees **magnetic**; that SailScoring expects magnetic rather than true is an
-assumption, pending confirmation with Mark:
+A placed end is saved as a typed position timed at the start time and flagged as
+an estimate on the page, the leg table, the sketch, the chart and Copy for Sail
+Scoring (`"x-estimate"`), never in the WhatsApp text. An estimate carries forward
+within its own race only; a later race is offered it. **Undo** withdraws what the
+helper placed, and is refused while another start uses it. **Remove Start** moves
+every later start's records down with it, withdraws the removed start's own placed
+ends, and is refused while another start uses them. A finish line with one end
+missing has no helper.
 
-    0.24 105
-    0.23 123
-    0.86 183
+**Laid marks** (Curlane, Dutchman, White Bay) take their position from the latest
+RIB fix, saved typed position or pasted position of the race or an earlier one
+whose name matches, ignoring case, spaces and punctuation; with none, the card's
+planning position, flagged until laid. A near miss is suggested, never applied.
+The Position box lets the RO pin any fix or the card position; that choice, and
+auto's choice, are saved with the course. Harp, Ringabella, Dosco and EF4 are
+permanently moored and always use the workbook position.
 
-A note above the block, not part of what is copied, says whether the first and
-last legs are measured from the recorded committee boat and pin (or finish pin) or
-from the card's stand-in start and finish, and that the bearings given are magnetic
-(see the assumption above). Because
-each physical leg is rounded separately, the lines can add to a few hundredths
-more or less than the legs table's total.
+**Legs.** Between two card marks the card's own route is used, passages included,
+reversed from the snapshot where the workbook authors it one way only. Otherwise
+the leg is straight, labelled "not depth-checked" where it touches a Course Card
+mark. A recorded start line keeps the card's route from the card's start point
+and measures only the first hop from the line, labelled; the finish likewise. For
+a card course the card's Finish decides: Grassy Mid stands for the Grassy Walk
+line; No.8 or Dosco is the mark itself. A No.8 or Dosco card start is a committee
+boat line near the mark, never the mark. Distances and bearings use Vincenty on
+WGS84, as the workbook does. Magnetic variation comes from the embedded World
+Magnetic Model at the course's first leg (noon UTC on the race date), as Sail
+Scoring computes it; with no measured leg, the map centre, said beside the wind
+arrow.
 
-**Copy for Sail Scoring.** The selected race and start as one JSON document in Sail
-Scoring's ORC constructed course format (`"format": "orc-constructed-course"`,
-version 1), copied to the clipboard for Sail Scoring's Add start dialog. It is not
-the Course Record (`STATUS.md` C2, A37). The legs are those of the leg table above:
-one per physical leg, from the same function, the distance to 0.01 nm and the
-bearing in degrees magnetic to one decimal (`"north": "magnetic"`; from PAGE_VERSION 2026-10-06.36, as agreed with Mark McLoughlin on 10 October 2026), each named "From - To" as
-the legs table names its ends ("Start - Windward"). The name is the series, race
-date, race and start ("Autumn League, Sun 27 Sept 2026, Race 1, Start 1"); the
-series is also given as `"x-series"` (from PAGE_VERSION 2026-10-06.36; extra fields start
-with "x-" in Mark McLoughlin's format convention), left out when the series name is not set. The
-anchor is where the first leg starts, usually the start line's midpoint, to 6
-decimals. Wind direction (°M, as entered) is on every leg, or on none when not
-entered; wind speed likewise, left out when no direction is entered. Marks, line
-ends, recorded times, fixes, recorders, devices and keys are not exported.
+**Wind and the start line.** The wind direction (0 to 360 °M, saved when the box
+is left) gives TWA per leg, how far the line is off square and which end is
+favoured. Without wind the line's length and bearing still show.
 
-- A start with no start time is not exported: the button is disabled and "Start
-  time missing" shows. The start time entered is taken as the actual start.
-- A leg that cannot be measured (no start line, no finish line where the finish
-  needs one, or a mark missing) is left out, never made up, and named after the race
-  name in short form, one count of the legs not measured, each leg once, with the
-  reasons: "Autumn League, Sun 27 Sept 2026, Race 1, Start 1 - INCOMPLETE - 1 leg not
-  measured (start line not recorded)", or "… - INCOMPLETE - 3 legs not measured (mark
-  missing: No.12; start line not recorded)". A leg measured from a laid mark's
-  planning position, or to the start line used as the finish while its warning
-  shows, is exported and named with "STAND-IN - …", after INCOMPLETE where both
-  apply. Every warning in the name also shows beside the button, in full, naming
-  each leg. The card's start or
-  finish point standing in, a wind speed with no direction and an unset series are
-  shown beside the button only.
-- Sail Scoring shows the name as the race title, so warnings in it are a stopgap
-  until it offers a note field (`docs/orc-constructed-course-tests/README.md`).
+**Check recorded marks** (closed by default, in both views): a sketch or map of
+every fix of the race (or all races), with the recorded lines, the as-sailed
+course of the selected start drawn over them, and advisory flags that never block
+(old position, pin near a mark, line far off square, mark far from the same mark
+in another race, pin order, no committee boat). Tapping a fix shows its detail;
+typed positions there can be withdrawn or corrected. Typed or pasted positions more
+than 8 nm from the map centre are listed, not drawn.
+
+**Saving.** Course changes save automatically a second after each change and
+every 15 seconds while any is unsent, once the device has loaded that day. The
+line under Get latest marks says what happened: saved, waiting (no signal, no
+key, no reply in 20 s, server error: retried every 15 s), or a record refused. A
+load that leads to a save says why. Changing day first sends the old day's unsent
+changes; if any cannot be sent the change of day stops ("Still on …"), and
+"Change day anyway" is offered only when nothing more can be done.
+
+**Send** (section 6):
+- **WhatsApp**, **Share** and **Copy text**: a clean course list for competitors
+  (series and date heading, race and start, the numbered marks with sides, each
+  leg in °M with distance and TWA, the total and the positions). No route notes,
+  estimates or labels.
+- A course with a missing mark, a leg not measured, a leg under 50 m or a position
+  over 8 nm away shows a red line above the buttons, and each asks "Send anyway?".
+- **Copy legs for SailScoring**: one line per physical leg, distance in nm and
+  bearing in °M.
+- **Copy for Sail Scoring**: the start as one JSON document in Sail Scoring's ORC
+  constructed course format (`docs/constructed-course-format.md`): legs from the
+  same calculation as the leg table, distance to 0.01 nm, course in °M to one
+  decimal, wind on every leg or none, the anchor where the first leg starts, the
+  series as `"x-series"`. The name is the date, race and start, followed by any
+  INCOMPLETE or STAND-IN warning. A start with no start time is not exported.
+  Rounding sides are never sent.
+
+**Clear everything** (foot of Setup, tap twice) clears this device as a reload
+would; nothing is sent, and the first tap warns about anything unsent.
+
+**Offline.** The course page has no service worker: with no signal it opens only
+if the browser still has it in its own cache.
+
+## Sites
+
+- **tradboats.ie**: RCYC's live install, `/record/`, `/course/` and `/marks/`,
+  with the test copy beside it (`/course-test/`, `/marks-test/`).
+- **orc-ireland.org**: a separate install with its own race key and data, same
+  layout; installed from a package by its own administrator
+  (`docs/INSTALL_ORC-IRELAND.md`).
 
 ## Scripts
 
@@ -687,7 +318,9 @@ ends, recorded times, fixes, recorders, devices and keys are not exported.
                               committee boat, pin or finish.
     scripts/rebuild_page.py   Embeds that snapshot in the race officer page and bumps PAGE_VERSION.
     scripts/xlsx_edit.py      Surgical workbook edits, and a cell-level diff of two workbooks.
-    scripts/build_test.py     Builds the parallel TEST copy of the RO page and marks.php (see below).
+    scripts/build_test.py     Builds the parallel test copy of the RO page and marks.php (see Test copy).
+    scripts/backfill_day_series.py  One-off: writes a series name into chosen past days, through marks.php,
+                              after backing them up.
 
 Command lines:
 
@@ -696,6 +329,8 @@ Command lines:
                                   [--spacing 5.0] [--criterion 1.5] [--out chord_evidence.csv] [--date "30 Sep 2026"]
     python scripts/make_snapshot.py WORKBOOK [--out cardsnap.json]
     python scripts/rebuild_page.py WORKBOOK [--page pages/course/course_v8.html] [--dry-run]
+    python scripts/build_test.py [--page ...] [--marks ...] [--out build/test]
+    python scripts/backfill_day_series.py --url URL --backup-dir DIR [--key-js PATH] [--series NAME] [--dates ...] [--dry-run]
 
 Dependencies: `pandas`, `numpy`, `tifffile`, `openpyxl` (diff only).
 
@@ -735,264 +370,106 @@ alone is over 5 GB) and are not in the repository.
 
 ## Tests
 
-    tests/test_marks.py       Safety tests for pages/marks/marks.php.
+    tests/test_marks.py       marks.php, run unmodified as real CGI requests on throwaway data
+    tests/test_build_test.py  build_test.py, plus static checks of the course page's source
+    tests/test_backfill.py    backfill_day_series.py against a local marks.php
 
-Runs `marks.php` unmodified as real CGI requests against a throwaway day file
-holding three races, and checks those races are intact after each case: a fix
-or course that cannot be JSON-encoded, a damaged day file, a write failing
-part-way, the RO page moving a fix (device, recorder and tap must survive), the tap
-time (stored, returned, a bad one dropped while the fix is kept), the series
-name (saved, read back and cleared; a wrong key, a bad name or a failed write leaves
-`series.json` unchanged), and 60 fixes, 10 courses and 30 reads arriving at once.
-It also checks the RO key (missing, malformed, wrong, right, header only), the course
-history (first plus last 5, the 5 MB cap, an identical save writing nothing, a failed
-history write refusing the save, saves arriving at once), the decisions endpoint,
-unused by the pages (every field validated, a malformed record writing nothing, a
-retry writing nothing, the daily cap, revoke), a race's picked list (kept and read
-back, moved into the history, dropped by an older page's save, the 50 KB limit),
-withdrawing and correcting a typed position (refused for a RIB or committee boat fix,
-refused while a course uses it, never deleted, a retry writing nothing) and
-that every request the current RIB and RO pages send is accepted
-as before. The race key and RO key in its throwaway folders are made at run time.
-Run it, on PHP 8.4 and on PHP 5.5 like the live host, before uploading any change to
-`marks.php`.
-
-Needs a local PHP install with `php-cgi` (in the Windows PHP zip; the `php-cgi`
-package on Linux), found on PATH or through the `PHP_CGI` environment variable.
-Tested with PHP 8.4.26 and 5.5.38 on Windows; the live host runs PHP 5.5.38 (checked 9 October 2026).
-
-    tests/test_build_test.py  Tests for scripts/build_test.py.
-
-Builds a test copy into a throwaway folder and checks it: it talks only to
-`/marks-test/`, every browser storage key carries the `test-` prefix, the red TEST
-banner shows its `PAGE_VERSION`, the title says TEST, it is `noindex`, `marks.php`
-is copied byte for byte and nothing else in the page changed. Then it feeds the
-script pages it must refuse (a storage key without `STORE`, a stray `/marks/` path,
-a missing or doubled key.js tag, no `STORE` line, no title) and checks each is
-refused and leaves an earlier build untouched. It also checks that the page's
-storage key names (what follows `STORE+`) are exactly the known list, `pv-`,
-`race-key`, `course-plot-v1` and `course-series`, so a key
-added or dropped must update the test. Needs no PHP and no browser.
-Static guards also check that the "Copy for Sail Scoring" button appears once, that
-the leg table for SailScoring, its line format and its copy code are unchanged, and
-that the copy takes its legs from the leg table's function and changes nothing.
-For 2026-10-06.30 (`STATUS.md` A40, A45) they check that the snapshot has all 63
-marks, its authored routes and courses are exactly v3.19's plus 85 exact reverses,
-no Position Source, Source URL or Verification / Use text is in the page, Copy for
-Sail Scoring and the SailScoring lines are unchanged from .29, and the WhatsApp text
-carries no analysis, route notes or labels. For 2026-10-06.31 they check the five
-fixes after Pat's test of .30: Course Card marks not carried, the All races
-switches, the card-name refusal, a routing waypoint with nothing on one side, and
-the laid-mark notice's total.
+`test_marks.py` checks that every request the pages send is accepted, that bad
+input and failed writes leave the data intact, and the course history, typed
+position withdraw and correct, the day's series, the RO key and the decisions
+endpoint. It needs `php-cgi` on PATH or in `PHP_CGI`; run it on PHP 8.4 and on PHP
+5.5 (as the live host) before any change to `marks.php`. `test_build_test.py`
+builds a test copy into a throwaway folder and checks it talks only to
+`/marks-test/` with `test-` storage keys, and that the build refuses pages it
+must; it also holds static guards over the course page's source. None of these
+runs the page's JavaScript.
 
 ## Deploying the pages
 
-    pages/course/index.html      ->  /course/index.html  (generated: see below)
+    pages/course/course_v8.html  ->  /course/index.html
     pages/record/sw.js           ->  /record/sw.js       (upload before the page)
-    pages/record/record.html     ->  /record/index.html
+    pages/record/index.html      ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
-    pages/marks/key.js           ->  /marks/key.js      (not in the repository)
-    data/ro-key.php                  ->  /marks/data/ro-key.php  (placed by hand, never in the repository;
-                                         optional: it protects only the unused decisions endpoint)
+    key.js                       ->  /marks/key.js       (made from pages/marks/key.example.js; never in the repository)
 
-`pages/course/index.html` is not in the repository: `rebuild_page.py` writes it on
-every run as a byte-identical copy of `course_v8.html`, which stays the source. Upload
-that file as `/course/index.html`; never edit it by hand. A copy of `course_v8.html`
-renamed to `index.html` is the same bytes while the snapshot is current
-(`rebuild_page.py --dry-run` says so); the 9 October 2026 upload was such a copy.
-Either way, compare its SHA-256 with `course_v8.html` before uploading and again after
-re-downloading it.
+The course page is uploaded exactly as committed. `rebuild_page.py` also writes
+`pages/course/index.html`, a byte-identical copy, when a workbook release changes
+the snapshot.
 
-The race key is kept out of this public repository. Copy `pages/marks/key.example.js`
-to `key.js`, set the key, and upload it next to `marks.php`: both pages load it and
-`marks.php` reads it, so the key is changed in one place. Without a usable `key.js`,
-`marks.php` refuses every request. Each phone remembers the last key it saw, so a
-`key.js` that fails to load mid-race does not stop uploads.
+The race key is kept out of this public repository. Copy
+`pages/marks/key.example.js` to `key.js`, set the key and upload it next to
+`marks.php`: both pages load it and `marks.php` reads it. Without a usable `key.js`
+`marks.php` refuses every request. Each phone remembers the last key it saw.
 
 **If the RIB page's service worker misbehaves,** upload `pages/record/sw-kill.js`
-**as `/record/sw.js`**, replacing the real one. Do not just delete `sw.js`: a
-missing file leaves the installed worker running. Each phone picks up the kill
-switch the next time it opens `/record/` with signal (reload once if the page
-looked wrong): it deletes the saved copies and unregisters itself, and the page
-loads from the network as before. While the kill switch is in place the page still
-registers it on each open, and it removes itself again at once. Put the real
-`sw.js` back once it is fixed. `sw-kill.js` itself is never uploaded under its own
-name.
+**as `/record/sw.js`**. Do not just delete `sw.js`: a missing file leaves the
+installed worker running. Each phone picks up the kill switch the next time it
+opens `/record/` with signal; it deletes the saved copies and unregisters itself.
+Put the real `sw.js` back once fixed.
 
-`marks.php` keeps its data in `/marks/data/` and writes an `.htaccess` there that
-denies web access. That only works on Apache or LiteSpeed; check it on the live server (9 October 2026: a request for a non-existent file under `/marks/data/` is refused with 403).
+## Test copy
 
-## Parallel test install
-
-A full copy of the RO page and `marks.php` that runs beside the live ones on the same
-site, on a copy of a day's files, so the live RIB page, live `marks.php` and live data
-are never touched. The RIB page has no test copy: its service worker deletes every
-other `record-` cache on the site, which would remove the live page's offline copy.
+A copy of the course page and `marks.php` that runs beside the live ones on the
+same site, on its own data, so the live pages and data are never touched. The RIB
+page has no test copy: its service worker would remove the live page's offline
+copy.
 
     python scripts/build_test.py        ->  build/test/   (ignored by git)
     build/test/course-test/index.html   ->  /course-test/index.html
-    build/test/marks-test/marks.php     ->  /marks-test/marks.php   (unchanged copy)
+    build/test/marks-test/marks.php     ->  /marks-test/marks.php
 
-`BUILD.txt` names the source commit and, for each file, where it came from: the
-committed file and its commit only when it is tracked and unchanged, otherwise its
-path, "outside the repository", "not tracked" or "uncommitted changes" (`STATUS.md` A28).
+`BUILD.txt` names where each built file came from. The test page differs from the
+live one only in its `key.js` path and `MARKS_BASE` (`/marks-test/`), `STORE`
+(`test-`, so it never shares browser storage with the live page), `-test` on
+`PAGE_VERSION`, "TEST" in the title, `noindex`, and a red banner.
 
-The test page differs from the live one only in its `key.js` tag and `MARKS_BASE`
-(`/marks-test/`), `STORE` (`test-`, so every browser storage key it writes is
-`test-...` and it never reads or writes the live page's keys on the same phone),
-`PAGE_VERSION` (`...-test`), "TEST" in the title, `noindex`, and a red banner at
-the top showing its `PAGE_VERSION`. The script refuses, and writes nothing, if any
-storage key in the page lacks `STORE` or if any path could still reach `/marks/`.
-For every test build, also open it, use it, and list the browser's stored keys:
-every key it wrote must start with `test-`.
+First install: create `/course-test/` and `/marks-test/`, upload the two files, and
+place `/marks-test/key.js` by hand with a test race key different from the live
+one. Opening `/course-test/` creates `/marks-test/data/`; check it is refused
+(403). Copy into it, by FTP, the live days the test needs. That data holds real
+recorder names and phone ids: keep any download of it outside the repository.
 
-Upload, in this order:
+Each test build: back up `/marks-test/data/` and the current `/course-test/index.html`
+first; upload the new page (and `marks.php` if it changed); check its
+`PAGE_VERSION` by view-source in a private window. To roll a test build back,
+restore both the page and the data folder.
 
-1. Create `/course-test/` and `/marks-test/` beside `/course/` and `/marks/`, and
-   upload the two built files above.
-2. Place `/marks-test/key.js` by hand, in the format of `key.example.js`:
-   `window.RACE_KEY='...';` with a TEST race key, 6 characters or more, no quote
-   marks, and **different from the live key**. It is never part of the build.
-3. Open `https://tradboats.ie/course-test/` once. Its first request reaches
-   `/marks-test/marks.php` with the test key, and that creates `/marks-test/data/`
-   with its deny-all `.htaccess` (a request without the key is refused before that).
-   Check `https://tradboats.ie/marks-test/data/` is refused (403 Forbidden).
-4. Copy the day's files from `/marks/data/` into `/marks-test/data/` by FTP:
-   download `marks-2026-10-04.json`, `courses-2026-10-04.json` and `series.json`
-   and upload them to `/marks-test/data/`. Only a copy: nothing in `/marks/` changes.
-   Check `https://tradboats.ie/marks-test/data/marks-2026-10-04.json` is refused (403).
-5. Optional (the RO key protects only the unused decisions endpoint): place
-   `/marks-test/data/ro-key.php` by hand, exactly two lines, `<?php` and
-   `return '...';`, with a TEST RO key of 16 to 64 letters, digits, `-` or `_`,
-   **different from the live RO key**. Check
-   `https://tradboats.ie/marks-test/data/ro-key.php` is refused (403) or blank,
-   never showing the key.
+## Releasing to a live site
 
-`/marks-test/data/` then holds a copy of real fixes, with recorder names and phone
-ids: delete it (with the whole `/marks-test/`) when the rehearsal ends, and keep any
-download of it outside the repository.
+1. **Timing.** Nothing goes to the live paths within 12 hours of a race.
+2. **Tests.** `tests/test_build_test.py` passes; if `marks.php` changed,
+   `tests/test_marks.py` passes on PHP 8.4 and PHP 5.5. The build has passed on the
+   test copy: a script regression on copies of the live and test data (every
+   start's legs, totals, outputs and saves against the released page), and the
+   manual steps for what needs a person's eyes.
+3. **Nothing unsent.** No RIB phone has fixes waiting and no RO device has course
+   changes waiting.
+4. **Backups**, outside the repository, in a dated folder: the live
+   `/course/index.html`, `/marks/marks.php`, and the whole `/marks/data/` folder.
+   Check the data folder's file count against FileZilla's and keep a SHA-256 list
+   of every file:
 
-To remove it, delete `/course-test/` and `/marks-test/` on the server.
+       Get-ChildItem <folder> -File | Get-FileHash | Select-Object Hash, Path | Export-Csv <folder>.sha256.csv -NoTypeInformation
 
-## Live install: backup and rollback
+   These backups hold real recorder names and phone ids: never share them.
+5. **Upload** in FileZilla, Binary mode: `marks.php` first if it changed, then the
+   page. Download each back and compare its SHA-256 with the file uploaded.
+6. **Check** in a private window by view-source: the new `PAGE_VERSION`,
+   `MARKS_BASE='/marks/'` and `STORE=''`, and no test banner. Load a raced day and
+   check its totals are unchanged.
+7. **Every device.** On each RO device (PC, tablet, phone, laptop) close every
+   `/course/` tab and reopen it with signal; confirm it runs the new release
+   before it is used again, by view-source or by wording only the new release
+   shows. An older page can drop choices a newer one saved.
 
-Before uploading `marks.php` or the RO page to the live paths (never within 12 hours
-of a race), keep, outside the repository and dated:
+The detailed steps for each release are written to `build/release/` (not in git).
 
-1. `/marks/marks.php`, downloaded as `marks.php.live-YYYY-MM-DD`;
-2. `/course/index.html`, downloaded as `index.html.live-YYYY-MM-DD`;
-3. the whole `/marks/data/` folder, downloaded as `marks-data-YYYY-MM-DD/`.
+**Rollback.** Upload the backed-up page (and `marks.php`, if it was replaced) and
+restore the whole `/marks/data/` backup: an older page may not read what a newer
+one saved. Anything saved after the backup is lost and must be entered again.
+Then repeat step 7 for the older page.
 
-Upload `marks.php` first, then the page. Check the live page's version by view-source
-(Ctrl+U), searching for PAGE_VERSION: expect the new version with the live values
-`MARKS_BASE='/marks/'` and `STORE=''`; the page does not write PAGE_VERSION to the
-Console. To roll back, upload the saved `marks.php`
-and `index.html` again. Files a newer `marks.php` added to `data/` are ignored by the
-older one and can stay. Put a day's file back from the dated copy only if that file
-itself must be restored: it removes anything recorded or saved since the copy.
-Backups of `/marks/data/` will contain the RO key file (`data/ro-key.php`) once it is
-in place: keep them outside the repository and never share them.
-
-**9 October 2026 upload.** `marks.php` first: the 318d09b version (23,076 bytes,
-SHA-256 `05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`) replaced
-the 4a66559 version (10,487 bytes,
-`a104989efcb6a767aa4fe0c2aaf09f7ffcb389ca46bec112cafcf2ae3b187f04`). Then the page:
-`course_v8.html` at 318d09b, PAGE_VERSION 2026-10-06.24 (280,789 bytes,
-`3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b`), copied and
-renamed to `index.html`, replaced .7 (2aec398; 257,628 bytes,
-`157ce311615d4243fe09e5196250cf418bef74c7282c339a04ed7f997c388a10`). Both went up
-with FileZilla in Binary mode and were re-downloaded and hashed; the live page loaded
-the 4 October day, and was opened and working on a PC and a tablet (Pat). The first
-known live course save since the upload was the Race 1 repair of 4 October, made
-later on 9 October 2026 on the PC with this page; it wrote the course history file
-(`courses-history-2026-10-04.json`), so the live `data/` accepts the history write.
-No race has used it. The old files are kept outside
-the repository in `release_2026-10-09`: `marks.php.live-2026-10-09`,
-`index.html.live-2026-10-09` and `marks-data-2026-10-09`, with the upload copies
-`marks.php` and `index.html`. To roll back, upload `marks.php.live-2026-10-09` as
-`/marks/marks.php` and `index.html.live-2026-10-09` as `/course/index.html`. A .7
-page clears a line end that names a later race's fix, and drops a race's picked
-chips, on its first save of that record, so those choices are lost after a page
-rollback (the course history keeps the replaced versions while the new `marks.php`
-stays). After the upload no device may edit courses on the .7 page: close every open
-`/course/` tab and reopen it with signal.
-
-**9 October 2026 upload of PAGE_VERSION 2026-10-06.25.** No race was within 12 hours.
-The three backups were taken first, in FileZilla in Binary mode, outside the repository
-in `release_2026-10-09_25`: `marks.php.live-2026-10-09_25` (the 318d09b version,
-`05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
-`index.html.live-2026-10-09_25` (the live .24,
-`3113744562d739a85d0a7d3f9d6a51c0e8630ae50d754c3ddd42c6c4cf28062b`) and
-`marks-data-2026-10-09_25`. Then only the page: `course_v8.html` at 0db8b42,
-PAGE_VERSION 2026-10-06.25 (295,269 bytes,
-`2775387969964d825a8e18f20d932370f778d26ae4d79395cc6a0161e9eb9009`), copied as
-`index.html` and uploaded as `/course/index.html` in Binary mode; re-downloaded, the
-hash matched. `marks.php` is unchanged (318d09b). The page was opened on the PC and
-the tablet (Pat) and showed PAGE_VERSION 2026-10-06.25 with no page script errors; no
-day was loaded and nothing edited for the check. To roll back, upload
-`index.html.live-2026-10-09_25` as `/course/index.html`; `marks.php` and `data/` stay
-as they are.
-
-**10 October 2026 upload of PAGE_VERSION 2026-10-06.26.** No race was within 12 hours:
-the page is next used at about 10:00 on 11 October 2026 (first warning signal 11:00),
-and the upload was finished by 12:49 on 10 October. The three backups were taken
-first, in FileZilla in Binary mode, outside the repository in `release_2026-10-10_26`:
-`marks.php.live-2026-10-10` (the 318d09b version,
-`05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
-`index.html.live-2026-10-10` (the live .25,
-`2775387969964d825a8e18f20d932370f778d26ae4d79395cc6a0161e9eb9009`) and
-`marks-data-2026-10-10`. Beforehand `tests/test_marks.py` passed on PHP 8.4.26 and
-5.5.38, and `tests/test_build_test.py` passed. Then only the page: `course_v8.html` at
-c06c18b (page commit 3ece041), PAGE_VERSION 2026-10-06.26 (301,337 bytes,
-`1ac99aea21df9198e753530b95d5d995dd4a1883879eed03379c2827c6fd1d1f`), copied as
-`index.html` into the same folder and uploaded as `/course/index.html` in Binary
-mode; re-downloaded, the hash matched. `marks.php` is unchanged (318d09b). The page
-was opened on the PC and the tablet (Pat) and showed PAGE_VERSION 2026-10-06.26 with
-the "Course for Sail Scoring" block in section 6; the PC's console showed no page
-script errors. No day was loaded and nothing edited for the check. To roll back,
-upload `index.html.live-2026-10-10` as `/course/index.html`; `marks.php` and `data/`
-stay as they are, since .26 changes no stored data.
-
-**12 October 2026 upload of PAGE_VERSION 2026-10-06.29.** No race was within 12 hours
-(the next race is on 18 October 2026). Beforehand the RO devices showed no unsent fixes
-on the live .26 page. The three backups were taken first, in FileZilla in Binary mode,
-outside the repository in `release_2026-10-12_29`: `marks.php.live-2026-10-12` (the
-318d09b version, `05b7a38f8827719a4e3d766967b40eca28c0a605feb8a9f561542c1c52d1a0ca`),
-`index.html.live-2026-10-12` (the live .26,
-`1ac99aea21df9198e753530b95d5d995dd4a1883879eed03379c2827c6fd1d1f`) and
-`marks-data-2026-10-12`. Beforehand `tests/test_marks.py` passed on PHP 8.4.26 and
-5.5.38, and `tests/test_build_test.py` passed. Then only the page: `course_v8.html` at
-0cb5563, PAGE_VERSION 2026-10-06.29 (322,727 bytes,
-`8a58a11b28d2b9aa65e991d711a19d2f256121253dd3769bd525c5129bc14a38`), as
-`pages/course/index.html`, uploaded as `/course/index.html` in Binary mode;
-re-downloaded, the hash matched. `marks.php` is unchanged (318d09b) and was not
-re-uploaded. Every `/course/` tab was closed and reopened on the PC and the tablet (Pat):
-view-source showed PAGE_VERSION 2026-10-06.29 on both, and the PC's console showed no
-page script errors. No day was loaded and nothing was typed, pasted or recorded on the
-live page for the check. To roll back, upload `index.html.live-2026-10-12` as
-`/course/index.html`; `marks.php` and `data/` stay as they are, since .29 changes no
-stored format (course rows saved from pasted positions are hidden on .26, as before,
-and fixes in a device's "Not sent" list stay on that device).
-
-**15 October 2026 upload of PAGE_VERSION 2026-10-06.37.** No race was within 12 hours
-(the next is Sunday 18 October 2026, first warning 10:55). Steps:
-`build/release/RELEASE_STEPS_37.md`; essentials in PROJECT_HISTORY section 24. The
-backups were taken first, outside the repository in `release_2026-10-15_37`:
-`index.html.live-2026-10-15` (the live .36,
-`6da55fc18cd1fd05592b1ff3af504d4d917fdc9b6fa945116ca84d5dfe8a62f1`),
-`marks-data-2026-10-15` (file count checked, with `marks-data-2026-10-15.sha256.csv`)
-and `marks.php.live-2026-10-15`. Then only the page: `course_v8.html` at 2830692,
-PAGE_VERSION 2026-10-06.37 (440,766 bytes,
-`d0d1cf39820a6c7d6122af664c4c64fb3a53e044687a2d377acebd6f743988eb`), uploaded as
-`/course/index.html` in Binary mode; re-downloaded, the hash matched. `marks.php` is
-unchanged (`5c86088c36ca191765be45db441d0af62a5f939fa06ea79f78d194ae8c69e176`). The
-PC, tablet, phone and laptop were checked on .37 by wording only .37 shows, and
-`/record/` opened unchanged. To roll back, upload `index.html.live-2026-10-15` as
-`/course/index.html` and restore `marks-data-2026-10-15` to `/marks/data/`: .36 cannot
-read a start saved by .37 with both ends of its start line placed, and drops a Grassy
-start or a Start Pin set at a mark on its next save.
-
-## Before any release
+## Before any workbook release
 
 1. `python scripts/audit_workbook.py <workbook>` — must pass all 16 checks.
 2. `cell_diff(before, after)` from `scripts/xlsx_edit.py` (the one-line command is
@@ -1007,11 +484,11 @@ start or a Start Pin set at a mark on its next save.
    workbook it was made from.
 6. `python scripts/rebuild_page.py <workbook>` — embeds a fresh snapshot in
    `pages/course/course_v8.html` and moves its `PAGE_VERSION` on, so the bundled
-   data and the master do not drift, and writes `pages/course/index.html` as a
-   byte-identical copy; upload that file as `/course/index.html`. It prints what
-   changed in the snapshot first: after a change to the workbook alone, expect only
-   `meta.source` and `meta.sha256`. `--dry-run` shows the changes without writing.
-7. Record the new SHA-256 in this README.
+   data and the master do not drift. It prints what changed in the snapshot first:
+   after a change to the workbook alone, expect only `meta.source` and
+   `meta.sha256`. `--dry-run` shows the changes without writing. The page is then
+   released as above.
+7. Record the new workbook SHA-256 in the Current state table.
 
 A validation worth repeating whenever the sampling changes: Dosco to
 RW_Fort_Davis is 641.3 m, 130/130 samples, minimum 2.875 m LAT. That reproduces a
@@ -1032,9 +509,6 @@ result recorded long before these scripts existed.
    but the criterion is doing real work there.
 5. **Mark's 204.** Navigation Tests holds 204 distinct directed pairs, 61 of which
    are not physical chords. Probably the population behind his figure; unconfirmed.
-6. **Laid marks shown red.** A club laid mark at its planning position shows the red
-   outline and ⚠ as a chip, but is left out of the red outline in the Fixed marks
-   list; to be made consistent later (Pat, 14 October 2026).
 
 ## Workbook sheets
 
