@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 16 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71). Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 17 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -26,7 +26,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **.38 (built and tested, not released):** A8, A71. Released after Sunday's race, with the series backfill for 27 September, 4, 11 and 18 October.
 
-**Next:** A65 (race-day safety), A25 (key by header only), A70 (remove Copy legs).
+**.39 (built and tested, not released):** A65, on top of .38. Released after .38; never within 12 hours of a race.
+
+**Next:** A25 (key by header only), A70 (remove Copy legs).
 
 **Then:** A63 (finish line), A60 (copy a course from any start).
 
@@ -89,7 +91,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A17 | RIB page uses absolute `/marks/` paths | NOT STARTED | `/record-test/` path |
 | A18 | RIB service worker deletes every `record-` cache on the origin | NOT STARTED | |
 | A19 | RIB localStorage keys unprefixed | NOT STARTED | |
-| A81 | RIB worker can keep an older page as its offline copy: it installs from `/record/` and accepts any page with the version marker, so a host-cached older page can be saved by a newer worker, or replace a newer copy | NOT STARTED | Fix to match the course page worker (A65) once its design is agreed |
+| A81 | RIB worker can keep an older page as its offline copy: it installs from `/record/` and accepts any page with the version marker, so a host-cached older page can be saved by a newer worker, or replace a newer copy | NOT STARTED | Fix to match the course page worker (A65); it also waits on reading a copy of the page before answering (`await isPage(res)`), the pattern that stalled the course page's Reload in the A65 test |
 | A20 | Snapshot embedded per build; one build and `marks.php` folder per venue | NOT STARTED | |
 | A21 | Cork constants in the RO page | NOT STARTED | |
 | A22 | No venue, club or course-area identifier in stored files | NOT STARTED | |
@@ -143,7 +145,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A62 | Mark with no rounding side holds the WhatsApp text | DECIDED | Built with gates |
 | A63 | Finish line built like the start line; recorded Finish Pin as default | DECIDED | |
 | A64 | Never show or save a course for another day than the Race day box | BUILT AND TESTED | Released in .37 |
-| A65 | Course page opens with no signal | DECIDED | |
+| A65 | Course page opens with no signal | BUILT AND TESTED | Service worker, own version only, saved copy keeps Content-Type only; saves and direct fix actions wait for the version check, new fixes and Send never wait; kill switch `pages/course/sw-kill.js`; not released; see Next |
 | A66 | Server refuses Withdraw while a saved auto choice uses the fix | DECIDED | |
 | A67 | Correct moves only the starts the RO chooses | DECIDED | Design points first |
 | A68 | Save each start's auto choice when its start time passes | DECIDED | Design points first |

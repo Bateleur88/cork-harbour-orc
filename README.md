@@ -305,8 +305,27 @@ changes; if any cannot be sent the change of day stops ("Still on …"), and
 **Clear everything** (foot of Setup, tap twice) clears this device as a reload
 would; nothing is sent, and the first tap warns about anything unsent.
 
-**Offline.** The course page has no service worker: with no signal it opens only
-if the browser still has it in its own cache.
+**Offline.** A service worker (`pages/course/sw.js`, served as `/course/sw.js`,
+controlling `/course/` only) keeps a copy of the page and `key.js`. Opening always
+tries the network first and uses the saved copy only if the network fails, gives a
+server error or takes over 3 seconds (10 seconds when the page is reloading to a
+newer version it found). The worker keeps only a page of its own version, so an
+older page cached by the host never becomes the saved copy. Its cache is named
+after its folder and version, and a new worker deletes only its own folder's older
+copies, never the RIB page's or the test copy's. A device must open the page once
+with signal before it can open it without.
+
+Until the page has confirmed its version with the server since it was opened,
+course saves (the day's series among them) and withdraw, correct, move to another
+race, Undo's and Remove Start's withdrawals wait; new fixes and Send never wait.
+The save line reads "Waiting: checking the page version", and a change of day
+that cannot check stops with "Still on ‹day›: waiting to check the page version".
+A newer page on the server reloads the page by itself, at most once a minute and
+twice in all; after that a red line and **Reload** show under Get latest marks,
+and nothing held is sent until the page reloads. The Google Fonts stylesheet
+never holds the page: text shows at once in the fallback font. Safari on iPhone
+may drop the saved copy after about a week without a visit, so open the page with
+signal before each race day.
 
 ## Sites
 
@@ -395,6 +414,7 @@ runs the page's JavaScript.
 ## Deploying the pages
 
     pages/course/course_v8.html  ->  /course/index.html
+    pages/course/sw.js           ->  /course/sw.js       (upload before the page)
     pages/record/sw.js           ->  /record/sw.js       (upload before the page)
     pages/record/index.html      ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
@@ -409,11 +429,13 @@ The race key is kept out of this public repository. Copy
 `marks.php`: both pages load it and `marks.php` reads it. Without a usable `key.js`
 `marks.php` refuses every request. Each phone remembers the last key it saw.
 
-**If the RIB page's service worker misbehaves,** upload `pages/record/sw-kill.js`
-**as `/record/sw.js`**. Do not just delete `sw.js`: a missing file leaves the
-installed worker running. Each phone picks up the kill switch the next time it
-opens `/record/` with signal; it deletes the saved copies and unregisters itself.
-Put the real `sw.js` back once fixed.
+**If a page's service worker misbehaves,** upload that page's kill switch in place
+of its `sw.js`: `pages/record/sw-kill.js` as `/record/sw.js`, or
+`pages/course/sw-kill.js` as `/course/sw.js` (or `/course-test/sw.js` for the test
+copy). Do not just delete `sw.js`: a missing file leaves the installed worker
+running. Each device picks up the kill switch the next time it opens the page with
+signal; it deletes that folder's saved copies and unregisters itself. Put the real
+`sw.js` back once fixed.
 
 ## Test copy
 
@@ -423,6 +445,7 @@ page has no test copy: its service worker would remove the live page's offline
 copy.
 
     python scripts/build_test.py        ->  build/test/   (ignored by git)
+    build/test/course-test/sw.js        ->  /course-test/sw.js      (upload before the page)
     build/test/course-test/index.html   ->  /course-test/index.html
     build/test/marks-test/marks.php     ->  /marks-test/marks.php
 
@@ -430,6 +453,9 @@ copy.
 live one only in its `key.js` path and `MARKS_BASE` (`/marks-test/`), `STORE`
 (`test-`, so it never shares browser storage with the live page), `-test` on
 `PAGE_VERSION`, "TEST" in the title, `noindex`, and a red banner.
+The test worker differs from the live one only in its `key.js` path
+(`/marks-test/key.js`); its saved copies are named for `/course-test/`, so the test
+and live copies never touch each other's.
 
 First install: create `/course-test/` and `/marks-test/`, upload the two files, and
 place `/marks-test/key.js` by hand with a test race key different from the live
@@ -438,9 +464,11 @@ one. Opening `/course-test/` creates `/marks-test/data/`; check it is refused
 recorder names and phone ids: keep any download of it outside the repository.
 
 Each test build: back up `/marks-test/data/` and the current `/course-test/index.html`
-first; upload the new page (and `marks.php` if it changed); check its
-`PAGE_VERSION` by view-source in a private window. To roll a test build back,
-restore both the page and the data folder.
+and `/course-test/sw.js` first; upload `sw.js`, then the page (and `marks.php` if
+it changed); check its `PAGE_VERSION` by view-source in a private window. To roll a
+test build back, restore the page, `sw.js` and the data folder; if the restored
+page has no service worker, upload `pages/course/sw-kill.js` as `/course-test/sw.js`
+instead.
 
 ## Releasing to a live site
 
@@ -453,15 +481,17 @@ restore both the page and the data folder.
 3. **Nothing unsent.** No RIB phone has fixes waiting and no RO device has course
    changes waiting.
 4. **Backups**, outside the repository, in a dated folder: the live
-   `/course/index.html`, `/marks/marks.php`, and the whole `/marks/data/` folder.
+   `/course/index.html`, `/course/sw.js`, `/marks/marks.php`, and the whole
+   `/marks/data/` folder.
    Check the data folder's file count against FileZilla's and keep a SHA-256 list
    of every file:
 
        Get-ChildItem <folder> -File | Get-FileHash | Select-Object Hash, Path | Export-Csv <folder>.sha256.csv -NoTypeInformation
 
    These backups hold real recorder names and phone ids: never share them.
-5. **Upload** in FileZilla, Binary mode: `marks.php` first if it changed, then the
-   page. Download each back and compare its SHA-256 with the file uploaded.
+5. **Upload** in FileZilla, Binary mode: `marks.php` first if it changed, then
+   `/course/sw.js`, then the page. Download each back and compare its SHA-256 with
+   the file uploaded.
 6. **Check** in a private window by view-source: the new `PAGE_VERSION`,
    `MARKS_BASE='/marks/'` and `STORE=''`, and no test banner. Load a raced day and
    check its totals are unchanged.
@@ -472,10 +502,12 @@ restore both the page and the data folder.
 
 The detailed steps for each release are written to `build/release/` (not in git).
 
-**Rollback.** Upload the backed-up page (and `marks.php`, if it was replaced) and
-restore the whole `/marks/data/` backup: an older page may not read what a newer
-one saved. Anything saved after the backup is lost and must be entered again.
-Then repeat step 7 for the older page.
+**Rollback.** Upload the backed-up page and `sw.js` (and `marks.php`, if it was
+replaced) and restore the whole `/marks/data/` backup: an older page may not read
+what a newer one saved. If the page rolled back to has no service worker, upload
+`pages/course/sw-kill.js` as `/course/sw.js` instead, so every device drops the
+newer page's saved copy. Anything saved after the backup is lost and must be
+entered again. Then repeat step 7 for the older page.
 
 ## Before any workbook release
 
