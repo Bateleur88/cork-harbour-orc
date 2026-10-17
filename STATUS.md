@@ -117,6 +117,8 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A33 | Refused course save never shown | BUILT AND TESTED | |
 | A34 | Loading a day could send a save without an edit | BUILT AND TESTED | Known limit: a record holding only a start time is sent on load with no reason given |
 | A35 | Change of day dropped unsent edits | BUILT AND TESTED | Known limit: stale "Still on" message |
+| A83 | An edit made after the page is reopened offline gives no sign it is unsent until the day loads from the server | NOT STARTED | The edit is kept on the device and sent once the day loads; until then the save line says nothing |
+| A84 | After a change of day stops, its messages stay although Race day has gone back: "Race day is … but … is loaded", "… not loaded (see below)", and the red "Still on" line once the version is confirmed | NOT STARTED | Same cause as A35's known limit; clear or redraw them when the stop is resolved |
 | A37 | Copy for Sail Scoring (ORC constructed course JSON) | BUILT AND TESTED | °M to one decimal; no rounding sides, by design. In .38 the series goes as x-series only, not in the name. The AsSailedCourse hand-off (C2) |
 | A70 | Remove the "Copy legs for SailScoring" block: Sail Scoring takes only the ORC import (A37) | DECIDED | The on-screen leg table stays |
 
