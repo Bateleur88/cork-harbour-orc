@@ -26,13 +26,13 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **.38 (built and tested, not released):** A8, A71. Released after Sunday's race, with the series backfill for 27 September, 4, 11 and 18 October.
 
-**.39 (built and tested, not released):** A65, on top of .38. Released after .38; never within 12 hours of a race.
+**.39 (built and tested, not released):** A65, A82 (course page icons), on top of .38. Released after .38; never within 12 hours of a race.
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
 **Then:** A63 (finish line), A60 (copy a course from any start).
 
-**Then:** A7, A12, A13, A39, A17 to A19, A81 (RIB page and server; tested on the water).
+**Then:** A7, A12, A13, A39, A17 to A19, A81, A82 (RIB page icons) (RIB page and server; tested on the water).
 
 **Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A78 (layout, wording and line-end fixes); A24 (script tests). A79 goes with the next workbook release.
 
@@ -162,7 +162,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A78 | A placed line end replaced by placing again can't be withdrawn on its own | DECIDED | Add a way to withdraw a placed end no start uses |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
 | A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
-| A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: to be tested with A65 on the test copy. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
+| A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: tested on the test copy, not released; see Next. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
 
