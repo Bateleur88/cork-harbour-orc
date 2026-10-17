@@ -98,9 +98,11 @@ altered in ways it must refuse and checks that it writes nothing:
                 "coursepage|"+folder+"|"+version and the clean-up deletes only caches of exactly its own folder, so the
                 test worker's can never match a /course/ cache (the rule also run on sample names); a page is kept only
                 if its PAGE_VERSION is the worker's own, at install and on refresh; the kill switch deletes only its own
-                folder's caches and unregisters. Refusals: a worker with no key.js line, a stray /marks/ path, a
-                "record-" cache or no own-version check, and a page registering a worker twice or in any other form;
-                the one registration form builds. Guards, not proof: no JavaScript is run
+                folder's caches and unregisters; a saved copy keeps Content-Type only, with status 200 (no
+                Content-Encoding or Content-Length from the server). Refusals: a worker with no key.js line, a stray
+                /marks/ path, a "record-" cache or no own-version check, or whose answer to the browser waits on
+                reading a copy of it (the A65 Step 23 stall), and a page registering a worker twice or in any other
+                form; the one registration form builds. Guards, not proof: no JavaScript is run
  24  .39        static guards for A65 in the page (group 24): it registers the worker in exactly the one form, once; the
                 font stylesheet does not hold the page; saveCourses holds every save until the version is confirmed and
                 starts the check, before anything is sent; the change of day checks the version first and stops with its
@@ -390,7 +392,10 @@ def t2_refusals(tmp):
         'worker: stray /marks/ path': lw.replace("const WAIT=3000", "const OLD='/marks/marks.php', WAIT=3000"),
         'worker: a "record-" cache': lw.replace("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
                                                 "const CACHE='record-'+VERSION;"),
-        'worker: no own-version check': lw.replace("return !!m&&m[1]===VERSION;", "return !!m;"),
+        'worker: no own-version check': lw.replace("return !!VERSION&&!!m&&m[1]===VERSION;", "return !!m;"),
+        'worker: the answer waits on reading a copy': lw.replace(
+            "const net=fetch(r).then(res=>{copy=res.clone();return res;});",
+            "const net=fetch(r).then(async res=>{copy=res.clone();await res.clone().text();return res;});"),
     }
     for name, text in workers.items():
         p = os.path.join(tmp, 'bad-sw.js')
@@ -1057,8 +1062,17 @@ def t23_worker_guards():
     g('the folder and version come from its own address', "const VERSION=new URL(location.href).searchParams.get('v')||'';" in code
       and "const PAGE=new URL('./',location.href).href, PAGE_PATH=new URL(PAGE).pathname;" in code)
     g('install fetches ./?v=<its own version> and keeps it only if it is its own',
-      "fetch(PAGE+'?v='+encodeURIComponent(VERSION),{cache:'reload'})" in code and "if(res.type!=='basic'||!await isOwn(res))throw" in code)
-    g('a refresh keeps only its own version', "(page?await isOwn(res):res.ok)" in code)
+      "fetch(PAGE+'?v='+encodeURIComponent(VERSION),{cache:'reload'})" in code
+      and "if(res.type!=='basic'||!buf||!isOwn(new TextDecoder().decode(buf)))throw" in code)
+    g('a refresh keeps only its own version', "if(page&&!isOwn(new TextDecoder().decode(buf)))return;" in code)
+    g("the browser's answer never waits on reading a copy of it (A65 Step 23)",
+      "const net=fetch(r).then(res=>{copy=res.clone();return res;});" in code and "const buf=await copy.arrayBuffer();" in code
+      and not any(x in code for x in ('.clone().text()', '.clone().arrayBuffer()', 'await isOwn(')))
+    cp = re.search(r'const copyOf=.*', code)
+    g('a saved copy keeps Content-Type only, status 200: no Content-Encoding or Content-Length',
+      bool(cp) and "headers:t?{'Content-Type':t}:{}" in cp.group(0) and 'status:200' in cp.group(0)
+      and not re.search(r'(?i)content-encoding|content-length|transfer-encoding|headers:res\.headers', cp.group(0))
+      and code.count('copyOf(res,buf)') == 2)
     g('the clean-up deletes only its own folder', "if(ownCache(k)&&k!==CACHE)await caches.delete(k);" in code)
     g('a navigation to another version waits 10 s', "OTHER_WAIT=10000" in code and "wait=v!==null&&v!==VERSION?OTHER_WAIT:WAIT" in code)
     g('only the page and its key.js are handled', "const key=page?PAGE:(r.url===KEY?KEY:'');" in code and "if(!key)return;" in code)

@@ -62,7 +62,9 @@ SW_KEY_LIVE = "const KEY=new URL('/marks/key.js',location.href).href;"
 SW_KEY_TEST = f"const KEY=new URL('{TEST_BASE}key.js',location.href).href;"
 SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const ownCache=k=>{const p=k.split('|');return p.length===3&&p[0]==='coursepage'&&p[1]===PAGE_PATH;};",
-           "return !!m&&m[1]===VERSION;")
+           "return !!VERSION&&!!m&&m[1]===VERSION;",
+           "const net=fetch(r).then(res=>{copy=res.clone();return res;});",
+           "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 
 
 class Refused(Exception):
@@ -169,8 +171,13 @@ def worker_problems(code):
     out = [f'it must contain {need!r} exactly once (found {code.count(need)})' for need in SW_NEED if code.count(need) != 1]
     if 'record-' in code:
         out.append('it names a "record-" cache, which the RIB worker would delete (STATUS A18)')
-    if code.count('await isOwn(res)') != 2:
+    if code.count('isOwn(new TextDecoder().decode(buf))') != 2:
         out.append('it must check isOwn before saving a page, at install and on refresh (2 places)')
+    # the response handed to the browser must never wait on a read of a copy of itself: that stalled a navigation until
+    # the worker's wait ran out (A65 test, Step 23)
+    for bad in ('.clone().text()', '.clone().arrayBuffer()', '.clone().json()', 'await isOwn('):
+        if bad in code:
+            out.append(f'it reads a copy of a response before handing it over ({bad!r})')
     return out
 
 

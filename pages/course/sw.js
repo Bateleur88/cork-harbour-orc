@@ -18,15 +18,18 @@ const KEY=new URL('/marks/key.js',location.href).href;                         /
 const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;
 const WAIT=3000, OTHER_WAIT=10000;
 const ownCache=k=>{const p=k.split('|');return p.length===3&&p[0]==='coursepage'&&p[1]===PAGE_PATH;};
-// the page, and exactly this worker's version of it
-const isOwn=async res=>{if(!res.ok||!VERSION)return false;
-  const m=(await res.clone().text()).match(/const PAGE_VERSION='([^']+)'/);return !!m&&m[1]===VERSION;};
+// the page's text holds exactly this worker's version
+const isOwn=text=>{const m=String(text).match(/const PAGE_VERSION='([^']+)'/);return !!VERSION&&!!m&&m[1]===VERSION;};
+// a response to keep, made from bytes already read: nothing handed to the browser ever waits for this check. The bytes
+// are the decoded body, so only Content-Type is kept: the server's Content-Encoding or Content-Length would not match
+const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};
 
 self.addEventListener('install',e=>e.waitUntil((async()=>{
   const res=await fetch(PAGE+'?v='+encodeURIComponent(VERSION),{cache:'reload'});
-  if(res.type!=='basic'||!await isOwn(res))throw new Error('page not saved');   // not its own version: no install
+  const buf=res.ok?await res.arrayBuffer():null;                               // read once, never through a copy
+  if(res.type!=='basic'||!buf||!isOwn(new TextDecoder().decode(buf)))throw new Error('page not saved');   // not its own version: no install
   const c=await caches.open(CACHE);
-  await c.put(PAGE,res);
+  await c.put(PAGE,copyOf(res,buf));
   await c.add(new Request(KEY,{cache:'reload'})).catch(()=>{});                 // the page also keeps the last key itself
   await self.skipWaiting();
 })()));
@@ -41,10 +44,17 @@ self.addEventListener('fetch',e=>{
   const key=page?PAGE:(r.url===KEY?KEY:'');
   if(!key)return;                                                     // not ours: the browser fetches it as normal
   const v=page?u.searchParams.get('v'):null, wait=v!==null&&v!==VERSION?OTHER_WAIT:WAIT;
-  const net=fetch(r).then(async res=>{
-    if(res.type==='basic'&&!res.redirected&&(page?await isOwn(res):res.ok))await (await caches.open(CACHE)).put(key,res.clone());
-    return res;});
-  e.waitUntil(net.catch(()=>{}));                                     // an answer after the wait still refreshes the copy
+  // the browser gets the network's response as soon as it answers; a copy, read alongside it, refreshes the saved copy
+  // only if it is this worker's own version. Awaiting a full read of a clone before handing the response over stalled
+  // the navigation until the wait ran out (A65 test, Step 23); an answer after the wait still refreshes the copy
+  let copy=null;
+  const net=fetch(r).then(res=>{copy=res.clone();return res;});
+  e.waitUntil(net.then(async res=>{
+    if(res.type!=='basic'||res.redirected||!res.ok)return;
+    const buf=await copy.arrayBuffer();
+    if(page&&!isOwn(new TextDecoder().decode(buf)))return;
+    await (await caches.open(CACHE)).put(key,copyOf(res,buf));
+  }).catch(()=>{}));
   e.respondWith((async()=>{
     let res;
     try{res=await Promise.race([net,new Promise(ok=>setTimeout(ok,wait))]);}catch(_){}
