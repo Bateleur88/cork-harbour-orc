@@ -115,6 +115,11 @@ optional "Who's recording?" name, the position's own time and the moment Record
 was tapped. Fixes queue on the phone and upload to `marks.php` when there is
 signal, so nothing is lost offline. A WhatsApp message headed "Laid marks – date"
 is the backup. (`pages/record/record.html` is an identical copy of the same page.)
+The ORC IRL watermark behind the page is embedded in it as a data URI, so it is
+there offline; `pages/record/assets/orc-irl-watermark.png` is its source and is not
+uploaded. The favicon, the ORC IRL sails with an orange (#FF6600) R badge, is
+embedded in the page as data URIs, so it is there offline; its sources are in
+`pages/record/assets/` and are not uploaded.
 
 *A fresh position only.* Android Chrome can hand over the phone's last known
 position first, with its own old time, even when asked not to. So a position more
@@ -175,7 +180,10 @@ there is refused with 403).
 The race officer's page, in two views: **Setup** (sections 1 to 3: marks, import,
 building the course) and **Race** (what is needed after the gun: the course and
 total, legs, plot, wind shift, Send and the committee boat button). The course
-card snapshot and an ORC IRL watermark are embedded. From 1100 px wide the page is
+card snapshot and an ORC IRL watermark are embedded. The favicon, the same ORC IRL
+sails with a green (#2E8E47) C badge, is embedded as data URIs too, so it is there
+offline; its sources are in `pages/course/assets/` and are not uploaded. From 1100 px
+wide the page is
 two columns (legs and course on the left; sketch or chart, Check recorded marks,
 wind shift and Send on the right).
 

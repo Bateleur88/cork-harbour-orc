@@ -158,6 +158,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A78 | A placed line end replaced by placing again can't be withdrawn on its own | DECIDED | Add a way to withdraw a placed end no start uses |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
 | A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
+| A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: to be tested with A65 on the test copy. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
 
