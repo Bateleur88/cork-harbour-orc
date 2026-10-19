@@ -117,8 +117,12 @@ altered in ways it must refuse and checks that it writes nothing:
                 the reload; placing an end again, or setting the Start Pin again, hands the replaced end to
                 withdrawReplaced, which checks every use, the sending state and the page version before posting the
                 withdrawal with "replaced by placing again", and leaves a note under the end's list (this device only)
-                on every way out short of withdrawing it; the placement itself never waits. Guards, not proof: no
-                JavaScript is run
+                on every way out short of withdrawing it; the placement itself never waits. .41: the replaced end is
+                saved with its start (lineGone) before any withdrawal, read as a placed estimate or set pin (estOf,
+                setOf), labelled ", replaced", left out of auto and the earlier-race offer, still offered Withdraw;
+                every withdrawal, Undo and Remove Start handle it; an entry whose fix is gone from its race is removed
+                on load, saved and said (checkGoneRefs), and Remove Start never withdraws a fix already gone. Guards,
+                not proof: no JavaScript is run
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -725,7 +729,7 @@ def t13_changes36_guards():
     g('A49: no date label in the WhatsApp text', r".replace(/ on \S+ \d{1,2} \S+$/,'')" in code)
     g('A10: opening an old race never writes a choice: device-only laid choices from before .35 are not saved by a load, and a load-led save adds no auto choice',
       'S.laidLegacy[key])return;' in fn_body(code, 'function laidRec(') and "if(S.laidShape!==35)" in code
-      and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 2 and 'if(!noFreeze)freezeFor(k);' in code)
+      and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 3 and 'if(!noFreeze)freezeFor(k);' in code)
     g('A54: section 3\'s start line note follows the wind box as section 4 does', "sMiss+'<div id=\"lineInfo\">'+lineInfo()+'</div>'+" in code
       and "if($('lineInfo'))$('lineInfo').innerHTML=lineInfo();" in fn_body(code, 'function buildLegs('))
     g('A56: an out-of-range direction is used as none and never saved', "twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}" in code
@@ -780,8 +784,8 @@ def t15_start_line_setup_guards():
       and 'Object.keys(CARD.marks).forEach' in fn_body(code, 'function fixedOpts('))
     g('a Start Pin set at a mark: a typed position and this start\'s pin, the RO\'s choice, not an estimate (answer 2 corrected)', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
       and "S.linePinAt[k]={ref:'s:'+id,at};" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
-      and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}" in code
-      and "function estOf(m){return m?estAll().find(refHit(m))||null:null;}" in code)
+      and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}" in code
+      and "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code)
     g('its time defaults to the start time', "tt=String(d.ptime||'').trim()||startTime()" in code)
     g('one Undo withdraws every estimate of the start, committee boat first, after one confirmation', "sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1))" in code
       and code.count("reason:'estimate undone by the RO'") == 1)
@@ -802,7 +806,7 @@ def t15_start_line_setup_guards():
       and "drawn:true},kind:'start',est:true}" in bl and '!g.a.drawn' in fn_body(code, 'function courseMarks('))
     g('the chart labels an estimated line', "ln.est?'Start line: estimate'" in code and "permanent:true,direction:'bottom',offset:[0,12],className:'estTip'" in code)
     g('decision 2a: an estimated end carries forward only within its race; a later race is offered it, never given it by auto',
-      "&&!(m.race<r&&helpOf(m))).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
+      "&&!(m.race<r&&helpOf(m))&&!goneOf(m)).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
       and "(estOf(eo)?'A start line estimate from Race '+eo.race:'A Start Pin set in Race '+eo.race)+' is available – use it? '" in code)
     g('T7: a helper end named by what the RO did, time last, in lists, notes and Check recorded marks; short on the drawings',
       "'Start Pin: '+p.at+' ('+fixWhen(m)+')'" in code and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')" in code
@@ -914,7 +918,7 @@ def t18_gone_start_guards():
     g('d: one estimate record per end of a start; placing one end keeps the other',
       "S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});" in code
       and "function estsOf(k){const o=(S.lineEst||{})[k];return o?[o.cb,o.pin].filter(Boolean):[];}" in code
-      and "function estOf(m){return m?estAll().find(refHit(m))||null:null;}" in code)
+      and "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code)
     g('d: the old shape is read as that end\'s, from the server and from this device',
       "function estNorm(v){const one=estRec(v);if(one)return {[one.w]:one};" in code
       and "const le=estNorm(rec.lineEst); if(le)S.lineEst[k]=le; else delete S.lineEst[k];" in code
@@ -971,7 +975,7 @@ def t20_time_and_remove_guards():
     ra = fn_body(code, 'async function removeStartAsked(')
     g('2: the Remove Start button goes through removeStartAsked', "if(rm)rm.onclick=()=>removeStartAsked(S.start);" in code
       and "rm.onclick=()=>{removeStart(" not in code)
-    g('2: the removed start\'s own placed ends and set pin are found', "estsOf(k).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[])" in ra)
+    g('2: the removed start\'s own placed ends and set pin are found', "estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[])" in ra)
     g('2: refused, naming the starts, while any other start uses one of them',
       "const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];" in ra
       and "' not removed: its '" in ra and ra.index('const others=') < ra.index("action:'withdraw'"))
@@ -1153,7 +1157,7 @@ def t24_version_gate_guards():
 
 
 def t25_a78_guards():
-    """A78 in the page (2026-10-06.40). Guards, not proof: no JavaScript is run."""
+    """A78 in the page (2026-10-06.40, .41). Guards, not proof: no JavaScript is run."""
     sys.path.insert(0, os.path.join(ROOT, 'scripts'))
     import build_test
     code = build_test.strip_comments(read(PAGE))
@@ -1164,8 +1168,8 @@ def t25_a78_guards():
     g("a line end's detail offers Withdraw only when endWithdrawable, and never Correct",
       i > 0 and "(endWithdrawable(m)?'<div class=\"fxDetAct\"><button type=\"button\" class=\"fxBtn\" data-fx=\"withdraw\"" in line
       and 'data-fx="correct"' not in line)
-    g('endWithdrawable: a typed or placed position on the server, no estimate record or none of its uses left',
-      "function endWithdrawable(m){return isTypedPos(m)&&!!m.sid&&!m.pending&&(!helpOf(m)||!lineUsers(m,undefined,true).length);}" in code)
+    g('endWithdrawable: a typed or placed position on the server, no estimate record, a replaced end, or none of its uses left',
+      "function endWithdrawable(m){return isTypedPos(m)&&!!m.sid&&!m.pending&&(!helpOf(m)||!!goneOf(m)||!lineUsers(m,undefined,true).length);}" in code)
     ta = fn_body(code, 'async function typedAct(')
     a, b, c = ta.find("action:'withdraw',date:day,id:m.sid,reason:why"), ta.find('estsOf(k2).filter(refHit(m)).forEach(e=>{estDrop(e);hit=true;});'), ta.find("fxSel='';await pull(true);typedSays")
     g('a withdrawn placed end takes its estimate or set-pin record with it, after the server agreed and before the reload',
@@ -1189,6 +1193,44 @@ def t25_a78_guards():
       0 < h.find('const old=(S.lineEst[k]||{})[w]||null;') < h.find('S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});')
       < h.find("if(old)await withdrawReplaced(k,w,old,'placed '+old.m+' m at '+pad(old.brgM,3)+'°M');"))
     g('verReady still used exactly four times (the placement is never refused for the version)', code.count('if(!verReady(') == 4)
+    # .41: a replaced end stays known as a page-placed end on every device until it is withdrawn
+    h = code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")]
+    g('a replaced set pin is stored with its start before the withdrawal is tried',
+      0 < h.find("if(old)goneAdd(k,{w:'pin',ref:old.ref,at:old.at});") < h.find('stamp(k);commit();') < h.find('if(old)await withdrawReplaced('))
+    h = code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
+    g('a replaced placed end is stored with its start before the withdrawal is tried',
+      0 < h.find('if(old)goneAdd(k,Object.assign({},old));') < h.find('stamp(k);commit();') < h.find('if(old)await withdrawReplaced('))
+    g('a stored replaced end is read as a placed estimate or a set Start Pin',
+      "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code
+      and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}" in code)
+    hl = fn_body(code, 'function helpLong(')
+    g('it is labelled ", replaced" in both shapes', "const rp=goneOf(m)?', replaced':'';" in hl and hl.count('+rp') == 2)
+    g('auto (every race) and the earlier-race offer leave a replaced end out; the list still offers it',
+      '&&!(m.race<r&&helpOf(m))&&!goneOf(m)).sort(' in fn_body(code, 'function candidates(')
+      and '&&helpOf(m)&&!goneOf(m)&&' in fn_body(code, 'function estEarlier(') and 'goneOf' not in fn_body(code, 'function endChoices('))
+    g('every withdrawal takes the stored entry with it',
+      'goneDrop(m);await pull(true);commit();}' in fn_body(code, 'async function withdrawReplaced(')
+      and 'if(isLineMark(m.name))goneDrop(m);' in fn_body(code, 'async function typedAct('))
+    u = code[code.find("if(act==='undoPlaced'){"):code.find('function setEnd(')]
+    g('Undo on a start that chose a replaced end refuses with a message',
+      "if((n.es||[]).some(e=>goneAll().includes(e))){say('Not undone: this end was replaced by placing again on another start." in u)
+    rs = fn_body(code, 'async function removeStartAsked(')
+    g('Remove Start withdraws its replaced ends too, and never a fix already gone (refFix, then filter)',
+      'const its=estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w}))' in rs
+      and '.map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)' in rs
+      and "'lineGone'];" in code[code.find('const START_KEYED='):code.find('const START_KEYED=') + 200])
+    g('saved with the course only when there is one, counted as content, and read back (goneNorm)',
+      '...(S.lineGone&&S.lineGone[k]&&S.lineGone[k].length?{lineGone:' in fn_body(code, 'function recordFor(')
+      and '||r.linePinAt||r.lineGone)return false;' in fn_body(code, 'function isEmptyRec(')
+      and 'const lg=goneNorm(rec.lineGone); S.lineGone=S.lineGone||{}; if(lg)S.lineGone[k]=lg; else delete S.lineGone[k];' in fn_body(code, 'function applyServerCourses('))
+    cg = fn_body(code, 'function checkGoneRefs(')
+    g('a stored entry whose fix is gone from its race is removed on load, saved and said under the end\'s list (never silently)',
+      'if(!stale()){checkLineRefs(ln);checkGoneRefs(ln);}' in code
+      and '(S.lineGone[k]||[]).forEach(g=>{const m=refFix(g.ref,g.w);(m&&m.race===r?keep:out).push(g);});' in cg
+      and 'if(!out.length)return;' in cg and 'S.lineFlags[k][g.w]=' in cg and 'stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[4];' in cg
+      and "'a replaced line end whose fix is gone was removed'];" in code)
+    g('a change of day clears the stored entries with the other per-start records',
+      "'linePinAt','lineGone','winds','cardCfg'].forEach(f=>" in code)
 
 
 def main():

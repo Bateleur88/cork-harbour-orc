@@ -433,7 +433,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.40';
+const PAGE_VERSION='2026-10-06.41';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -714,6 +714,7 @@ async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S
       estsOf(k2).filter(refHit(m)).forEach(e=>{estDrop(e);hit=true;});
       if(S.linePinAt[k2]&&refHit(m)(S.linePinAt[k2])){delete S.linePinAt[k2];hit=true;}
       if(hit)stamp(k2,true);});
+    if(isLineMark(m.name))goneDrop(m);   // A78: no longer a replaced end waiting to be withdrawn
     fxSel='';await pull(true);typedSays(m.name+' (Race '+m.race+') withdrawn: '+why+'.',true);return;}
   if(cardNameOf(m.name)){typedSays(cardRefusal(cardNameOf(m.name)),false);return;}
   if(!confirm('Correct the typed position '+who+'?\n\nThe wrong one stays in the record, withdrawn as "replaced by correction", and every course row using it moves to the corrected one.'))return;
@@ -774,7 +775,7 @@ function pickFix(k){const m=S.marks.find(x=>refFor(x)===k), r=S.race, st=$('fxSt
   S.picked[r]=(S.picked[r]||[]).concat(k); stamp('_starts|'+r);
   st.className='status ok'; st.textContent=lab+' added to the Race '+r+' chips.'; commit();}
 // the button (or why there is none) under the tapped fix's detail
-function endWithdrawable(m){return isTypedPos(m)&&!!m.sid&&!m.pending&&(!helpOf(m)||!lineUsers(m,undefined,true).length);}
+function endWithdrawable(m){return isTypedPos(m)&&!!m.sid&&!m.pending&&(!helpOf(m)||!!goneOf(m)||!lineUsers(m,undefined,true).length);}
 function pickHtml(m){const r=S.race, k=refFor(m);
   if(m.card)return '<p class="cardnote fxDetAct">A Course Card mark in the course of Race '+m.race+': its position is the course card\'s, not a fix recorded today.</p>';
   // A78: a typed or placed line end can be withdrawn once it is no start's estimate (placed again, or typed by hand), or
@@ -844,7 +845,7 @@ Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).filter(e=
     return id===m.id?{id:nid,side:typeof e==='string'?'':(e.side||'')}:e;});});
   m.id=nid;moved=true;});
  if(moved)save();}
-['laidSel','laidNo','laidAck','laidFrz','lineAuto','laidLegacy','lineMid','lineEst','startPt','linePinAt'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+['laidSel','laidNo','laidAck','laidFrz','lineAuto','laidLegacy','lineMid','lineEst','startPt','linePinAt','lineGone'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
 Object.keys(S.lineEst).forEach(k=>{const n=estNorm(S.lineEst[k]);if(n)S.lineEst[k]=n;else delete S.lineEst[k];});   // d: one record per end
 /* Laid-mark choices made on a page before 2026-10-06.35 were kept on this device only. They stay in use here, but are not
    saved with a course just because a day is opened (opening an old race never writes to it, A10): only once the RO
@@ -1568,13 +1569,13 @@ function renderCardSum(){
    Every record kept per start moves with its start, so nothing of the removed start passes to another (Pat, 15 October
    2026): before .37 the saved auto choices (lineAuto), estimates (lineEst, either shape) and midpoints (lineMid) stayed at
    the old start number. Any new per-start record must be added here. */
-const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt'];
+const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone'];
 /* fix 2 (Pat, 15 October 2026): the removed start's own helper fixes (a Start Pin set at a mark, an end placed by distance
    and bearing) are withdrawn with it (kept, marked withdrawn), as Undo does, so they never stay behind as unlabelled
    typed positions offered to other starts. Refused, naming the starts, while any other start uses one of them (lineUsers);
    not removed at all if a withdrawal fails. */
 async function removeStartAsked(i){const r=S.race, k=ckey(r,i), st=$('readStatus'), say=(t,ok)=>{st.textContent=t;st.className='status '+(ok?'ok':'err');};
-  const its=estsOf(k).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[]).map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)
+  const its=estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[]).map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)
     .sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1));
   if(its.length){
     const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];
@@ -1776,7 +1777,7 @@ function startMoment(r,st){return dayMoment(S.startTimes[ckey(r,st)]);}
 // RO (A58) carries forward only within its own race: a later race is offered it (estEarlier), never given it by auto
 // (Pat, 14 October 2026)
 function candidates(w,r){r=r||S.race;const t=END_TEST[w];
-  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&helpOf(m))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&helpOf(m))&&!goneOf(m)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
 // what an end's list offers the RO: every recorded fix of the end's type from any race of the day, earlier races first,
 // then by time, each labelled with its race and time (fixText). The fix itself is never changed
 function endChoices(w){const t=END_TEST[w];
@@ -1881,7 +1882,7 @@ function midLine(r,st){const z=(S.lineMid||{})[ckey(r??S.race,st??S.start)];if(!
   return f?{mid:{lat:f.lat,lon:f.lon},est:'mid',end:f,w:z.w}:null;}
 // the estimate a fix is, if the RO placed it (Option 1): its lineEst record, from any start of the day
 const refHit=m=>e=>e&&typeof e.ref==='string'&&(m.sid===sidNow(e.ref.slice(2))||(m.pending&&m.pid===e.ref.slice(2)));
-function estOf(m){return m?estAll().find(refHit(m))||null:null;}
+function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}
 /* d (Pat, 15 October 2026): one placed estimate per end of a start, S.lineEst[start] = {cb: {w:'cb', …}, pin: {w:'pin', …}},
    so placing the second end never takes the first one's estimate label away. A course saved before holds one record
    {w, ref, from, m, brgM}: it is read as that end's (estNorm), and a start with one placed end is saved in that shape still
@@ -1895,6 +1896,23 @@ function estsOf(k){const o=(S.lineEst||{})[k];return o?[o.cb,o.pin].filter(Boole
 function estAll(){return Object.keys(S.lineEst||{}).reduce((a,k)=>a.concat(estsOf(k)),[]);}
 function estSaved(k){const l=estsOf(k);return l.length===1?Object.assign({},l[0]):l.length?{cb:Object.assign({},l[0]),pin:Object.assign({},l[1])}:null;}
 function estDrop(e){Object.keys(S.lineEst).forEach(k=>{const o=S.lineEst[k];['cb','pin'].forEach(w=>{if(o[w]===e)delete o[w];});if(!o.cb&&!o.pin)delete S.lineEst[k];});}
+/* A78, part 2 (Pat, 20 October 2026): a placed end replaced by placing again, or a set Start Pin replaced by setting it
+   again, stays known as a page-placed end on every device until it is withdrawn: S.lineGone[start] = [{w, ref, from, m,
+   brgM} | {w:'pin', ref, at}], saved with the course of the start that replaced it. estOf and setOf read it, so it is
+   labelled as an estimate everywhere ("…, replaced") and never offered by "Use it?" (realEnd); being replaced, it is never
+   picked by auto or offered to a later race (candidates, estEarlier), though the RO can still choose it in the list. It is
+   not a use of the fix (lineUsers). An entry whose fix is gone from its race is removed on load, saved and said
+   (checkGoneRefs). */
+function goneRec(g){if(!g||typeof g!=='object')return null;
+  if('at' in g)return typeof g.ref==='string'&&/^s:/.test(g.ref)?{w:'pin',ref:g.ref,at:String(g.at||'')}:null;
+  return estRec(g);}
+function goneNorm(v){const l=Array.isArray(v)?v.map(goneRec).filter(Boolean):[];return l.length?l:null;}
+function goneAll(){return Object.keys(S.lineGone||{}).reduce((a,k)=>a.concat(S.lineGone[k]||[]),[]);}
+function goneOf(m){return m?goneAll().find(refHit(m))||null:null;}
+function goneAdd(k,g){S.lineGone=S.lineGone||{};S.lineGone[k]=(S.lineGone[k]||[]).concat(g);}
+function goneDrop(m){Object.keys(S.lineGone||{}).forEach(k=>{const l=S.lineGone[k].filter(g=>!refHit(m)(g));
+  if(l.length===S.lineGone[k].length)return;if(l.length)S.lineGone[k]=l;else delete S.lineGone[k];stamp(k,true);});}
+function goneWords(g){return END_LABEL[g.w]+' '+('at' in g?'set at '+g.at:'placed '+g.m+' m at '+pad(g.brgM,3)+'°M');}
 /* A78 (Pat, 19 October 2026): placing an end again, or setting the Start Pin again, replaces this start's own placed end;
    the one replaced is withdrawn straight away as Undo does ("replaced by placing again"), so it is never left offered as a
    recorded fix. The new end is placed whatever happens here. Never withdrawn while another start uses it, and never
@@ -1910,7 +1928,7 @@ async function withdrawReplaced(k,w,old,did){const m=refFix(old.ref,w);if(!m||!i
   if(!verOk){ensureVersion();return note('was not withdrawn: waiting to check the page version. Withdraw it from Check recorded marks.');}
   try{await postFix({action:'withdraw',date:S.pulledDay,id:m.sid,reason:'replaced by placing again'},OUTBOX_TIMEOUT_MS);}
   catch(e){return note('was not withdrawn ('+((e&&e.text)||(e&&e.message)||'no reply')+'). Withdraw it from Check recorded marks.');}
-  await pull(true);commit();}
+  goneDrop(m);await pull(true);commit();}
 // the notes withdrawReplaced left for end w of this race, while the position they name is still loaded
 function orphanNotes(w){return Object.keys(S.orphans||{}).filter(id=>{const o=S.orphans[id];
     return o.day===S.pulledDay&&o.race===S.race&&o.w===w&&S.marks.some(x=>(x.sid||x.pid)===id);})
@@ -1937,14 +1955,15 @@ function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '
    it appears it is named by what the RO did, in plain words, the time last (T7): helpLong in lists, notes and Check
    recorded marks, helpShort on the sketch and the Chart. A mark with an uncertain card position, or a laid mark at its
    planning position, keeps its warning (helpWarn). */
-function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||null:null;}
+function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}
 function helpOf(m){return estOf(m)||setOf(m);}
 function fixWhen(m){return 'R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the time is left out when the reference already ends with it ("from Start Pin R1 11:09", saved so by .36), so it is not
 // said twice (Pat, 14 October 2026)
-function helpLong(m){const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')';const e=estOf(m);if(!e)return '';
+function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by placing again, not yet withdrawn
+  const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')'+rp;const e=estOf(m);if(!e)return '';
   const w=fixWhen(m), f=String(e.from);
-  return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')');}
+  return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
 function helpShort(m){const p=setOf(m);if(p)return 'Start Pin ('+p.at+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
 function helpWarn(m){const p=setOf(m), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
@@ -1983,7 +2002,7 @@ function realEnd(w,m){if(!m||!helpOf(m)||(w!=='cb'&&w!=='pin'))return null;const
   const l=candidates(w,S.race).filter(x=>x!==m&&!helpOf(x)&&fixMoment(x)!==null&&fixMoment(x)<=t);return l[l.length-1]||null;}
 // auto finding nothing: the latest line end estimated in an earlier race, at or before this start, offered (A58)
 function estEarlier(w){if(w!=='cb'&&w!=='pin')return null;const t=startMoment(S.race,S.start);if(t===null)return null;
-  const l=S.marks.filter(m=>!m.card&&m.race<S.race&&END_TEST[w](m.name)&&helpOf(m)&&fixMoment(m)!==null&&fixMoment(m)<=t)
+  const l=S.marks.filter(m=>!m.card&&m.race<S.race&&END_TEST[w](m.name)&&helpOf(m)&&!goneOf(m)&&fixMoment(m)!==null&&fixMoment(m)<=t)
     .sort((a,b)=>a.race-b.race||fixMoment(a)-fixMoment(b));return l[l.length-1]||null;}
 // the list offers every race's fix of the end's type (endChoices); auto keeps its own rule (autoEnd, candidates)
 function endPicker(w,cardStandIn){
@@ -3064,7 +3083,7 @@ async function pull(quiet){
       ['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';$(id).className='status';});
       // "All course changes saved" speaks only for the day loaded (STATUS A48); it comes back with this day's next save
       saveState.okAt=0; showSave();
-      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
+      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // A8: the day's series likewise: one set for this day before it could be loaded stays, unsent; nothing carries over
       if(!mine('_day')||!S.daySeries){delete S.daySeries;delete S.courseDay._day;}
@@ -3110,7 +3129,7 @@ async function pull(quiet){
       const rq=await keyFetch(ENDPOINT+'?type=seriesbefore&date='+encodeURIComponent(day),{}), jq=await rq.json();
       if(rq.ok&&jq.ok&&!stale()&&typeof jq.series==='string'&&typeof jq.from==='string')S.carry={day,series:jq.series,from:jq.series?jq.from:''};
     }catch(_){}}
-    if(!stale())checkLineRefs(ln);
+    if(!stale()){checkLineRefs(ln);checkGoneRefs(ln);}
     if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false; reopenFrom='';}
     // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
     // then was edited while the day was not loaded
@@ -3189,6 +3208,19 @@ function checkLineRefs(ln){
           '(deleted or renamed): choice cleared, auto is used until you choose again';stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[1];}
       else if(v[0]==='l'&&m.sid){ls[w]='s:'+m.sid;stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[2];}});});
 }
+/* A78 (Pat, 20 October 2026): a replaced end saved with a start whose fix is no longer among that race's fixes (withdrawn
+   from another page or device, moved to another race, or otherwise gone) is removed from the start's record, which is
+   saved, and said under that end's list, never silently */
+function checkGoneRefs(ln){
+  Object.keys(S.lineGone||{}).forEach(k=>{if(!/^\d+\|\d+$/.test(k))return;const[r,st]=k.split('|').map(Number);
+    const keep=[], out=[];(S.lineGone[k]||[]).forEach(g=>{const m=refFix(g.ref,g.w);(m&&m.race===r?keep:out).push(g);});
+    if(!out.length)return;
+    if(keep.length)S.lineGone[k]=keep;else delete S.lineGone[k];
+    out.forEach(g=>{S.lineFlags[k]=S.lineFlags[k]||{};const was=S.lineFlags[k][g.w];
+      S.lineFlags[k][g.w]=(was?was+' ':'')+'The '+goneWords(g)+', replaced on Race '+r+' Start '+(st+1)+', is no longer among Race '+r+
+        '\'s fixes (withdrawn, moved to another race, or gone): removed from the replaced ends saved with this start.';});
+    stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[4];});
+}
 /* Line choices were held as phone-side fix ids before 2026-10-01.8; they become references once. The saved record
    already sent references, so nothing changes on the server and nothing looks unsent. */
 if(S.lineShape!==2){Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{const v=ls[w];
@@ -3233,9 +3265,11 @@ function recordFor(k){
           ...(estSaved(k)?{lineEst:estSaved(k)}:{}),
           // A58 part 2 (.37): the Grassy start on a hand-built start, and a Start Pin set at a mark (only when used)
           ...(S.startPt&&S.startPt[k]?{startPt:S.startPt[k]}:{}),
-          ...(S.linePinAt&&S.linePinAt[k]?{linePinAt:Object.assign({},S.linePinAt[k])}:{})};
+          ...(S.linePinAt&&S.linePinAt[k]?{linePinAt:Object.assign({},S.linePinAt[k])}:{}),
+          // A78: replaced ends not yet withdrawn (only when there are any, so every other course saves as before)
+          ...(S.lineGone&&S.lineGone[k]&&S.lineGone[k].length?{lineGone:S.lineGone[k].map(g=>Object.assign({},g))}:{})};
 }
-function isEmptyRec(k,r){if(k==='_day')return !r.series;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
+function isEmptyRec(k,r){if(k==='_day')return !r.series;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt||r.lineGone)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
 // the day-wide _starts is never sent: only each race's own groups are; the day's series is _day (A8)
 function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}))))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
@@ -3250,7 +3284,7 @@ function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses
    (400), full (429), server (500 and any other reply). */
 const SAVE_TIMEOUT_MS=20000, DAY_WAIT_MS=25000;
 const LOAD_WHY=['a course built before this day was loaded','a line end whose fix is gone was cleared',
-  "a fix reference updated to the server's copy",'edits made while the day was not loaded'];
+  "a fix reference updated to the server's copy",'edits made while the day was not loaded','a replaced line end whose fix is gone was removed'];
 let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:'',verHeld:false};
 function nOf(n,one,many){return n+' '+(n===1?one:many);}
 function saveLabel(k){const p=k.split('|');return k==='_day'?'Series name':k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
@@ -3418,6 +3452,7 @@ function applyServerCourses(obj){
       // the Grassy start on a hand-built start, and a Start Pin set at a mark (A58 part 2)
       if(rec.startPt==='Grassy Mid')S.startPt[k]='Grassy Mid'; else delete S.startPt[k];
       const pa=rec.linePinAt; if(pa&&typeof pa==='object'&&typeof pa.ref==='string'&&/^s:/.test(pa.ref))S.linePinAt[k]={ref:pa.ref,at:String(pa.at||'')}; else delete S.linePinAt[k];
+      const lg=goneNorm(rec.lineGone); S.lineGone=S.lineGone||{}; if(lg)S.lineGone[k]=lg; else delete S.lineGone[k];   // A78
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
       // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
       if('card' in rec){S.cardCfg=S.cardCfg||{};
@@ -3629,6 +3664,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     const old=S.linePinAt[k]||null;   // A78: this start's own set pin, replaced
     S.linePinAt[k]={ref:'s:'+id,at};
     S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});
+    if(old)goneAdd(k,{w:'pin',ref:old.ref,at:old.at});   // A78: saved with this start until it is withdrawn
     if((S.lineSel[k]||{}).pin==='none')delete S.lineSel[k].pin;   // b: the end the RO sets takes effect over "None"
     estDraft={};stamp(k);commit();sendOutbox();
     say('Start Pin set at '+at+' ('+ddm(src.lat,true)+' '+ddm(src.lon,false)+'), saved to the race record: sending… Now place the committee boat from it.',true);
@@ -3653,6 +3689,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     const old=(S.lineEst[k]||{})[w]||null;   // A78: this start's own placed end, replaced
     S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});   // d: this end's record; the other end's is kept
     S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});
+    if(old)goneAdd(k,Object.assign({},old));   // A78: saved with this start until it is withdrawn
     if((S.lineSel[k]||{})[w]==='none')delete S.lineSel[k][w];   // b: the end the RO places takes effect over "None"
     estDraft={};stamp(k);commit();sendOutbox();
     say(nm+' placed as an estimate: '+estWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',true);
@@ -3662,7 +3699,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
   // confirmation, the committee boat first; an estimate another start uses is not undone here
   if(act==='undoPlaced'){
     let ts=estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[]);
-    if(!ts.length){const n=lineEstNow()||{};ts=(n.es||[]).map(e=>'at' in e?Object.values(S.linePinAt).find(p=>p&&p.ref===e.ref):estAll().find(x=>x===e)).filter(Boolean);}
+    if(!ts.length){const n=lineEstNow()||{};
+      if((n.es||[]).some(e=>goneAll().includes(e))){say('Not undone: this end was replaced by placing again on another start. Choose another end for this start, then withdraw it from Check recorded marks.',false);return;}
+      ts=(n.es||[]).map(e=>'at' in e?Object.values(S.linePinAt).find(p=>p&&p.ref===e.ref):estAll().find(x=>x===e)).filter(Boolean);}
     const its=ts.map(e=>{const w='at' in e?'pin':e.w;return {e,w,m:refFix(e.ref,w)};}).sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1));
     if(!its.length||its.some(i=>!i.m))return;
     // a: refused while any other start uses it: saved there, chosen, inherited, or picked by auto right now (Pat, 15 October 2026)

@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 19 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38. Built, not yet tested: .40 (A78), which includes .39. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 19 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38. Built, not yet tested: .41 (A78), which includes .39. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -28,7 +28,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **.39 (built and tested, not released):** A65, A82 (course page icons), on top of .38. Released after .38; never within 12 hours of a race.
 
-**.40 (built, to be tested on the test copy):** A78, on top of .39. Released after .39, once tested; never within 12 hours of a race.
+**.41 (built, to be tested on the test copy):** A78, on top of .39. Released after .39, once tested; never within 12 hours of a race.
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
@@ -36,7 +36,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Then:** A7, A12, A13, A39, A17 to A19, A81, A82 (RIB page icons) (RIB page and server; tested on the water).
 
-**Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A77 (layout, wording and line-end fixes); A24 (script tests); A85 to A89. A79 goes with the next workbook release.
+**Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A77 (layout, wording and line-end fixes); A24 (script tests); A85 to A88. A79 goes with the next workbook release.
 
 **Never** release within 12 hours of a race.
 
@@ -161,7 +161,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A75 | Favoured end ignores the first mark | DECIDED | Add which end is nearer the first mark, and by how much; whether to switch to distance when the first leg isn't a beat is open |
 | A76 | "Record the missing end…" shows with no start time and no ends | DECIDED | Reword or remove |
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
-| A78 | A placed line end replaced by placing again can't be withdrawn on its own | IN PROGRESS | Built: Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); to be tested on the test copy; not released; see Next |
+| A78 | A placed line end replaced by placing again can't be withdrawn on its own | IN PROGRESS | Built: Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); until it is withdrawn, a replaced end is saved with its start's course and treated as a placed estimate on every device; to be tested on the test copy; not released; see Next |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
 | A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
 | A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: tested on the test copy, not released; see Next. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
@@ -169,7 +169,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A86 | Restore a withdrawn position | NOT STARTED | Needs a `marks.php` action; later |
 | A87 | Same-time ties between fixes are ordered differently on different devices | NOT STARTED | Later |
 | A88 | Save A78's "replaced end kept / not withdrawn" note with the course, so other devices see it | NOT STARTED | Later |
-| A89 | A replaced placed end kept because another start uses it loses its estimate label, so later races' Auto and the "Use it?" prompt can pick it | NOT STARTED | Later |
+| A89 | A replaced placed end kept because another start uses it loses its estimate label, so later races' Auto and the "Use it?" prompt can pick it | IN PROGRESS | Built as part of A78; see A78 |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
 
