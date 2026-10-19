@@ -111,6 +111,14 @@ altered in ways it must refuse and checks that it writes nothing:
                 confirmed the check never runs again; a newer page reloads at most once a minute and twice in all, and
                 never where sessionStorage fails; the waiting and stuck lines and the Reload button. Guards, not proof:
                 no JavaScript is run
+ 25  .40 A78    static guards for withdrawing placed line ends (group 25): the fix detail of a typed or placed line end
+                offers Withdraw (never Correct) only when it is no start's estimate, or still has its estimate or set-pin
+                record but no start uses it (lineUsers with placed); a withdrawal there takes that record with it before
+                the reload; placing an end again, or setting the Start Pin again, hands the replaced end to
+                withdrawReplaced, which checks every use, the sending state and the page version before posting the
+                withdrawal with "replaced by placing again", and leaves a note under the end's list (this device only)
+                on every way out short of withdrawing it; the placement itself never waits. Guards, not proof: no
+                JavaScript is run
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -606,7 +614,7 @@ def t10_changes33_guards():
     g('5 withdraw and correct: typed positions on the server only', 'if(!m||!isTypedPos(m)||!m.sid||m.pending)return;' in ta)
     g('5 the confirmation names the position, race, time and distance from the map centre',
       "' nm from the map centre (51.82 N, 8.27 W)'" in ta and "'Withdraw the typed position '+who" in ta and "'Correct the typed position '+who" in ta)
-    g('5 withdraw is refused while a course uses it, naming each race and start', 'const u=usesOf(m);' in ta and "' cannot be withdrawn: it is used in '" in ta)
+    g('5 withdraw is refused while a course uses it, naming each race and start', 'const u=usesOf(m,isLineMark(m.name));' in ta and "' cannot be withdrawn: it is used in '" in ta)
     g('5 the server actions', "action:'withdraw',date:day,id:m.sid,reason:why" in ta and "action:'correct',date:day,id:m.sid,new_id:nid,lat:p.lat,lon:p.lon" in ta)
     g('5 the card-name refusal applies to a correction', 'if(cardNameOf(m.name)){typedSays(cardRefusal(cardNameOf(m.name)),false);return;}' in ta)
     g('5 a withdrawn fix is never loaded', 'const list=j.marks.filter(m=>!m.withdrawn).sort(' in code)
@@ -889,7 +897,8 @@ def t18_gone_start_guards():
     lu = fn_body(code, 'function lineUsers(')
     g('lineUsers: a start using the fix by its choice, saved auto, its estimate, set-pin or midpoint record, or auto right now',
       "Object.values(S.lineSel[k]||{}).concat(Object.values(S.lineAuto[k]||{})).some(v=>refIs(v,m))" in lu
-      and "estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[],S.lineMid[k]?[S.lineMid[k]]:[]).some(e=>refIs(e.ref,m))" in lu
+      and "(placed?[]:estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[])).concat(S.lineMid[k]?[S.lineMid[k]]:[]).some(e=>refIs(e.ref,m))" in lu
+      and "function lineUsers(m,skip,placed){" in code
       and "['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m)" in lu and "if(k===skip)return;" in lu)
     g('lineUsers looks at every start of the day',
       "['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid'].forEach(f=>" in fn_body(code, 'function startKeys('))
@@ -917,8 +926,8 @@ def t18_gone_start_guards():
     g('d: Undo withdraws each end\'s record and keeps the rest', "estDrop(i.e);" in code
       and "let ts=estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[]);" in code)
     g('e: Withdraw counts every line end use (saved auto, estimate and set-pin records, auto right now)',
-      "return [...new Set(out.concat(lineUsers(m)))];" in fn_body(code, 'function usesOf(')
-      and "const u=usesOf(m);" in fn_body(code, 'async function typedAct('))
+      "return [...new Set(out.concat(lineUsers(m,undefined,placed)))];" in fn_body(code, 'function usesOf(')
+      and "const u=usesOf(m,isLineMark(m.name));" in fn_body(code, 'async function typedAct('))
 
 
 def t19_remove_start_guards():
@@ -1143,6 +1152,45 @@ def t24_version_gate_guards():
     g('the Reload button, once, shown only when stuck', page.count('id="verReload"') == 1 and "$('verReload').hidden=!verStuck;" in code)
 
 
+def t25_a78_guards():
+    """A78 in the page (2026-10-06.40). Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    code = build_test.strip_comments(read(PAGE))
+    g = lambda name, ok, detail='': report('25 A78: ' + name, ok, detail)
+    ph = fn_body(code, 'function pickHtml(')
+    i = ph.find('if(isLineMark(m.name))return')
+    line = ph[i:ph.find('\n', ph.find('\n', i) + 1)]
+    g("a line end's detail offers Withdraw only when endWithdrawable, and never Correct",
+      i > 0 and "(endWithdrawable(m)?'<div class=\"fxDetAct\"><button type=\"button\" class=\"fxBtn\" data-fx=\"withdraw\"" in line
+      and 'data-fx="correct"' not in line)
+    g('endWithdrawable: a typed or placed position on the server, no estimate record or none of its uses left',
+      "function endWithdrawable(m){return isTypedPos(m)&&!!m.sid&&!m.pending&&(!helpOf(m)||!lineUsers(m,undefined,true).length);}" in code)
+    ta = fn_body(code, 'async function typedAct(')
+    a, b, c = ta.find("action:'withdraw',date:day,id:m.sid,reason:why"), ta.find('estsOf(k2).filter(refHit(m)).forEach(e=>{estDrop(e);hit=true;});'), ta.find("fxSel='';await pull(true);typedSays")
+    g('a withdrawn placed end takes its estimate or set-pin record with it, after the server agreed and before the reload',
+      0 < a < b < c and 'if(S.linePinAt[k2]&&refHit(m)(S.linePinAt[k2])){delete S.linePinAt[k2];hit=true;}' in ta and 'if(hit)stamp(k2,true);' in ta)
+    wr = fn_body(code, 'async function withdrawReplaced(')
+    pf = wr.find("postFix({action:'withdraw',date:S.pulledDay,id:m.sid,reason:'replaced by placing again'},OUTBOX_TIMEOUT_MS)")
+    g('withdrawReplaced: typed positions only; every use, the sending state and the page version checked before posting',
+      'if(!m||!isTypedPos(m))return;' in wr and 0 < wr.find('const used=lineUsers(m);') < wr.find('if(m.pending||!m.sid)return note(')
+      < wr.find('if(!verOk){ensureVersion();return note(') < pf)
+    g('withdrawReplaced never refuses or holds the placement (no verReady), and every way out short of withdrawing leaves a note',
+      'verReady' not in wr and wr.count('return note(') == 4 and "catch(e){return note('was not withdrawn ('" in wr)
+    g('the note is kept on this device only (S.orphans, not in a saved course record)',
+      'S.orphans[m.sid||m.pid]={day:S.pulledDay,race:m.race,w,text:what+t};' in wr and 'orphans' not in fn_body(code, 'function recordFor('))
+    g("the note shows under the end's list while the position is loaded", "+orphanNotes(w)+note;" in fn_body(code, 'function endPicker(')
+      and "S.marks.some(x=>(x.sid||x.pid)===id)" in fn_body(code, 'function orphanNotes('))
+    h = code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")]
+    g('setting the Start Pin again hands the replaced set pin to withdrawReplaced, after the new one is in place',
+      0 < h.find('const old=S.linePinAt[k]||null;') < h.find("S.linePinAt[k]={ref:'s:'+id,at};") < h.find("if(old)await withdrawReplaced(k,'pin',old,'set at '+old.at);"))
+    h = code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
+    g('placing an end again hands the replaced end to withdrawReplaced, after the new one is in place',
+      0 < h.find('const old=(S.lineEst[k]||{})[w]||null;') < h.find('S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});')
+      < h.find("if(old)await withdrawReplaced(k,w,old,'placed '+old.m+' m at '+pad(old.brgM,3)+'°M');"))
+    g('verReady still used exactly four times (the placement is never refused for the version)', code.count('if(!verReady(') == 4)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1170,6 +1218,7 @@ def main():
         t22_day_series_guards()
         t23_worker_guards()
         t24_version_gate_guards()
+        t25_a78_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
