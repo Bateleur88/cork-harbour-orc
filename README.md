@@ -239,7 +239,12 @@ A placed end is saved as a typed position timed at the start time and flagged as
 an estimate on the page, the leg table, the sketch, the chart and Copy for Sail
 Scoring (`"x-estimate"`), never in the WhatsApp text. An estimate carries forward
 within its own race only; a later race is offered it. **Undo** withdraws what the
-helper placed, and is refused while another start uses it. **Remove Start** moves
+helper placed, and is refused while another start uses it. Placing an end again
+withdraws the one it replaces; a replaced end not yet withdrawn (another start uses
+it, or there was no signal) is labelled ", replaced" and never offered by "Use it?"
+or Auto. A placed or typed line end that is no longer an estimate, or that was
+replaced by placing again, can be withdrawn from **Check recorded marks**.
+**Remove Start** moves
 every later start's records down with it, withdraws the removed start's own placed
 ends, and is refused while another start uses them. A finish line with one end
 missing has no helper.
