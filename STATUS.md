@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 17 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 19 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -22,9 +22,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 ## Next
 
-**Sunday 18 October 2026:** first live race on .37. Race-day precautions: don't reload the course page with poor signal; once a start has gone, don't tap Undo on its start line; don't tap Remove Start in a race that has a course; check the series name reads "Autumn League" before the first course. After the race Pat decides what moves to CONFIRMED LIVE.
+**Next race:** race-day precautions while the course page is on .37 or .38: don't reload or close the course page while the signal is poor; once a start has gone, don't tap Undo on its start line; check the series name reads "Autumn League" before the first course.
 
-**.38 (built and tested, not released):** A8, A71. Released after Sunday's race, with the series backfill for 27 September, 4, 11 and 18 October.
+**.38 (built and tested, not released):** A8, A71. Released next, with the series backfill for 27 September, 4, 11 and 18 October; never within 12 hours of a race.
 
 **.39 (built and tested, not released):** A65, A82 (course page icons), on top of .38. Released after .38; never within 12 hours of a race.
 
@@ -110,7 +110,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 | Ref | Item | State | Current note |
 |---|---|---|---|
-| A29 | Picked chips from any fix of the day, saved with the race | BUILT AND TESTED | WhatsApp names another race's fix by its plain name, by design (A40 clean list); "(moved hh:mm)" marks a later fix of the same mark, by design; positions listed |
+| A29 | Picked chips from any fix of the day, saved with the race | CONFIRMED LIVE | WhatsApp names another race's fix by its plain name, by design (A40 clean list); "(moved hh:mm)" marks a later fix of the same mark, by design; positions listed |
 | A30 | Line ends from any race's fixes | BUILT AND TESTED | |
 | A31 | Course chart from sketch data; Legs block layout | BUILT AND TESTED | |
 | A32 | As-sailed overlay in Check recorded marks | BUILT AND TESTED | |
@@ -141,7 +141,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A54 | Start line length and bearing without wind | BUILT AND TESTED | |
 | A55 | Scale bar, label overlap, far-away warning colour | BUILT AND TESTED | Label nudging moved to A73 |
 | A56 | Wind box saved every keystroke, no range check | BUILT AND TESTED | |
-| A58 | One-end start line: the RO estimates the line | BUILT AND TESTED | Released in .37 |
+| A58 | One-end start line: the RO estimates the line | CONFIRMED LIVE | Released in .37 |
 | A60 | Copy the course from any other start | NOT STARTED | Design points to decide |
 | A61 | Straight legs across land or drying ground | NOT STARTED | Parked |
 | A62 | Mark with no rounding side holds the WhatsApp text | DECIDED | Built with gates |
@@ -151,7 +151,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A66 | Server refuses Withdraw while a saved auto choice uses the fix | DECIDED | |
 | A67 | Correct moves only the starts the RO chooses | DECIDED | Design points first |
 | A68 | Save each start's auto choice when its start time passes | DECIDED | Design points first |
-| A69 | Remove Start left later starts' line ends behind | BUILT AND TESTED | Released in .37; the Remove Start precaution stays until CONFIRMED LIVE |
+| A69 | Remove Start left later starts' line ends behind | CONFIRMED LIVE | Released in .37 |
 | A71 | Loading a day opens the start left open on another day | BUILT AND TESTED | In .38, not released |
 | A72 | Orange note when a day's series is changed after the day was copied for Sail Scoring | DECIDED | Needs the page to record each copy |
 | A73 | Layout and colour: start line section (one line per end, one status line, one next action), Card mark / Laid line labels (say "estimated" when either end is an estimate), messages beside their button, finish line drawn over the estimated start line, sketch start line and labels | DECIDED | Colour rule: red only for what holds Send back or could lose data; laid marks at their planning position shown red as chips but not in the Fixed marks list, to be made consistent |
@@ -205,3 +205,4 @@ Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decis
 | 2026-10-14 | .36 and `marks.php` released | Checks passed on PC and tablet |
 | 2026-10-15 | .37 released | Checks passed on PC, tablet, phone and laptop |
 | 2026-10-16 | Test files removed from live | Kept days unchanged |
+| 2026-10-18 | Race (Autumn League) on .37 | A29, A58, A69 confirmed live; RIB page worked |
