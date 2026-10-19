@@ -30,11 +30,11 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
-**Then:** A63 (finish line), A60 (copy a course from any start).
+**Then:** A63 (finish line), A60 (copy a course from any start), A78 (withdraw a placed line end).
 
 **Then:** A7, A12, A13, A39, A17 to A19, A81, A82 (RIB page icons) (RIB page and server; tested on the water).
 
-**Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A78 (layout, wording and line-end fixes); A24 (script tests). A79 goes with the next workbook release.
+**Later, once designed:** A62 with gates; A66, A67, A68; A9; A57; A73 to A77 (layout, wording and line-end fixes); A24 (script tests). A79 goes with the next workbook release.
 
 **Never** release within 12 hours of a race.
 
@@ -57,7 +57,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 |---|---|---|---|
 | L1 | Delay between tap and position; stale fixes | CONFIRMED LIVE | RIB page fresh-position rule. The RO page's "Record committee boat here" has no freshness check |
 | L2 | Marks recorded in wrong positions | CONFIRMED LIVE | Check recorded marks plot with advisory flags |
-| L3 | Recorded marks not visible on the RO page | BUILT AND TESTED | Check recorded marks: plot, details, list |
+| L3 | Recorded marks not visible on the RO page | CONFIRMED LIVE | Check recorded marks: plot, details, list |
 | L4 | Several fixes of one mark; choosing which | IN PROGRESS | Any fix of the day can be picked into a race (A29). Known gap: "Newer fix / Tap to use" on rows using an earlier race's fix (held by Pat) |
 | L5 | Distinguishing races and starts | IN PROGRESS | A start can use another race's fix (A29, A30) |
 | L6 | No start line generated | IN PROGRESS | Line ends from any race (A30); one-end start line (A58) |
@@ -75,11 +75,11 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A7 | Recorded fixes are never deleted or rewritten | DECIDED | RIB Delete becomes Withdraw; "wrong race" move makes a new linked record |
 | A8 | Series name per race day, saved and loaded with the day | BUILT AND TESTED | In .38, not released; saved with the race key; sent to Sail Scoring as x-series only; backfill runs at release; then recreate 10 September in the August / September series |
 | A9 | Laid mark on auto has no start-time limit | DECIDED | Latest fix at or before the race's first start |
-| A10 | Laid-mark choice and auto line ends saved with the course | BUILT AND TESTED | |
-| A11 | Magnetic variation by race date (WMM at map centre) | BUILT AND TESTED | |
+| A10 | Laid-mark choice and auto line ends saved with the course | CONFIRMED LIVE | |
+| A11 | Magnetic variation by race date (WMM at the course's first leg) | CONFIRMED LIVE | |
 | A12 | RIB page offers Races 1 to 3 only | DECIDED | "+ Race" up to 9 on both pages |
 | A13 | Which RIB file is uploaded | DECIDED | `pages/record/index.html`; remove `record.html` |
-| A15 | Distance method differs (page, workbook, course-cards) | BUILT AND TESTED | |
+| A15 | Distance method differs (page, workbook, course-cards) | CONFIRMED LIVE | |
 | A16 | Overlay omits Curlane; pairs merged | OPEN | Parked (see Open decisions) |
 | A27 | A saved course can be reproduced from marks plus saved choices | NOT STARTED | Part met by A10; reproduction not checked |
 | A57 | White Bay laid-mark choice became an explicit older fix | DECIDED | Record which device made each course save (`marks.php` already keeps an optional `by`) |
@@ -112,8 +112,8 @@ References are never reused or renumbered. Commits name them with a trailer such
 |---|---|---|---|
 | A29 | Picked chips from any fix of the day, saved with the race | CONFIRMED LIVE | WhatsApp names another race's fix by its plain name, by design (A40 clean list); "(moved hh:mm)" marks a later fix of the same mark, by design; positions listed |
 | A30 | Line ends from any race's fixes | BUILT AND TESTED | |
-| A31 | Course chart from sketch data; Legs block layout | BUILT AND TESTED | |
-| A32 | As-sailed overlay in Check recorded marks | BUILT AND TESTED | |
+| A31 | Course chart from sketch data; Legs block layout | CONFIRMED LIVE | |
+| A32 | As-sailed overlay in Check recorded marks | CONFIRMED LIVE | |
 | A33 | Refused course save never shown | BUILT AND TESTED | |
 | A34 | Loading a day could send a save without an edit | BUILT AND TESTED | Known limit: a record holding only a start time is sent on load with no reason given |
 | A35 | Change of day dropped unsent edits | BUILT AND TESTED | Known limit: stale "Still on" message |
@@ -128,7 +128,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 |---|---|---|---|
 | A38 | Typed and pasted positions; RO page queue | BUILT AND TESTED | |
 | A39 | RIB page queue blocked by a refused fix | NOT STARTED | Test on the water before relying on it |
-| A40 | Fixed marks fold; reversed routes; WhatsApp list in °M | BUILT AND TESTED | |
+| A40 | Fixed marks fold; reversed routes; WhatsApp list in °M | CONFIRMED LIVE | |
 | A41 | RO-chosen routing waypoint inside a pair the card already routes is labelled "routed via … (RO-chosen)" | OPEN | Parked (see Open decisions) |
 | A43 | RO's course message reader (aliases) | NOT STARTED | Later stage |
 | A44 | Changing day drops pasted positions with no warning | NOT STARTED | Later stage |
@@ -140,7 +140,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A50 | Plain chips beside a laid mark's chip | BUILT AND TESTED | |
 | A54 | Start line length and bearing without wind | BUILT AND TESTED | |
 | A55 | Scale bar, label overlap, far-away warning colour | BUILT AND TESTED | Label nudging moved to A73 |
-| A56 | Wind box saved every keystroke, no range check | BUILT AND TESTED | |
+| A56 | Wind box saved every keystroke, no range check | CONFIRMED LIVE | |
 | A58 | One-end start line: the RO estimates the line | CONFIRMED LIVE | Released in .37 |
 | A60 | Copy the course from any other start | NOT STARTED | Design points to decide |
 | A61 | Straight legs across land or drying ground | NOT STARTED | Parked |
@@ -159,7 +159,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A75 | Favoured end ignores the first mark | DECIDED | Add which end is nearer the first mark, and by how much; whether to switch to distance when the first leg isn't a beat is open |
 | A76 | "Record the missing end…" shows with no start time and no ends | DECIDED | Reword or remove |
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
-| A78 | A placed line end replaced by placing again can't be withdrawn on its own | DECIDED | Add a way to withdraw a placed end no start uses |
+| A78 | A placed line end replaced by placing again can't be withdrawn on its own | DECIDED | Add a way to withdraw a placed end no start uses; until then a wrongly placed end stays in the list and is offered back through Use it as a recorded committee boat |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
 | A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
 | A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: tested on the test copy, not released; see Next. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
@@ -205,4 +205,4 @@ Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decis
 | 2026-10-14 | .36 and `marks.php` released | Checks passed on PC and tablet |
 | 2026-10-15 | .37 released | Checks passed on PC, tablet, phone and laptop |
 | 2026-10-16 | Test files removed from live | Kept days unchanged |
-| 2026-10-18 | Race (Autumn League) on .37 | A29, A58, A69 confirmed live; RIB page worked |
+| 2026-10-18 | Race (Autumn League) on .37 | L3, A10, A11, A15, A29, A31, A32, A40, A56, A58, A69 confirmed live; RIB page worked |
