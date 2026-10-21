@@ -300,7 +300,7 @@ def t6_a38_guards():
     g('sendOutbox has no empty catch', not re.search(r'catch\s*\(\s*\w*\s*\)\s*\{\s*\}', so))
     g('id="notSent" exactly once', page.count('id="notSent"') == 1)
     g('Not sent moves with the committee boat button', "['notSent','slotCB']" in code)
-    g('Not sent drawn on every render', 'renderNotSent();\n}' in fn_body(code, 'function render('))
+    g('Not sent drawn on every render', 'renderNotSent(); paintMsgs();\n}' in fn_body(code, 'function render('))
     g('notSent in the fresh state (Clear everything resets it)', 'outbox:[],notSent:[]' in fn_body(code, 'function fresh('))
     ut = fn_body(code, 'function unsentText(')
     g('Clear everything counts Not sent and pasted positions', 'S.notSent' in ut and 'S.marks.filter(isPasted)' in ut)
@@ -340,7 +340,7 @@ def t6_a38_guards():
       and 's0.outbox.forEach(q=>readSays(q,outWait(q,stop.k,stop.e),' in so)
     g('the typing message follows its fix: sending again, removed',
       "readSays(x.f,outName(x.f)+': sending again" in ns and "readSays(x.f,outName(x.f)+': removed from this device.'" in ns)
-    g('readSays changes only a message still about that fix', "el.textContent.indexOf(outName(f)+':')!==0)return;" in code)
+    g('readSays changes only a message still about that fix', "actMsgs[x].t.indexOf(outName(f)+':')===0);if(!key)return;" in code)
     pl = fn_body(code, 'async function pull(')
     g('the line under Get latest marks splits recorded fixes and typed positions',
       "nOf(list.length-nTyped,'recorded fix','recorded fixes')" in pl and "nOf(nTyped,'typed position','typed positions')" in pl
@@ -495,6 +495,8 @@ def t7_a40_guards():
             body = body.replace('mag1(pt.brg,vc)', 'magOf(pt.brg)')
             # and "x-estimate" when the start line is the RO's estimate (A58, Pat 14 October 2026)
             body = body.replace("+(xEst(r,st)?'  \"x-estimate\": '+JSON.stringify(xEst(r,st))+',\\n':'')", '')
+            # .43 fix 7: the finish is the last mark also on a card course's Laid line (finIsLast)
+            body = body.replace("noF=!L.fPt&&!finIsLast(r,st);", "noF=!L.fPt&&(L.ccfg||finishMode(r,st)!=='last');")
             # .37: a hand-built Grassy start gets the STAND-IN note beside the button, as an imported one does (A58 part 2)
             body = body.replace('if(L.sPt&&!L.sl&&L.ccfg)', 'if(L.sPt&&!L.sl)')
             body = chr(10).join(x for x in body.split(chr(10)) if 'gsOf(r,st))cardSti.push(' not in x)
@@ -577,7 +579,8 @@ def t9_fixes32_guards():
       and 'S.date' not in bl)
     g('1 the heading follows the Race day box at once', "$('day').addEventListener('change',()=>{render();" in code)
     g('2 routing waypoints are not carried either', 'm.race<S.race&&!isCourseCard(m)&&!isRwCard(m)' in fn_body(code, 'function bank('))
-    g('4 one line per refused name', "refused.map(cardRefusal));" in code and "$('readStatus').innerHTML=said.map(esc).join('<br>');" in code)
+    g('4 one line per refused name', "refused.map(cardRefusal));" in code and "say(said.join('\\n'),!!(n&&!far.length&&!refused.length));" in code
+      and '.actMsg{white-space:pre-line}' in page)
     cr = fn_body(code, 'function cardRefusal(')
     g('5 the refusal by kind: a buoy, or a point (routing waypoint, Grassy Mid)',
       "point=m.rw||m.type==='Start/finish modelling point'" in cr and "'If you need a different point, give it a different name.'" in cr
@@ -731,7 +734,7 @@ def t13_changes36_guards():
       'S.laidLegacy[key])return;' in fn_body(code, 'function laidRec(') and "if(S.laidShape!==35)" in code
       and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 4 and 'if(!noFreeze)freezeFor(k);' in code)
     g('A54: section 3\'s start line note follows the wind box as section 4 does', "sMiss+'<div id=\"lineInfo\">'+lineInfo()+'</div>'+" in code
-      and "if($('lineInfo'))$('lineInfo').innerHTML=lineInfo();" in fn_body(code, 'function buildLegs('))
+      and "if($('lineInfo')){$('lineInfo').innerHTML=lineInfo();paintMsgs();}" in fn_body(code, 'function buildLegs('))
     g('A56: an out-of-range direction is used as none and never saved', "twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}" in code
       and code.count("if(!twdWarnSay(v)){twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}") == 2 and 'if(twdBad)S.twd=\'\';' in code)
     g('Copy for Sail Scoring: course to one decimal of a degree magnetic', 'function mag1(brgT,v){' in code and '"course": \'+mag1(pt.brg,vc)' in code)
@@ -887,7 +890,9 @@ def t17_reopen_names_guards():
       "setInterval(()=>{if(!document.hidden&&!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);},30000);" in code)
     hl = fn_body(code, 'function helpLong(')
     g('2 the time in brackets is left out when the reference already ends with it',
-      "f.endsWith(' '+w)?'':' ('+w+')'" in hl and "'°M from '+e.from+' ('+fixWhen(m)+')'" not in code)
+      "if(!mm||/ R\\d+( \\d{1,2}:\\d{2})?$/.test(f))return '';" in fn_body(code, 'function fromWhenOf(')
+      and "return String(from).endsWith(' '+w)?'':w;" in fn_body(code, 'function fromWhenNew(')
+      and "f.endsWith(' '+w)?'':' ('+w+')'" in fn_body(code, 'function helpX(') and "'°M from '+e.from+' ('+fixWhen(m)+')'" not in code)
     g('4 a RIB phone with no recorder name is "phone with no name"', "return m.recorder||'phone with no name';" in code and "'unnamed phone'" not in code)
 
 
@@ -1209,7 +1214,7 @@ def t25_a78_guards():
       "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code
       and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}" in code)
     hl = fn_body(code, 'function helpLong(')
-    g('it is labelled ", replaced" in every shape (Start Pin set, start end placed, Finish Pin set, Finish boat placed)', "const rp=goneOf(m)?', replaced':'';" in hl and hl.count('+rp') == 4)
+    g('it is labelled ", replaced" in every shape (Start Pin set, start end placed, Finish Pin set, Finish boat placed)', "const rp=goneOf(m)?', replaced':'';" in hl and hl.count('+rp') == 3 and "fixWhen(m)+rp;};" in hl)
     g('auto (every race) and the earlier-race offer leave a replaced end out; the list still offers it',
       '&&!(m.race<r&&helpOf(m))&&!(isFinW(w)&&finOf(m))&&!goneOf(m)).sort(' in fn_body(code, 'function candidates(')
       and '&&helpOf(m)&&!goneOf(m)&&' in fn_body(code, 'function estEarlier(') and 'goneOf' not in fn_body(code, 'function endChoices('))
@@ -1237,6 +1242,93 @@ def t25_a78_guards():
       and "'a replaced line end whose fix is gone was removed',\n  'a finish line end whose fix is gone was removed'];" in code)
     g('a change of day clears the stored entries with the other per-start records',
       "'linePinAt','lineGone','lineFin','winds','cardCfg'].forEach(f=>" in code)
+
+
+def t26_fixes43_guards():
+    """.43 fix round (Pat, 21 October 2026) in the page. Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('26 .43: ' + name, ok, detail)
+    # fix 1
+    g('1: a chosen button in a one-of group is filled, the others outlined',
+      '.ghost[aria-pressed="true"]{background:var(--sea);border-color:var(--sea);color:var(--paper)}' in page
+      and code.count('aria-pressed="\'+(m===v)+\'"') == 1 and "aria-pressed=\"'+(d.sq==='wind')+'\"" in code)
+    g('1: the finish side buttons are one row, Port filled red, Starboard filled green, Not given grey',
+      '.sideBtns button[data-v="port"][aria-pressed="true"]{background:var(--warn);color:var(--paper)}' in page
+      and '.sideBtns button[data-v="starboard"][aria-pressed="true"]{background:var(--ok);color:var(--paper)}' in page
+      and '.sideBtns button[data-v=""][aria-pressed="true"]{background:var(--muted);color:var(--paper)}' in page
+      and "b('port','Port')+b('starboard','Starboard')+b('','Not given')" in code)
+    # fix 2
+    rd = fn_body(code, 'function render(')
+    g('2: messages are cleared for the start left, then drawn under their buttons, on every render',
+      'msgsMoved();' in rd and rd.index('msgsMoved();') < rd.index('heldSay();') and 'renderNotSent(); paintMsgs();' in rd
+      and 'if(newDay)actMsgs={};' in fn_body(code, 'async function pull('))
+    mm = fn_body(code, 'function msgsMoved(')
+    g('2: leaving a start or race clears what was said there, and only there',
+      "if(actMsgK&&actMsgK!==k){" in mm and "x.indexOf(actMsgK+'|')===0" in mm and "x.indexOf(r+'|*|')===0" in mm)
+    pm = fn_body(code, 'function paintMsgs(')
+    g("2: a message goes in its button's slot, otherwise its row's",
+      "slots.find(s=>s.dataset.msg===a)||slots.find(s=>s.dataset.msg===MSG_GROUP[a])" in pm and "kk!==ckey(S.race,S.start)&&kk!==S.race+'|*'" in pm)
+    est = code[code.find("document.addEventListener('click',async e=>{const b=e.target.closest('.estAct')"):code.find('async function finAct(')]
+    g('2: the start and finish line helpers say under their buttons, and an action clears its row first',
+      "say=(t,ok)=>sayIn(act,k)(t,ok);" in est and 'msgClear(act);' in est and "$('readStatus')" not in est
+      and "$('readStatus')" not in fn_body(code, 'async function finAct('))
+    g('2: Remove Start, the Finish list, Check recorded marks, the mover, Read marks, typing and Save to the race record say under their buttons',
+      "say=sayIn('removeStart');" in fn_body(code, 'async function removeStartAsked(')
+      and "sayIn('finishSel')(t,false);" in code and "sayIn('fx:'+fxSel)(t,ok);" in fn_body(code, 'function typedSays(')
+      and "say=sayIn('fx:'+k);" in fn_body(code, 'function pickFix(') and "const say=sayIn('move');" in fn_body(code, 'async function moveFix(')
+      and "const say=sayIn('read');" in code and "const say=sayIn('typed');" in code and "sayIn('savepaste')(msg,true);" in fn_body(code, 'function savePasted(')
+      and all(f"$('readStatus')" not in fn_body(code, h) for h in ('async function removeStartAsked(', 'function pickFix(', 'async function moveFix(', 'function savePasted(', 'async function typedAct('))
+      and 'data-msg="removeStart"' in page and 'data-msg="savepaste"' in page and 'data-msg="read"' in page and 'data-msg="typed"' in page)
+    # fix 3
+    fs = fn_body(code, 'function finSay(')
+    g('3: no side while the Finish Pin is the midpoint, in WhatsApp and in the row',
+      'side=!z.mid&&z.pin&&z.pin.side;' in fs and 'if(pin&&!z.mid){' in fn_body(code, 'function finRowHtml('))
+    # fix 4
+    g('4: the finish choice goes home before the rows are redrawn and into the Finish line row after',
+      "$('finishHome').appendChild($('finishCard'));$('finishHome').appendChild($('finishFields'));" in rd
+      and rd.index("$('finishHome').appendChild") < rd.index("const ol=$('course');ol.innerHTML='';")
+      and "box.appendChild($('finishCard'));box.appendChild($('finishFields'));" in rd
+      and "<div class=\"finChoice\"></div>'+msgSlot('finishSel')+msgSlot('finFollow')+" in rd)
+    # fix 5
+    g('5: one plain line of this race\'s own line ends under the chips, never chips',
+      "const le=S.marks.filter(m=>m.race===S.race&&!m.card&&!m.virtual&&isLineMark(m.name))" in rd
+      and "p.textContent='Line ends: '+le.map(lineEndWords).join(' · ');" in rd
+      and "const bm0=bank().filter(m=>!isLineMark(m.name));" in rd and 'function lineEndWords(m){' in code)
+    # fix 6
+    g('6: a line end set or placed on this page is never carried into a later race',
+      "S.marks.filter(m=>m.race<S.race&&!isCourseCard(m)&&!isRwCard(m)&&!helpOf(m))" in fn_body(code, 'function bank('))
+    # fix 7
+    fst = fn_body(code, 'function finishState(')
+    g('7: on Laid line the Finish list choice is saved with the card set-up (lfc); with none, Laid line is as before',
+      "if(c.lfc==='start'||c.lfc==='finishpin'||c.lfc==='last')r.lfc=c.lfc;" in fn_body(code, 'function cardRec(')
+      and "if(c.lfc==='last')return {kind:'last'};" in fst and fst.index("c.lfc==='last'") < fst.index('if(finPinLine(r,st,sel))return {kind:\'finishpin\'};')
+      and "if(c.lfc)return c.lfc;return c.lfs==='start'&&!finPinLine(r,st)?'start':'finishpin';" in fn_body(code, 'function finChoiceOf(')
+      and "if(c&&cardEndMode('f')==='laid'){c.lfc=v;if(v==='start')c.lfs='start';else delete c.lfs;}else S.finishes[k]=v;" in code)
+    # fix 8
+    fa = fn_body(code, 'async function finAct(')
+    g('8: copies follow their source on every render, and before the end the source replaces is withdrawn',
+      rd.index('finFollowAll();') < rd.index('msgsMoved();')
+      and fa.count('finFollowAll();commit();') == 2
+      and fa.index('finFollowAll();commit();') < fa.index("if(old)await withdrawReplaced(k,'fpin'")
+      and fa.rindex('finFollowAll();commit();') < fa.index("if(old)await withdrawReplaced(k,'fcb'"))
+    g('8: Undo and Remove Start of a source are refused while starts share its line, naming them',
+      "if(shr.length){say('Not undone: '+shr.join(', ')" in fa
+      and "if(shr.length){say('Start '+(i+1)+' not removed: '+shr.join(', ')" in fn_body(code, 'async function removeStartAsked('))
+    g('8: a sharing start that follows says so in its Finish line row',
+      "actMsgs[msgKey('finFollow',k)]={t:'Finish line updated from Race '+r+' Start '+(st+1)+' at '+hhmm(Date.now())+'.',ok:null};" in fn_body(code, 'function finFollowAll('))
+    # fix 9
+    g('9: no finish sentence before there is a Finish Pin', "if(!pin)return '';" in fs and fs.index("if(!pin)return '';") < fs.index("return 'Finish between the committee boat and '"))
+    # fix 10
+    g("10: Copy for Sail Scoring keeps its x-estimate wording (helpX, the wording before .43)",
+      'const w=helpX(md.end)||fixWords2(md.end);' in fn_body(code, 'function lineEstNow(') and 'const w=helpX(fl.end)||fixWords2(fl.end);' in fn_body(code, 'function finEstNow(')
+      and 'helpLong(' not in fn_body(code, 'function lineEstNow(') and 'helpLong(' not in fn_body(code, 'function finEstNow('))
+    g('10: a placed end says its reference with that end\'s time, then its own time on the water',
+      "return lab+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
+      and "le.fromWhen?{fromWhen:String(le.fromWhen)}:{}" in fn_body(code, 'function estRec(')
+      and "v.cb.fromWhen?{fromWhen:String(v.cb.fromWhen)}:{}" in fn_body(code, 'function finNorm('))
 
 
 def main():
@@ -1267,6 +1359,7 @@ def main():
         t23_worker_guards()
         t24_version_gate_guards()
         t25_a78_guards()
+        t26_fixes43_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
