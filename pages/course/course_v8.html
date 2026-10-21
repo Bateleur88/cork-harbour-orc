@@ -363,7 +363,7 @@ body::before{content:"";position:fixed;top:0;right:0;bottom:0;left:0;z-index:-1;
   <ol class="course" id="course"></ol>
   <p class="cardnote" id="finishCard" hidden></p>
   <div class="fields" id="finishFields">
-    <label>Finish<select id="finishSel"><option value="start">Start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
+    <label>Finish<select id="finishSel"><option value="start">Same as the start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option></select></label>
   </div>
   <div class="fields" id="windFields">
     <label>Wind direction °M<input id="twd" type="number" min="0" max="360" inputmode="numeric" placeholder="optional"></label>
@@ -433,7 +433,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.41';
+const PAGE_VERSION='2026-10-06.42';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -713,6 +713,12 @@ async function typedAct(act,ref){const m=S.marks.find(x=>refFor(x)===ref), day=S
     if(isLineMark(m.name))startKeys().forEach(k2=>{let hit=false;
       estsOf(k2).filter(refHit(m)).forEach(e=>{estDrop(e);hit=true;});
       if(S.linePinAt[k2]&&refHit(m)(S.linePinAt[k2])){delete S.linePinAt[k2];hit=true;}
+      // A63: a finish line's set Finish Pin, placed Finish boat or midpoint record
+      const fz=finRec(k2);if(fz){const z=Object.assign({},fz), ls=S.lineSel[k2]||{};
+        if(z.pin&&refHit(m)(z.pin)){delete z.pin;hit=true;}
+        if(z.cb&&refHit(m)(z.cb)){delete z.cb;if(ls.fcb==='none')delete ls.fcb;hit=true;}
+        if(z.mid&&refHit(m)(z.mid)){delete z.mid;if(ls.fcb==='none')delete ls.fcb;hit=true;}
+        finSet(k2,z);}
       if(hit)stamp(k2,true);});
     if(isLineMark(m.name))goneDrop(m);   // A78: no longer a replaced end waiting to be withdrawn
     fxSel='';await pull(true);typedSays(m.name+' (Race '+m.race+') withdrawn: '+why+'.',true);return;}
@@ -845,8 +851,9 @@ Object.keys(S.courses||{}).forEach(k=>{S.courses[k]=(S.courses[k]||[]).filter(e=
     return id===m.id?{id:nid,side:typeof e==='string'?'':(e.side||'')}:e;});});
   m.id=nid;moved=true;});
  if(moved)save();}
-['laidSel','laidNo','laidAck','laidFrz','lineAuto','laidLegacy','lineMid','lineEst','startPt','linePinAt','lineGone'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
+['laidSel','laidNo','laidAck','laidFrz','lineAuto','laidLegacy','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin'].forEach(k=>{if(!S[k]||typeof S[k]!=='object')S[k]={};});
 Object.keys(S.lineEst).forEach(k=>{const n=estNorm(S.lineEst[k]);if(n)S.lineEst[k]=n;else delete S.lineEst[k];});   // d: one record per end
+Object.keys(S.lineFin).forEach(k=>{const n=finNorm(S.lineFin[k]);if(n)S.lineFin[k]=n;else delete S.lineFin[k];});   // A63
 /* Laid-mark choices made on a page before 2026-10-06.35 were kept on this device only. They stay in use here, but are not
    saved with a course just because a day is opened (opening an old race never writes to it, A10): only once the RO
    changes that choice, or the course is sent, or shown on the race day (freezeNow) */
@@ -1182,7 +1189,7 @@ function drawChartInner(){
   const nearOf=P.pts.filter(m=>ok(m)&&!farNm(m)), isFar=m=>nearOf.length&&ok(m)&&!!farNm(m), farLegs=[];
   P.lines.forEach(ln=>{if(!ok(ln.a)||!ok(ln.b)||isFar(ln.a)||isFar(ln.b))return;
     L.polyline([[ln.a.lat,ln.a.lon],[ln.b.lat,ln.b.lon]],{color:ln.est?'#B3261E':LINE,weight:2,dashArray:'6,5'})
-      .bindTooltip(ln.est?'Start line: estimate':ln.kind==='finish'?'Finish line':P.slUnused?'Start line (recorded, not used: '+P.slUnused+' chosen)':'Start line',
+      .bindTooltip(ln.est?(ln.kind==='finish'?'Finish line: estimate':'Start line: estimate'):ln.kind==='finish'?'Finish line':P.slUnused?'Start line (recorded, not used: '+P.slUnused+' chosen)':'Start line',
         ln.est?{permanent:true,direction:'bottom',offset:[0,12],className:'estTip'}:{sticky:true}).addTo(LRoute);
     bounds.push([ln.a.lat,ln.a.lon],[ln.b.lat,ln.b.lon]);});
   // the legs, in order, each with its arrowhead
@@ -1517,9 +1524,15 @@ function render(){
       '<button data-a="del" data-i="'+i+'" aria-label="Remove">✕</button></div>';
     ol.appendChild(li);});
   if((!cardCfgNow()&&finishMode()==='finishpin')||cardEndMode('f')==='laid'){const li=document.createElement('li');li.className='lineRow';li.id='finishRow';
-    li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="meta">'+endPicker('fcb')+'</div><div class="meta">↔ '+endPicker('fpin')+'</div></div><div></div>';
+    li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b>'+finRowHtml()+'</div><div></div>';
     ol.appendChild(li);}
-  $('finishSel').value=finishMode();
+  // A63: the Finish list, its first option the default (Auto); then the finish lines of earlier starts, offered only
+  {const k=ckey(S.race,S.start), sh=cardCfgNow()?[]:finShared(), z=finRec(k), v=z&&z.src&&sh.some(x=>x.k===z.src)?'from:'+z.src:finishMode();
+   const fh='<option value="start">Same as the start line</option><option value="finishpin">Committee boat &amp; Finish Pin</option><option value="last">At the last mark</option>'+
+     (sh.length?'<optgroup label="Finish lines set on earlier starts">'+sh.map(x=>'<option value="from:'+esc(x.k)+'">'+esc(x.text)+'</option>').join('')+'</optgroup>':'');
+   // redrawn only when it changes, so an open list is not closed by the 30-second refresh
+   if($('finishSel').dataset.h!==fh){$('finishSel').innerHTML=fh;$('finishSel').dataset.h=fh;}
+   $('finishSel').value=v;}
   // a card course takes its finish from the card, so the hand-built Finish selector gives way to a plain statement
   {const c=cardCfgNow(); $('finishFields').hidden=!!c; $('finishCard').hidden=!c;
    if(!c)$('finishCard').innerHTML='';
@@ -1569,26 +1582,48 @@ function renderCardSum(){
    Every record kept per start moves with its start, so nothing of the removed start passes to another (Pat, 15 October
    2026): before .37 the saved auto choices (lineAuto), estimates (lineEst, either shape) and midpoints (lineMid) stayed at
    the old start number. Any new per-start record must be added here. */
-const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone'];
+const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin'];
 /* fix 2 (Pat, 15 October 2026): the removed start's own helper fixes (a Start Pin set at a mark, an end placed by distance
    and bearing) are withdrawn with it (kept, marked withdrawn), as Undo does, so they never stay behind as unlabelled
    typed positions offered to other starts. Refused, naming the starts, while any other start uses one of them (lineUsers);
-   not removed at all if a withdrawal fails. */
+   not removed at all if a withdrawal fails. A63 (Pat, 21 October 2026): its own placed Finish boats are withdrawn the same
+   way. Its own set Finish Pins are named in lineSel, which the server checks, so after the confirmation each is moved to
+   the start's replaced ends (lineFin.gone) and the start is saved first; if that save fails, they go back and the start
+   is not removed. Then the withdrawals: start ends, Finish boats, then Finish Pins; the start is removed only if every one
+   succeeds. A Finish Pin not withdrawn stays with the start as a replaced end (", replaced" on every device, never picked
+   by auto), with the A78 note. */
 async function removeStartAsked(i){const r=S.race, k=ckey(r,i), st=$('readStatus'), say=(t,ok)=>{st.textContent=t;st.className='status '+(ok?'ok':'err');};
-  const its=estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[]).map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)
+  const fz=finRec(k)||{}, fg=fz.gone||[], fOwn=!fz.src;
+  const fix=l=>l.map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m);
+  const its=fix(estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[],
+      fOwn&&fz.cb?[{e:fz.cb,w:'fcb'}]:[],fg.filter(g=>g.w==='fcb').map(e=>({e,w:'fcb'}))))
     .sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1));
-  if(its.length){
-    const others=[...new Set(its.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];
-    if(others.length){say('Start '+(i+1)+' not removed: its '+its.map(x=>x.m.name).join(' and ')+' '+(its.length>1?'are':'is')+' also used by '+others.join(', ')+'.',false);return;}
-    if(its.some(x=>x.m.pending||!x.m.sid)){say('Start '+(i+1)+' not removed: its line ends are still being sent. Try again in a moment.',false);return;}
+  const post=fix((fOwn&&fz.pin&&fz.pin.at?[{e:fz.pin,w:'fpin'}]:[]).concat(fg.filter(g=>g.w==='fpin').map(e=>({e,w:'fpin'}))));
+  const all=its.concat(post);
+  if(all.length){
+    const others=[...new Set(all.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];
+    if(others.length){say('Start '+(i+1)+' not removed: its '+all.map(x=>x.m.name).join(' and ')+' '+(all.length>1?'are':'is')+' also used by '+others.join(', ')+'.',false);return;}
+    if(all.some(x=>x.m.pending||!x.m.sid)){say('Start '+(i+1)+' not removed: its line ends are still being sent. Try again in a moment.',false);return;}
     if(!verReady(say))return;   // A65
-    if(!confirm('Remove Start '+(i+1)+'? Its '+its.map(x=>x.m.name+' '+('at' in x.e?'set at '+x.e.at:'placed '+x.e.m+' m at '+pad(x.e.brgM,3)+'°M')).join(' and ')+
-      (its.length>1?' are':' is')+' withdrawn from the race record (kept, marked withdrawn).'))return;
-    for(const x of its){
-      try{await postFix({action:'withdraw',date:S.pulledDay,id:x.m.sid,reason:'start removed by the RO'},OUTBOX_TIMEOUT_MS);}
-      catch(err){commit();say('Start '+(i+1)+' not removed: '+((err&&err.text)||(err&&err.message)||'no reply')+'.',false);return;}}}
+    if(!confirm('Remove Start '+(i+1)+'? Its '+all.map(x=>x.m.name+' '+('at' in x.e?'set at '+x.e.at:'placed '+x.e.m+' m at '+pad(x.e.brgM,3)+'°M')).join(' and ')+
+      (all.length>1?' are':' is')+' withdrawn from the race record (kept, marked withdrawn).'))return;
+    // the set Finish Pin leaves the finish line for the replaced ends, and the start is saved without it in lineSel first
+    if(post.length){const z0=finRec(k), ls0=Object.assign({},S.lineSel[k]||{});
+      if(fOwn&&fz.pin&&fz.pin.at){const z=Object.assign({},z0);delete z.pin;finSet(k,z);finGoneAdd(k,{w:'fpin',ref:fz.pin.ref,at:fz.pin.at});
+        if((S.lineSel[k]||{}).fpin===fz.pin.ref)delete S.lineSel[k].fpin;}
+      stamp(k,true);commit();
+      let saved=true;for(const x of post)if(!(await finSavedWithout(x.e.ref)))saved=false;
+      if(!saved){finSet(k,z0?JSON.parse(JSON.stringify(z0)):null);S.lineSel[k]=ls0;stamp(k,true);commit();scheduleSave();
+        say('Start '+(i+1)+' not removed: the change to its finish line could not be saved. Try again when there is signal.',false);return;}}
+    for(const x of its.concat(post)){
+      try{await postFix({action:'withdraw',date:S.pulledDay,id:x.m.sid,reason:'start removed by the RO'},OUTBOX_TIMEOUT_MS);if(x.w==='fpin')goneDrop(x.m);}
+      catch(err){const why=(err&&err.text)||(err&&err.message)||'no reply';
+        // a Finish Pin moved to the replaced ends above stays there, labelled and never picked by auto, with the A78 note
+        post.filter(p=>goneOf(p.m)).forEach(p=>{S.orphans=S.orphans||{};S.orphans[p.m.sid]={day:S.pulledDay,race:p.m.race,w:'fpin',
+          text:'The Finish Pin set at '+p.e.at+' ('+fixWhen(p.m)+') was not withdrawn: Start '+(i+1)+' is not removed ('+why+'). Withdraw it from Check recorded marks, then remove the start.'};});
+        await pull(true);commit();say('Start '+(i+1)+' not removed: '+why+'.',false);return;}}}
   removeStart(i);S.start=0;classOpen=false;commit();
-  if(its.length){await pull(true);commit();say('Start '+(i+1)+' removed; its '+its.map(x=>x.m.name).join(' and ')+' withdrawn.',true);}}
+  if(all.length){await pull(true);commit();say('Start '+(i+1)+' removed; its '+all.map(x=>x.m.name).join(' and ')+' withdrawn.',true);}}
 function removeStart(i){
   const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
   let last=classesOf().length-1;
@@ -1597,6 +1632,9 @@ function removeStart(i){
   START_KEYED.forEach(f=>{const o=S[f]=S[f]||{};delete o[ckey(r,i)];
     for(let j=i+1;j<=last;j++){const a=ckey(r,j);if(a in o){o[ckey(r,j-1)]=o[a];delete o[a];}}});
   estDraft={};   // a helper draft typed for a start that moved or went is not carried to another
+  // A63: a copied finish line names the start it came from: it follows that start down, and no longer names a removed one
+  Object.keys(S.lineFin||{}).forEach(k=>{const z=S.lineFin[k];if(!z.src)return;const[sr,ss]=z.src.split('|').map(Number);if(sr!==r)return;
+    if(ss===i){delete z.src;finSet(k,Object.assign({},z));stamp(k,true);}else if(ss>i){z.src=ckey(r,ss-1);stamp(k,true);}});
   const gone=ckey(r,last); if(S.synced[gone]!==undefined){S.courses[gone]=[];stamp(gone);}
 }
 // which race day a course (race|start) was built for, so a day change never clears a course built for the day being loaded
@@ -1752,7 +1790,10 @@ function abbr(n){const s=n.trim();
   if(/^offset$/i.test(s))return 'O'; if(/^gybe$/i.test(s))return 'G';
   return s.length<=2?s.toUpperCase():s;}
 function isFinishPin(n){return /finish/i.test(n)&&/pin/i.test(n);}
-function isLineMark(n){return isCB(n)||isStartPin(n)||isFinishPin(n);}
+// A63 (Pat, 20 October 2026): the committee boat placed on this page for a finish line is named "Finish boat", with no
+// "committee" in its name, so it is a finish end only; a GPS-recorded committee boat counts as neither and serves either line
+function isFinishBoat(n){return /\bfinish\s*boat\b/i.test(n);}
+function isLineMark(n){return isCB(n)||isStartPin(n)||isFinishPin(n)||isFinishBoat(n);}
 function latest(test){let b=null;bank().forEach(m=>{if(test(m.name)&&(!b||m.race>b.race||(m.race===b.race&&m.fix>b.fix)))b=m;});return b;}
 function mkLine(a,b){return a&&b?{cb:a,pin:b,mid:{lat:(a.lat+b.lat)/2,lon:(a.lon+b.lon)/2}}:null;}
 if(!S.lineSel||typeof S.lineSel!=='object')S.lineSel={};
@@ -1763,7 +1804,8 @@ if(!S.lineSel||typeof S.lineSel!=='object')S.lineSel={};
    end is inherited from the previous start, or picked automatically, and the page says which and why. The RO decides:
    nothing automatic ever replaces a choice he made. */
 if(!S.lineFlags||typeof S.lineFlags!=='object')S.lineFlags={};
-const END_TEST={cb:n=>isCB(n),pin:n=>isStartPin(n),fcb:n=>isCB(n),fpin:n=>isFinishPin(n)};
+const END_TEST={cb:n=>isCB(n),pin:n=>isStartPin(n),fcb:n=>isCB(n)||isFinishBoat(n),fpin:n=>isFinishPin(n)};
+const isFinW=w=>w==='fcb'||w==='fpin';
 const END_LABEL={cb:'Committee boat',pin:'Start Pin',fcb:'Committee boat',fpin:'Finish Pin'};
 const ACC_CHECK=15, ACC_POOR=30;   // ±m: a fix is flagged when its accuracy is strictly greater; it stays selectable
 function accWarn(m){const a=m&&typeof m.acc==='number'?m.acc:null;return a===null?'':a>ACC_POOR?'poor GPS':a>ACC_CHECK?'check GPS':'';}
@@ -1776,12 +1818,14 @@ function startMoment(r,st){return dayMoment(S.startTimes[ckey(r,st)]);}
 // (the automatic rules use only these; a later race's fix is never picked automatically). A line end estimated by the
 // RO (A58) carries forward only within its own race: a later race is offered it (estEarlier), never given it by auto
 // (Pat, 14 October 2026)
+// A63: a Finish Pin or Finish boat set or placed on this page (finOf) is never picked by auto, in any race
 function candidates(w,r){r=r||S.race;const t=END_TEST[w];
-  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&helpOf(m))&&!goneOf(m)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+  return S.marks.filter(m=>!m.card&&m.race<=r&&t(m.name)&&!(m.race<r&&helpOf(m))&&!(isFinW(w)&&finOf(m))&&!goneOf(m)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
 // what an end's list offers the RO: every recorded fix of the end's type from any race of the day, earlier races first,
-// then by time, each labelled with its race and time (fixText). The fix itself is never changed
+// then by time, each labelled with its race and time (fixText). The fix itself is never changed. A63: a committee boat
+// placed on this page for a start line is never offered for a finish line
 function endChoices(w){const t=END_TEST[w];
-  return S.marks.filter(m=>!m.card&&t(m.name)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+  return S.marks.filter(m=>!m.card&&t(m.name)&&!(w==='fcb'&&estOf(m))).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
 function refFor(m){return m.sid?'s:'+m.sid:'l:'+m.id;}
 // the fix an end's saved choice names, from any race of the day (as the list offers them); null if it is gone or is not of
 // the end's type
@@ -1793,13 +1837,19 @@ function refFix(ref,w){if(typeof ref!=='string'||!/^[sl]:/.test(ref))return null
    when the RO should look. own=false gives what would apply without this start's own choice. sel (optional, for
    legPts): a lookup 'race|start' -> line-end choices used instead of S.lineSel, passed down the recursion; never written. */
 function endPick(w,r,st,own,sel){r=r||S.race;st=st==null?S.start:st;
+  // A63: the finish committee boat of a line set with the helper (lineFin): the Finish boat placed for it, or none, the
+  // Finish Pin being the line's midpoint; lineSel.fcb is 'none' beside either, for pages before .42
+  if(w==='fcb'&&own!==false){const z=finRec(ckey(r,st));
+    if(z&&z.mid)return {m:null,how:'mid',reason:'None: the Finish Pin is used as the line midpoint'};
+    if(z&&z.cb){const m=refFix(z.cb.ref,'fcb');if(m)return {m,how:'placed',reason:'Placed by you'};}}
   const v=own===false?undefined:((sel?sel(ckey(r,st)):S.lineSel[ckey(r,st)])||{})[w];
   if(v==='none')return {m:null,how:'none',reason:'None, chosen by you: this end is not used'};
   if(v&&v!=='auto'){const m=refFix(v,w);if(m)return {m,how:'chosen',reason:'Chosen by you'};}
   // a later start keeps the previous start's choice unless a newer fix of this type was recorded after the previous
-  // start's time and at or before this start's time; both times are needed to tell
+  // start's time and at or before this start's time; both times are needed to tell. A63: a finish end is inherited only
+  // when it is a recorded fix, never a Finish Pin or Finish boat set or placed on this page
   if(st>0){const p=endPick(w,r,st-1,undefined,sel);
-    if(p.how==='chosen'||p.how==='none'||p.how==='inherited'){
+    if((p.how==='chosen'||p.how==='none'||p.how==='inherited')&&!(isFinW(w)&&p.m&&finOf(p.m))){
       const t0=startMoment(r,st-1), t1=startMoment(r,st), from=p.how==='inherited'?p.from:st-1;
       if(t0!==null&&t1!==null&&t0<=t1){
         const newer=candidates(w,r).filter(m=>{const t=fixMoment(m);return t!==null&&t>t0&&t<=t1;});
@@ -1817,6 +1867,9 @@ function autoUse(w,r,st,sel){const a=autoEnd(w,r,st,sel), z=w==='fcb'?'':((S.lin
   return {m:f,how:'auto',saved:true,reason:'Auto, as saved with the course',live:a.m&&a.m!==f?a.m:null};}
 function autoEnd(w,r,st,sel){
   if(w==='fcb'){const s=endPick('cb',r,st,undefined,sel);
+    // A63 (5c): only a recorded committee boat, never one placed for the start line as an estimate
+    if(s.m&&helpOf(s.m))return {m:null,how:'unset',reason:'Auto: none, this start\'s committee boat is an estimate',
+      warn:'The start\'s committee boat is an estimate: choose a committee boat or place the Finish boat'};
     return {m:s.m,how:s.m?'auto':'unset',reason:'Auto: same as this start\'s committee boat',warn:s.m?'':'No committee boat for this start'};}
   const list=candidates(w,r).filter(m=>fixMoment(m)!==null).sort((a,b)=>fixMoment(a)-fixMoment(b));
   if(w==='fpin'){const m=list[list.length-1]||null;
@@ -1908,11 +1961,127 @@ function goneRec(g){if(!g||typeof g!=='object')return null;
   return estRec(g);}
 function goneNorm(v){const l=Array.isArray(v)?v.map(goneRec).filter(Boolean):[];return l.length?l:null;}
 function goneAll(){return Object.keys(S.lineGone||{}).reduce((a,k)=>a.concat(S.lineGone[k]||[]),[]);}
-function goneOf(m){return m?goneAll().find(refHit(m))||null:null;}
+// a replaced start or finish end (A78, A63); estOf and setOf read the start ones only
+function goneOf(m){return m?goneAll().find(refHit(m))||finGoneAll().find(refHit(m))||null:null;}
 function goneAdd(k,g){S.lineGone=S.lineGone||{};S.lineGone[k]=(S.lineGone[k]||[]).concat(g);}
 function goneDrop(m){Object.keys(S.lineGone||{}).forEach(k=>{const l=S.lineGone[k].filter(g=>!refHit(m)(g));
-  if(l.length===S.lineGone[k].length)return;if(l.length)S.lineGone[k]=l;else delete S.lineGone[k];stamp(k,true);});}
+  if(l.length===S.lineGone[k].length)return;if(l.length)S.lineGone[k]=l;else delete S.lineGone[k];stamp(k,true);});
+  Object.keys(S.lineFin||{}).forEach(k=>{const z=S.lineFin[k], g=z.gone||[], l=g.filter(x=>!refHit(m)(x));
+    if(l.length===g.length)return;if(l.length)z.gone=l;else delete z.gone;if(!Object.keys(z).length)delete S.lineFin[k];stamp(k,true);});}
 function goneWords(g){return END_LABEL[g.w]+' '+('at' in g?'set at '+g.at:'placed '+g.m+' m at '+pad(g.brgM,3)+'°M');}
+/* ---------- A63: the finish line set with the helper (Pat, 19 and 20 October 2026) ----------
+   Per start, for "Committee boat & Finish Pin" (a hand-built course) or Laid line (a card course): the Finish Pin at any
+   harbour mark or recorded fix of the day (a typed position named "Finish Pin" at its position, the RO's definite choice
+   of that end), the finish committee boat placed by distance and bearing from it (a typed position named "Finish boat",
+   an estimate), or the Finish Pin as the line midpoint (an estimate), and which end of the line the Finish Pin is.
+   S.lineFin[start] = {pin: {ref, at, side}, cb: {ref, from, m, brgM} | mid: {ref}, gone: [{w:'fcb', ref, from, m, brgM} |
+   {w:'fpin', ref, at}], src: 'race|start'}, saved with the course as "lineFin" (only when there is one, so every other
+   course saves as before). pin.at is the mark the Finish Pin was set at, '' for a Finish Pin chosen in the list (the record
+   then holds only the side); src: the finish line was copied from that start's, whose fixes it uses and never owns.
+   The ends are also in lineSel, so that the server's in-use check protects them and pages before .42 measure the same
+   line where they can: fpin the Finish Pin, fcb a recorded committee boat, or 'none' beside a placed Finish boat or a
+   midpoint (5a: a page before .42 would clear a Finish boat named in lineSel, which it does not count as a committee
+   boat, and save the course). Being placed on this page, a Finish Pin or Finish boat is never picked by auto or inherited
+   (candidates, endPick); replaced ones follow A78 (gone). */
+const FIN_SIDES=['port','starboard'];
+function finGoneRec(g){if(!g||typeof g!=='object'||typeof g.ref!=='string'||!/^s:/.test(g.ref))return null;
+  if(g.w==='fpin')return {w:'fpin',ref:g.ref,at:String(g.at||'')};
+  if(g.w==='fcb')return {w:'fcb',ref:g.ref,from:String(g.from||''),m:+g.m||0,brgM:+g.brgM||0};
+  return null;}
+function finNorm(v){if(!v||typeof v!=='object')return null;const s=x=>typeof x==='string'&&/^s:/.test(x), o={};
+  // the sides spelt out here, not FIN_SIDES: this runs when the page starts, before that line has run
+  if(v.pin&&typeof v.pin==='object'&&s(v.pin.ref))o.pin={ref:v.pin.ref,at:String(v.pin.at||''),side:v.pin.side==='port'||v.pin.side==='starboard'?v.pin.side:''};
+  if(v.cb&&typeof v.cb==='object'&&s(v.cb.ref))o.cb={ref:v.cb.ref,from:String(v.cb.from||''),m:+v.cb.m||0,brgM:+v.cb.brgM||0};
+  else if(v.mid&&typeof v.mid==='object'&&s(v.mid.ref))o.mid={ref:v.mid.ref};
+  const g=Array.isArray(v.gone)?v.gone.map(finGoneRec).filter(Boolean):[];if(g.length)o.gone=g;
+  if(typeof v.src==='string'&&/^\d+\|\d+$/.test(v.src))o.src=v.src;
+  return Object.keys(o).length?o:null;}
+function finRec(k){return (S.lineFin||{})[k]||null;}
+function finSaved(k){const z=finRec(k);return z?JSON.parse(JSON.stringify(z)):null;}
+function finSet(k,z){S.lineFin=S.lineFin||{};if(z&&Object.keys(z).length)S.lineFin[k]=z;else delete S.lineFin[k];}
+// the Finish Pins set and Finish boats placed on this page, from every start's record (a copy repeats its source's)
+function finAll(){return Object.keys(S.lineFin||{}).reduce((a,k)=>{const z=S.lineFin[k]||{};
+  if(z.pin&&z.pin.at)a.push({w:'fpin',ref:z.pin.ref,at:z.pin.at});if(z.cb)a.push(Object.assign({w:'fcb'},z.cb));return a;},[]);}
+function finGoneAll(){return Object.keys(S.lineFin||{}).reduce((a,k)=>a.concat((S.lineFin[k]||{}).gone||[]),[]);}
+function finGoneAdd(k,g){const z=Object.assign({},finRec(k)||{});z.gone=(z.gone||[]).concat(g);finSet(k,z);}
+// the record that set or placed fix m for a finish line, replaced ones included; null for a recorded fix
+function finOf(m){return m?finAll().find(refHit(m))||finGoneAll().find(refHit(m))||null:null;}
+// this start's own set Finish Pin and placed Finish boat (not a copy's): the ends Undo and Remove Start withdraw
+function finOwn(k){const z=finRec(k);if(!z||z.src)return [];
+  return [z.cb&&{w:'fcb',e:z.cb},z.pin&&z.pin.at&&{w:'fpin',e:z.pin}].filter(Boolean).map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m);}
+function finWords(e){return 'Finish boat placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+function finGoneWords(g){return g.w==='fpin'?'Finish Pin set at '+g.at:'Finish boat placed '+g.m+' m at '+pad(g.brgM,3)+'°M';}
+// the mark a Finish Pin stands for, for the WhatsApp text: the mark it was set at ("Dosco"), without the race and time of
+// a recorded fix it was set at; a recorded Finish Pin is "the Finish Pin"
+function finPinName(m){const f=m&&finOf(m);if(!f||f.w!=='fpin'||!f.at)return 'the Finish Pin';
+  return f.at.replace(/ R\d+( \d{1,2}:\d{2})?$/,'');}
+// the finish line of race r, start st when it is "Committee boat & Finish Pin" (or Laid line): the two ends, or the
+// Finish Pin as the line midpoint; fin marks it as a finish line, never the start line used as the finish
+function finPinLine(r,st,sel){const z=finRec(ckey(r??S.race,st??S.start));
+  if(z&&z.mid){const f=refFix(z.mid.ref,'fpin');return f?{mid:{lat:f.lat,lon:f.lon},est:'mid',end:f,fin:true}:null;}
+  const ln=mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m);return ln?Object.assign(ln,{fin:true}):null;}
+// whether race r, start st uses its own finish line (finPinLine): "Committee boat & Finish Pin", or a card course's Laid line
+function finUsesPin(r,st){return cardCfgNow(r,st)?cardEndMode('f',r,st)==='laid':finishMode(r,st)==='finishpin';}
+// the finish line's estimate for start r|st: {kind:'mid'|'placed', text, x} or null; x goes into Copy for Sail Scoring
+function finEstNow(r,st){if(!finUsesPin(r,st))return null;const fl=finPinLine(r,st);if(!fl)return null;
+  if(fl.est==='mid'){const w=helpLong(fl.end)||fixWords2(fl.end);
+    return {kind:'mid',text:w+' used as the line midpoint',x:'finish line: '+w+' used as midpoint'};}
+  const f=finOf(fl.cb);if(!f||f.w!=='fcb')return null;
+  return {kind:'placed',text:finWords(f),x:'finish line: '+finWords(f)};}
+// Copy for Sail Scoring's "x-estimate" (point 3, Pat, 20 October 2026): with only a start line estimate exactly as .37 and
+// .41 give it; a finish line estimate is added after "; ", or alone when the start line is not an estimate
+function xEst(r,st){const a=lineEstNow(r,st), b=finEstNow(r,st);return a&&b?a.x+'; '+b.x:a?a.x:b?b.x:'';}
+/* the WhatsApp text's finish (point 9 and 5h): "Finish on the start line." (a Grassy start too), "Finish between the
+   committee boat and Dosco (port)." (the mark the Finish Pin stands for, the side only when given), "Finish at No.10."
+   (the last mark). Never says an end is an estimate. A card course on Card mark (or on auto with the card's mark or
+   point) says nothing; on Laid line it follows the hand-built wording. L: legPts of the start */
+function finSay(L){const c=L.ccfg, r=L.r, st=L.st;let k;
+  if(c){const m=cardEndMode('f',r,st), fs=L.fsx||{};if(m==='card')return '';
+    k=fs.kind==='startline'?'start':fs.kind==='finishpin'||m==='laid'?'pin':'';}
+  else{const f=finishMode(r,st);k=f==='finishpin'?'pin':f==='last'?'last':'start';}
+  if(k==='start')return 'Finish on the start line.';
+  if(k==='last'){const e=[...L.rows].reverse().find(x=>!isRwCard(markById(x.id))), m=e&&markById(e.id);return m?'Finish at '+m.name+'.':'';}
+  if(k!=='pin')return '';
+  const z=finRec(ckey(r,st))||{}, pin=z.mid?refFix(z.mid.ref,'fpin'):endPick('fpin',r,st).m, side=z.pin&&z.pin.side;
+  return 'Finish between the committee boat and '+finPinName(pin)+(side?' ('+side+')':'')+'.';}
+/* the finish lines of earlier starts (an earlier race, or an earlier start of this race) that use their own finish line
+   with both ends or the Finish Pin as midpoint, recorded ends only or not, each line once (5g): offered in the Finish list,
+   never applied unless the RO chooses one. A line using a replaced end is not offered (5e). */
+function finShared(){const out=[], seen=new Set(), ks=new Set(startKeys().concat(Object.keys(S.finishes||{}).filter(k=>/^\d+\|\d+$/.test(k))));
+  [...ks].sort((a,b)=>a.split('|')[0]-b.split('|')[0]||a.split('|')[1]-b.split('|')[1]).forEach(k=>{const[r,st]=k.split('|').map(Number);
+    if(!(r<S.race||(r===S.race&&st<S.start))||!finUsesPin(r,st))return;
+    const ln=finPinLine(r,st);if(!ln)return;
+    const mid=ln.est==='mid', cb=mid?null:ln.cb, pin=mid?ln.end:ln.pin;if(goneOf(cb)||goneOf(pin))return;
+    const z=finRec(k)||{}, side=z.pin&&z.pin.side||'', id=(cb?refFor(cb):'mid')+'|'+refFor(pin)+'|'+side;
+    if(seen.has(id))return;seen.add(id);
+    const cbT=mid?'Finish Pin as the line midpoint (estimate)':finOf(cb)?'Finish boat (estimate) '+finOf(cb).m+' m at '+pad(finOf(cb).brgM,3)+'°M':fixWords2(cb);
+    const pinT=finOf(pin)&&finOf(pin).at?'Finish Pin: '+finOf(pin).at:fixWords2(pin);
+    out.push({k,cb,pin,mid,side,text:'Race '+r+' Start '+(st+1)+': '+(mid?pinT+', '+cbT:cbT+' ↔ '+pinT)+(side?' ('+side+')':'')});});
+  return out;}
+// choosing a finish line of another start: this start uses the same fixes (nothing is made or changed) and records where
+// the line came from; refused while this start has its own set or placed finish ends, which Undo takes away first
+function finCopy(k,src){const x=finShared().find(y=>y.k===src);if(!x)return 'That finish line is no longer available.';
+  if(finOwn(k).length)return 'Not changed: this start has its own Finish Pin or Finish boat. Undo them first, then choose the finish line of another start.';
+  const old=finRec(k)||{}, z={src};
+  if(x.side)z.pin={ref:refFor(x.pin),at:'',side:x.side};
+  if(x.mid)z.mid={ref:refFor(x.pin)};
+  else if(finOf(x.cb)){const f=finOf(x.cb);z.cb={ref:refFor(x.cb),from:f.from,m:f.m,brgM:f.brgM};}
+  if(old.gone)z.gone=old.gone;
+  S.finishes[k]='finishpin';S.lineSel[k]=S.lineSel[k]||{};
+  S.lineSel[k].fpin=refFor(x.pin);S.lineSel[k].fcb=x.mid||z.cb?'none':refFor(x.cb);
+  if(S.lineAuto[k]){delete S.lineAuto[k].fpin;if(!Object.keys(S.lineAuto[k]).length)delete S.lineAuto[k];}
+  if(S.lineFlags[k]){delete S.lineFlags[k].fcb;delete S.lineFlags[k].fpin;}
+  finSet(k,z);return '';}
+// leaving a copied finish line: its ends go back to auto; replaced ends of this start's own are kept
+function finUncopy(k){const z=finRec(k);if(!z||!z.src)return;
+  finSet(k,z.gone?{gone:z.gone}:null);
+  if(S.lineSel[k]){delete S.lineSel[k].fcb;delete S.lineSel[k].fpin;}}
+/* 5b (Pat, 20 October 2026): the server refuses to withdraw a fix that a saved course names in lineSel, so the records
+   that named ref are saved first, now that they no longer name it. True once no saved record names it there. */
+async function finSavedWithout(ref){
+  const named=()=>Object.keys(S.synced||{}).filter(k=>{try{return Object.values((JSON.parse(S.synced[k])||{}).lineSel||{}).includes(ref);}catch(e){return false;}});
+  for(let i=0;i<3&&named().length;i++){if(savingP)await savingP;await saveCourses(false,k=>named().includes(k));}
+  return !named().length;}
 /* A78 (Pat, 19 October 2026): placing an end again, or setting the Start Pin again, replaces this start's own placed end;
    the one replaced is withdrawn straight away as Undo does ("replaced by placing again"), so it is never left offered as a
    recorded fix. The new end is placed whatever happens here. Never withdrawn while another start uses it, and never
@@ -1920,12 +2089,14 @@ function goneWords(g){return END_LABEL[g.w]+' '+('at' in g?'set at '+g.at:'place
    note under the end's list says so until it is withdrawn, which the RO can then do from Check recorded marks. The note
    is on this device only (S.orphans), and goes by itself once the position is withdrawn. */
 async function withdrawReplaced(k,w,old,did){const m=refFix(old.ref,w);if(!m||!isTypedPos(m))return;
-  const what='The '+END_LABEL[w]+' '+did+' before ('+fixWhen(m)+') ';
+  const what='The '+(w==='fcb'?'Finish boat':END_LABEL[w])+' '+did+' before ('+fixWhen(m)+') ';
   const note=t=>{S.orphans=S.orphans||{};S.orphans[m.sid||m.pid]={day:S.pulledDay,race:m.race,w,text:what+t};commit();};
   const used=lineUsers(m);
   if(used.length)return note('is kept: '+used.join(', ')+(used.length>1?' still use':' still uses')+' it. Withdraw it from Check recorded marks once no start uses it.');
   if(m.pending||!m.sid)return note('was not withdrawn: it is still waiting to send. Withdraw it from Check recorded marks once it is sent.');
   if(!verOk){ensureVersion();return note('was not withdrawn: waiting to check the page version. Withdraw it from Check recorded marks.');}
+  // A63 (5b): a Finish Pin is named in lineSel, so the course that named it is saved without it first
+  if(w==='fpin'&&!(await finSavedWithout(old.ref)))return note('was not withdrawn: the course change is not saved yet. Withdraw it from Check recorded marks.');
   try{await postFix({action:'withdraw',date:S.pulledDay,id:m.sid,reason:'replaced by placing again'},OUTBOX_TIMEOUT_MS);}
   catch(e){return note('was not withdrawn ('+((e&&e.text)||(e&&e.message)||'no reply')+'). Withdraw it from Check recorded marks.');}
   goneDrop(m);await pull(true);commit();}
@@ -1938,13 +2109,16 @@ function orphanNotes(w){return Object.keys(S.orphans||{}).filter(id=>{const o=S.
    a start that has gone must never lose its line through an action on another start. skip: a start left out. */
 const refIs=(v,m)=>typeof v==='string'&&/^s:/.test(v)&&((m.sid&&sidNow(v.slice(2))===m.sid)||(m.pending&&m.pid===v.slice(2)));
 function startKeys(){const ks=new Set();
-  ['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid'].forEach(f=>Object.keys(S[f]||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k))ks.add(k);}));
+  ['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid','lineFin'].forEach(f=>Object.keys(S[f]||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k))ks.add(k);}));
   return [...ks].sort((a,b)=>a.split('|')[0]-b.split('|')[0]||a.split('|')[1]-b.split('|')[1]);}
 // placed (A78): leave out the estimate and set-pin records that placed m; a midpoint and every saved or live choice count
 function lineUsers(m,skip,placed){const out=[];if(!m)return out;
   startKeys().forEach(k=>{if(k===skip)return;const[r,st]=k.split('|').map(Number);
     const saved=Object.values(S.lineSel[k]||{}).concat(Object.values(S.lineAuto[k]||{})).some(v=>refIs(v,m));
-    const rec=(placed?[]:estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[])).concat(S.lineMid[k]?[S.lineMid[k]]:[]).some(e=>refIs(e.ref,m));
+    // A63: a finish line's set Finish Pin, placed Finish boat and midpoint; with placed, a copy's still count (it uses
+    // another start's ends), its own placing records do not
+    const fz=(S.lineFin||{})[k]||{}, frec=[fz.mid].concat(placed&&!fz.src?[]:[fz.cb,fz.pin&&fz.pin.at?fz.pin:null]).filter(Boolean);
+    const rec=(placed?[]:estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[])).concat(S.lineMid[k]?[S.lineMid[k]]:[],frec).some(e=>refIs(e.ref,m));
     const now=['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m);
     if(saved||rec||now)out.push('Race '+r+' Start '+(st+1));});
   return out;}
@@ -1956,16 +2130,20 @@ function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '
    recorded marks, helpShort on the sketch and the Chart. A mark with an uncertain card position, or a laid mark at its
    planning position, keeps its warning (helpWarn). */
 function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}
-function helpOf(m){return estOf(m)||setOf(m);}
+function helpOf(m){return estOf(m)||setOf(m)||finOf(m);}
 function fixWhen(m){return 'R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the time is left out when the reference already ends with it ("from Start Pin R1 11:09", saved so by .36), so it is not
 // said twice (Pat, 14 October 2026)
 function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by placing again, not yet withdrawn
+  const fz=finOf(m);   // A63: a Finish Pin set at a mark, or a Finish boat placed from the Finish Pin
+  if(fz){if(fz.w==='fpin')return 'Finish Pin: '+fz.at+' ('+fixWhen(m)+')'+rp;
+    const w=fixWhen(m), f=String(fz.from);return 'Finish boat – estimate: '+fz.m+' m at '+pad(fz.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
   const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')'+rp;const e=estOf(m);if(!e)return '';
   const w=fixWhen(m), f=String(e.from);
   return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
-function helpShort(m){const p=setOf(m);if(p)return 'Start Pin ('+p.at+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
-function helpWarn(m){const p=setOf(m), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
+function helpShort(m){const fz=finOf(m);if(fz)return fz.w==='fpin'?'Finish Pin ('+fz.at+')':'Finish boat (est.)';
+  const p=setOf(m);if(p)return 'Start Pin ('+p.at+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
+function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the start line's estimate for start r|st: {kind:'mid'|'placed', text} or null
 function lineEstNow(r,st){if(gsOf(r,st))return null;const md=midLine(r,st);
@@ -1981,7 +2159,7 @@ function legStartLine(r,st,sel){return lineOff(r,st)?null:(midLine(r,st)||startL
 function startStandIn(r,st){const m=cardEndMode('s',r,st);return m==='auto'||m==='card';}
 // how a card course's finish is measured: kind 'finishpin' | 'startline' | 'mark' | 'cardpt' | 'missing', and any warning
 function finishState(r,st,sel){const c=cardCfgNow(r,st);if(!c)return null;const m=cardEndMode('f',r,st);
-  if(m==='laid'){if(mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m))return {kind:'finishpin'};
+  if(m==='laid'){if(finPinLine(r,st,sel))return {kind:'finishpin'};
     if(startLine(r,st,sel))return c.lfs==='start'?{kind:'startline',kept:true}:{kind:'startline',warn:'No finish line marked: the start line is used as the finish'};
     return {kind:'missing',warn:'Finish line missing'};}
   if(finishIsCardMark(r,st))return {kind:'mark'};
@@ -1989,8 +2167,8 @@ function finishState(r,st,sel){const c=cardCfgNow(r,st);if(!c)return null;const 
   return startLine(r,st,sel)?{kind:'startline'}:{kind:'cardpt'};}
 function finishLine(r,st,sel){
   if(cardCfgNow(r,st)){const fs=finishState(r,st,sel);
-    return fs.kind==='finishpin'?mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m):fs.kind==='startline'?startLine(r,st,sel):null;}
-  const f=finishMode(r,st);if(f==='last')return null;if(f==='finishpin')return mkLine(endPick('fcb',r,st,undefined,sel).m,endPick('fpin',r,st,undefined,sel).m);if(gsOf(r,st))return null;return midLine(r,st)||startLine(r,st,sel);}
+    return fs.kind==='finishpin'?finPinLine(r,st,sel):fs.kind==='startline'?startLine(r,st,sel):null;}
+  const f=finishMode(r,st);if(f==='last')return null;if(f==='finishpin')return finPinLine(r,st,sel);if(gsOf(r,st))return null;return midLine(r,st)||startLine(r,st,sel);}
 // one fix as a dropdown entry: its race and time ("R2 13:09"), accuracy (and its warning), recorder, and "after this start"
 function fixText(m,w){if(helpOf(m))return helpLong(m);   // T7
   const t=fixMoment(m), st=startMoment(S.race,S.start), aw=accWarn(m);
@@ -2054,7 +2232,7 @@ function startLineNote(twdT,vA){const sl=startLine();if(!sl)return null;
    typed position at its position, an estimate), then the committee boat is placed from it. Nothing is filled in or saved
    until the RO acts; estDraft keeps what the RO has typed across redraws (the 30-second refresh on the race day). */
 let estDraft={};
-function estDraftFor(k){if(estDraft.k!==k)estDraft={k,dist:'',brg:'',ref:'',time:'',sq:'',port:'',at:'',ptime:''};return estDraft;}
+function estDraftFor(k){if(estDraft.k!==k)estDraft={k,dist:'',brg:'',ref:'',time:'',sq:'',port:'',at:'',ptime:'',fat:'',fptime:'',fdist:'',fbrg:'',ftime:''};return estDraft;}
 // the first mark of the open start's course, a routing waypoint before it skipped (rw)
 function firstMarkOf(r,st){let rw=false;
   for(const e of (S.courses[ckey(r??S.race,st??S.start)]||[])){const m=markById(typeof e==='string'?e:e.id);if(m&&isRwCard(m)){rw=true;continue;}
@@ -2071,12 +2249,67 @@ function estSuggest(have,w,d){const turn=(w==='cb'?90:-90)*(d.port==='1'?-1:1), 
 function raceMarkOpts(sel,skip){return [...new Map((S.courses[ckey(S.race,S.start)]||[]).map(e=>markById(typeof e==='string'?e:e.id)).concat(bank())
     .filter(m=>m&&!m.virtual&&!m.missing&&isFinite(m.lat)&&m.id!==skip&&!isLineMark(m.name)).map(m=>[m.id,m])).values()]
     .map(m=>'<option value="'+esc(m.id)+'"'+(sel===m.id?' selected':'')+'>'+esc(m.card?m.name:fixWords2(m))+'</option>').join('');}
-function fixedOpts(sel){const last=['Club laid mark','Routing waypoints'], groups=[];
-  Object.keys(CARD.marks).forEach(nm=>{const g=CARD.marks[nm].group||CARD.marks[nm].type;let x=groups.find(y=>y.g===g);if(!x)groups.push(x={g,names:[]});x.names.push(nm);});
+function fixedOpts(sel,noRw){const last=['Club laid mark','Routing waypoints'], groups=[];
+  Object.keys(CARD.marks).forEach(nm=>{if(noRw&&CARD.marks[nm].rw)return;const g=CARD.marks[nm].group||CARD.marks[nm].type;let x=groups.find(y=>y.g===g);if(!x)groups.push(x={g,names:[]});x.names.push(nm);});
   groups.sort((a,b)=>last.indexOf(a.g)-last.indexOf(b.g));
   return groups.map(x=>'<optgroup label="Fixed marks: '+esc(x.g)+'">'+x.names.map(nm=>'<option value="card:'+esc(nm)+'"'+(sel==='card:'+nm?' selected':'')+'>'+esc(nm)+'</option>').join('')+'</optgroup>').join('');}
 // a reference chosen in a list: a mark of the race by id, or a Fixed mark ('card:' + name) at its card position
 function estRef(v){const c=/^card:/.test(v)&&CARD.marks[v.slice(5)];return c?{name:v.slice(5),lat:c.lat,lon:c.lon,card:v.slice(5)}:v?markById(v):null;}
+/* A63, point 2 (Pat, 20 October 2026): the marks the Finish Pin can be set at: this start's course rows and this race's
+   chips (the marks the Start Pin list offers), then the course card's fixed marks, then "Other fixes of the day": every
+   other recorded or typed fix of the day from any race, by race then time. Line ends, virtual points, routing waypoints
+   and pasted positions are left out, and no fix is in two groups. The Start Pin list is unchanged. */
+function finPinOpts(sel){const ok=m=>m&&!m.virtual&&!m.missing&&isFinite(m.lat)&&!isLineMark(m.name)&&!isRwCard(m);
+  const race=[...new Map((S.courses[ckey(S.race,S.start)]||[]).map(e=>markById(typeof e==='string'?e:e.id)).concat(bank()).filter(ok).map(m=>[m.id,m])).values()];
+  const ids=new Set(race.map(m=>m.id));
+  const other=S.marks.filter(m=>ok(m)&&!m.card&&!isPasted(m)&&!ids.has(m.id)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));
+  const o=m=>'<option value="'+esc(m.id)+'"'+(sel===m.id?' selected':'')+'>'+esc(m.card?m.name:fixWords2(m))+'</option>';
+  return race.map(o).join('')+fixedOpts(sel,true)+(other.length?'<optgroup label="Other fixes of the day">'+other.map(o).join('')+'</optgroup>':'');}
+// a fix's server reference, for a fix still waiting to send the id it will have
+function sref(m){return 's:'+(m.sid||m.pid);}
+// the finish line's length and bearing, or its estimate, under the Finish line row
+function finLineNote(fl,fe){const k=ckey(S.race,S.start), z=finRec(k)||{};
+  if(fe&&fe.kind==='mid')return '<div class="meta warnTxt">Finish line: estimate – '+esc(fe.text)+'. No line length. '+
+    ((S.courses[k]||[]).length?'Drawn as a 200 m line square to the last leg. ':'The line will be drawn when the course has a last mark. ')+
+    (z.src?'':'<button type="button" class="ghost estAct" data-act="finUndoMid">Undo</button>')+'</div>';
+  if(!fl||!fl.cb)return '<div class="meta warnTxt">No finish line yet: choose or record the committee boat and Finish Pin, or set the Finish Pin and place the Finish boat from it.</div>';
+  const g=geo(fl.cb,fl.pin);
+  return (fe?'<div class="meta warnTxt">Finish line: estimate – '+esc(fe.text)+'.</div>':'')+'<div class="meta">Finish line '+Math.round(g.m)+' m, '+pad(magOf(g.brg,varW()),3)+'°M</div>';}
+/* A63: the Finish line row of "Committee boat & Finish Pin" (or Laid line): the two lists as before; a Finish Pin set or a
+   Finish boat placed by this start, or the midpoint, said in words with Undo instead of its list; which end of the line
+   the Finish Pin is; then the helper. A copied line is shown in words only: it is changed in the Finish list. */
+function finRowHtml(){const k=ckey(S.race,S.start), z=finRec(k)||{}, d=estDraftFor(k), ce=endPick('fcb'), fg=S.lineFlags[k]||{};
+  const pin=z.mid?refFix(z.mid.ref,'fpin'):endPick('fpin').m, fl=finPinLine(), fe=finEstNow();
+  const line=t=>'<div class="meta">'+t+'</div>', flag=w=>fg[w]?'<div class="meta warnTxt">⚠ '+esc(fg[w])+'</div>':'';
+  const words=(m,w)=>esc(helpLong(m)||END_LABEL[w]+': '+fixText(m,w))+(helpWarn(m)?'<div class="meta warnTxt">⚠ '+esc(helpWarn(m))+'</div>':'');
+  const cbHtml=z.mid?line('Committee boat: none, the Finish Pin is used as the line midpoint'):
+    ce.how==='placed'?'<div class="meta warnTxt">'+words(ce.m,'fcb')+'</div>':null;
+  const ownPin=!z.src&&z.pin&&z.pin.at?refFix(z.pin.ref,'fpin'):null;
+  const pinHtml=z.src||z.mid||ownPin?'<div class="meta">↔ '+(pin?words(pin,'fpin'):'Finish Pin: none')+'</div>':null;
+  const sideT=z.pin&&z.pin.side?'The Finish Pin is the '+z.pin.side+' end of the line.':'';
+  if(z.src){const[r,st]=z.src.split('|').map(Number);
+    return (cbHtml||line(ce.m?words(ce.m,'fcb'):'Committee boat: none'))+pinHtml+(sideT?line(esc(sideT)):'')+
+      line('Copied from Race '+r+' Start '+(st+1)+'. To change it, choose another finish in the Finish list.')+
+      finLineNote(fl,fe)+flag('fcb')+flag('fpin')+orphanNotes('fcb')+orphanNotes('fpin');}
+  let h=(cbHtml?cbHtml+flag('fcb')+orphanNotes('fcb'):'<div class="meta">'+endPicker('fcb')+'</div>')+
+    (pinHtml?pinHtml+flag('fpin')+orphanNotes('fpin'):'<div class="meta">↔ '+endPicker('fpin')+'</div>');
+  // 5j: which end of the line any Finish Pin is; "not given" leaves the side out of the WhatsApp text
+  if(pin){const sd=z.pin&&z.pin.side||'', b=(v,t)=>'<button type="button" class="ghost estAct" data-act="finSide" data-v="'+v+'" aria-pressed="'+(sd===v)+'">'+t+'</button>';
+    h+=line('The Finish Pin is the '+b('port','port end')+' '+b('starboard','starboard end')+' '+b('','not given'));}
+  h+=finLineNote(fl,fe);
+  const own=finOwn(k);
+  if(own.length)h+=line('<button type="button" class="ghost estAct" data-act="finUndo">Undo the '+esc(own.map(i=>i.m.name).join(' and '))+'</button>');
+  if(z.mid)return h;   // the midpoint is undone first (its Undo is with its note)
+  h+='<div class="meta estBox">Finish Pin at <select class="estIn" data-f="fat"><option value="">choose a mark</option>'+finPinOpts(d.fat)+'</select> time on the water '+
+    '<input class="estIn" data-f="fptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fptime)+'" style="width:4.5em"> '+
+    '<button type="button" class="estAct" data-act="finPinAt">'+(ownPin?'Set the Finish Pin again here':'Set Finish Pin here')+'</button></div>';
+  if(pin){const f=finOf(pin), pw=f&&f.at?'Finish Pin '+f.at:fixWords2(pin);
+    h+='<div class="meta estBox">1. Place the Finish boat: <input class="estIn" data-f="fdist" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d.fdist)+'" style="width:5.5em"> m at '+
+      '<input class="estIn" data-f="fbrg" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d.fbrg)+'" style="width:5em">°M from the '+esc(pw)+', time on the water '+
+      '<input class="estIn" data-f="ftime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.ftime)+'" style="width:4.5em"> '+
+      '<button type="button" class="estAct" data-act="finPlace">'+(ce.how==='placed'?'Place the Finish boat again':'Place Finish boat')+'</button></div>';
+    if(ce.how!=='placed')h+='<div class="meta estBox">2. <button type="button" class="estAct" data-act="finMid">Use the '+esc(pw)+' as the line midpoint – estimate</button></div>';}
+  return h;}
 function estOffer(){if(!startTime()||lineOff()||midLine())return '';
   const cb=endPick('cb').m, pin=endPick('pin').m;if(!!cb===!!pin)return '';
   const have=cb||pin, w=cb?'pin':'cb', missing=w==='cb'?'committee boat':'Start Pin', k=ckey(S.race,S.start), d=estDraftFor(k);
@@ -2141,6 +2374,10 @@ function analysis(cs,twdT){const vA=varW();
       bits.push('<p class="note'+(off>5?' flag':'')+'">'+line+'</p>'); txt.push(line);
     }
   }
+  // A63: the finish line, as the start line is said: its estimate, and its length and bearing
+  if(finUsesPin(S.race,S.start)){const fe=finEstNow(), fl=finPinLine();
+    if(fe)bits.push('<p class="note flag">Finish line: estimate – '+esc(fe.text)+(fe.kind==='mid'?'. No line length.':'.')+'</p>');
+    if(fl&&fl.cb){const r=geo(fl.cb,fl.pin);bits.push('<p class="note">Finish line '+Math.round(r.m)+' m, '+pad(magOf(r.brg,vA),3)+'°M</p>');}}
   const w=cs.find(m=>/windward/i.test(m.name));
   if(w&&twdT!==null){
     const from=sl?sl.mid:cs[0];
@@ -2257,7 +2494,9 @@ function buildLegs(){
   const L=legPts(), {ents,cs,sl,fl,fsx,slRec,ccfg,sPt,fPt,farLine,cardEnds,pts}=L;
   setSendWarn(L); $('ccPasted').innerHTML=pastedHtml(L);
   // the start line is the RO's estimate (A58): said in the leg table, section 4 and the sketch, never in the WhatsApp text
-  const estL=lineEstNow(), finEst=!!(estL&&fl&&(fl.est||(fl.cb&&(estOf(fl.cb)||estOf(fl.pin)))));
+  const estL=lineEstNow(), finEst=!!(estL&&fl&&((fl.est&&!fl.fin)||(fl.cb&&(estOf(fl.cb)||estOf(fl.pin)))));
+  // A63: the finish line's own estimate: said in the leg table, section 4, the sketch, the chart and Copy for Sail Scoring, never in the WhatsApp text
+  const finE=fl&&fl.fin?finEstNow():null;
   // section 3's start line note follows the wind box too, so it always matches section 4 (Pat, 13 October 2026, A54)
   if($('lineInfo'))$('lineInfo').innerHTML=lineInfo();
   const vr=varOf(L);
@@ -2291,6 +2530,7 @@ function buildLegs(){
     rows+='<tr><td>'+(isLine?'Line':'Leg '+(i+1))+'<br><span style="color:var(--muted);font-size:.85rem">'+esc(a.name)+' → '+esc(b.name)+'</span>'+(viaText?'<br><span class="viaTxt">'+esc(viaText)+'</span>':'')+(fixNote?'<br><span class="viaTxt warnTxt">'+esc(fixNote)+'</span>':'')+
       (r.m<SHORT_M?'<br><span class="viaTxt warnTxt">⚠ two marks at nearly the same position ('+Math.round(r.m)+' m)</span>':'')+
       (estL&&((a===sPt&&L.sl)||(b===fPt&&finEst))?'<br><span class="viaTxt warnTxt">start line: estimate</span>':'')+
+      (finE&&b===fPt?'<br><span class="viaTxt warnTxt">finish line: estimate</span>':'')+
       (nParts>1?'<br><button type="button" class="segToggle" data-leg="'+i+'" data-n="'+nParts+'" aria-expanded="'+open+'">'+(open?'▾ ':'▸ ')+nParts+' physical legs</button>':'')+'</td>'+
       '<td class="n">'+pad(brgM,3)+'°M<br><span style="color:var(--muted)">'+pad(brgT,3)+'°T</span></td>'+
       '<td class="n">'+r.nm.toFixed(2)+'<br><span style="color:var(--muted)">'+Math.round(r.m)+' m</span></td>'+
@@ -2315,7 +2555,8 @@ function buildLegs(){
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
       (CARD.marks[ccfg.s]&&CARD.marks[ccfg.s].type!=='Start/finish modelling point'?' (a '+ccfg.s+' start is a committee boat line near the mark, not the mark itself)':''):
     'from the first mark (no start point)';
-  const to=fsx&&fsx.kind==='finishpin'?'at the midpoint of the recorded finish line (committee boat and Finish Pin)':
+  const to=finE?(finE.kind==='mid'?'at the Finish Pin, used as the finish line midpoint':'at the midpoint of the finish line')+' (finish line: estimate – '+finE.text+')':
+    fsx&&fsx.kind==='finishpin'?'at the midpoint of the recorded finish line (committee boat and Finish Pin)':
     fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+ccfg.f+' finish (Card mark chosen)':
     ccfg&&fsx.kind==='mark'?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
@@ -2340,6 +2581,13 @@ function buildLegs(){
       plotLines.push({a:{id:'_eA',name:'',lat:A.lat,lon:A.lon,drawn:true},b:{id:'_eB',name:'',lat:B.lat,lon:B.lon,drawn:true},kind:'start',est:true});}}
   else if(estL){const x=plotLines.find(y=>y.kind==='start');if(x)x.est=true;}
   plotEst=estL?(estL.kind==='mid'?'start line: estimate (one end used as midpoint)':'start line: estimate'):'';
+  // A63 (5i): a finish line estimate likewise; the Finish Pin as midpoint is drawn as a 200 m line through it, square to
+  // the last leg (from the point before the finish): drawing only
+  if(finE&&finE.kind==='mid'){const p=pts.length>1&&pts[pts.length-1]===fPt?pts[pts.length-2]:null;
+    if(p&&!p.missing&&isFinite(p.lat)){const b=geo(p,fl.end).brg, A=geoDest(fl.end,(b+90)%360,100), B=geoDest(fl.end,(b+270)%360,100);
+      plotLines.push({a:{id:'_fA',name:'',lat:A.lat,lon:A.lon,drawn:true},b:{id:'_fB',name:'',lat:B.lat,lon:B.lon,drawn:true},kind:'finish',est:true});}}
+  else if(finE){const x=plotLines.find(y=>y.kind==='finish');if(x)x.est=true;}
+  plotFinEst=finE?(finE.kind==='mid'?'finish line: estimate (Finish Pin used as midpoint)':'finish line: estimate'):'';
   // only one end of the start line found and no line in use: that end is drawn, named an estimate when it is one (Pat,
   // 14 October 2026); drawing only, no leg starts from it
   const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];
@@ -2355,9 +2603,9 @@ function buildLegs(){
   const wRows=L.rows.filter(e=>!isRwCard(markById(e.id)));
   setOut('*'+head+'*\n*Race '+S.race+' · '+startName()+(startTime()?' · start '+startTime():'')+'*\n'+card(wRows)+'\n'+wRows.map((e,i)=>{const m=markById(e.id);
       if(!m)return (i+1)+'. mark missing'+(e.side?' ('+e.side+')':'');
-      return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+(e.side?' ('+e.side+')':'');}).join('\n')+'\n\n'+lines.join('\n')+
+      return (i+1)+'. '+m.name+(m.fix>1&&m.time?' (moved '+m.time+')':'')+(e.side?' ('+e.side+')':'');}).join('\n')+(finSay(L)?'\n'+finSay(L):'')+'\n\n'+lines.join('\n')+
     (ml?'\nTotal of measured legs '+total.toFixed(2)+' nm ('+ml+')':'\nTotal '+total.toFixed(2)+' nm')+'\n\n'+
-    [sl&&sl.cb,sl&&sl.pin,sl&&sl.end,fl&&fl!==sl&&fl.pin].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
+    [sl&&sl.cb,sl&&sl.pin,sl&&sl.end,fl&&fl!==sl&&fl.pin,fl&&fl.fin&&fl.est==='mid'&&fl.end,fl&&fl.fin&&fl.cb&&isFinishBoat(fl.cb.name)&&fl.cb].filter(Boolean).concat(cs).filter((m,i,arr)=>arr.findIndex(x=>x.id===m.id)===i).map(m=>m.name+(m.fix>1&&m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'')+' – '+ddm(m.lat,true)+' '+ddm(m.lon,false)).join('\n'));
 }
 /* SailScoring leg table: the same legs as the table above, but a passage is split into the legs actually sailed.
    The note is shown above the block and is not part of what is copied. */
@@ -2444,7 +2692,7 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
   if(i0<0)return {block:pre.join('. ')+'. No leg can be measured. Nothing to copy.',err:true};
   const a=L.pts[i0];
   const text='{\n  "format": "orc-constructed-course",\n  "version": 1,\n  "name": '+JSON.stringify(name)+',\n'+
-    (ser?'  "x-series": '+JSON.stringify(ser)+',\n':'')+(lineEstNow(r,st)?'  "x-estimate": '+JSON.stringify(lineEstNow(r,st).x)+',\n':'')+'  "north": "magnetic",\n'+
+    (ser?'  "x-series": '+JSON.stringify(ser)+',\n':'')+(xEst(r,st)?'  "x-estimate": '+JSON.stringify(xEst(r,st))+',\n':'')+'  "north": "magnetic",\n'+
     '  "anchor": { "lat": '+a.lat.toFixed(6)+', "lng": '+a.lon.toFixed(6)+' },\n  "legs": [\n'+legs.join(',\n')+'\n  ]\n}\n';
   return {text,warns:pre.map(t=>t+'.').concat(cardSti.length?['STAND-IN - '+cardSti.join('; ')+'.']:[],side),
     notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])};}
@@ -2495,6 +2743,7 @@ function courseMarks(cs,segs){
   marks.forEach(m=>{if(seen.has(m.id))return;seen.add(m.id);out.push({m,label:helpShort(m)||m.name+(nameCount[m.name.toLowerCase()]>1&&m.time?' '+m.time:'')});});
   return out;}
 let plotEst='';   // buildLegs: the start line is the RO's estimate (A58), said beside the start in the sketch
+let plotFinEst='';   // A63: the finish line is the RO's estimate, said beside the finish in the sketch
 function plot(pts,segs,solo){
   segs=segs||[];solo=solo||[];
   // a missing mark (STATUS A38) has no position: it is not drawn, and neither are the legs to and from it
@@ -2547,6 +2796,7 @@ function plot(pts,segs,solo){
     '<text x="6" y="'+(H-44)+'" font-size="11" fill="var(--warn)">wind '+pad(tM,3)+'°M'+(S.tws===''?'':' '+S.tws+' kn')+'</text>'+
     (va.centre?'<text x="6" y="'+(H-30)+'" font-size="10" fill="var(--warn)">variation at the map centre: no leg measured</text>':'');}
   if(plotEst&&pts[0]&&pts[0].virtual&&!pts[0].missing)g+='<text x="'+(px(pts[0])+10).toFixed(1)+'" y="'+(py(pts[0])+16).toFixed(1)+'" font-size="11" fill="var(--warn)">'+esc(plotEst)+'</text>';
+  {const f=pts[pts.length-1];if(plotFinEst&&pts.length>1&&f&&f.virtual&&!f.missing&&!isFar(f))g+='<text x="'+(px(f)+10).toFixed(1)+'" y="'+(py(f)-10).toFixed(1)+'" font-size="11" fill="var(--warn)">'+esc(plotFinEst)+'</text>';}
   $('plot').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Course plan, north up">'+
     '<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--sea)"/></marker>'+
     '<marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/></marker></defs>'+g+'</svg>';
@@ -2622,7 +2872,7 @@ function fxOverlay(r,P,res){
 let fxAll=false, fxChart=false, fxSel='', fxFit='', FxMap=null, FxLayer=null;
 const fxHide=new Set();     // races switched off by the chips in All races mode; not saved
 // the short All races label: race, mark initial (CB, SP, FP for the line ends), time
-function fxShort(m){return 'R'+m.race+' '+(isCB(m.name)?'CB':isStartPin(m.name)?'SP':isFinishPin(m.name)?'FP':abbr(m.name))+(m.time?' '+m.time:'');}
+function fxShort(m){return 'R'+m.race+' '+(isCB(m.name)?'CB':isStartPin(m.name)?'SP':isFinishPin(m.name)?'FP':isFinishBoat(m.name)?'FB':abbr(m.name))+(m.time?' '+m.time:'');}
 const FX_SHAPE=['●','■','▲','◆'];
 function fxCol(r){return r<=3?'var(--r'+r+')':'var(--ink)';}
 function fxShape(r,x,y,s,attr){const k=(r-1)%4;
@@ -2653,7 +2903,8 @@ function fxChecks(list){
     add(m,bad?'bad':'check','Position '+fmtAge(a.s)+' old when '+(a.by==='id'?'the phone saved it':
       'the server received it (a fix sent later, after no signal, also shows this)')+(bad?': probably not where the mark is.':': the phone may have used an earlier position.'));});
   [...new Set(list.map(m=>m.race))].sort((a,b)=>a-b).forEach(r=>{const own=list.filter(m=>m.race===r);
-    own.filter(m=>isStartPin(m.name)||isFinishPin(m.name)).forEach(p=>own.filter(x=>!isLineMark(x.name)).forEach(x=>{const d=geo(p,x).m;
+    // A63 (point 6): a Finish Pin set at a mark or a Finish boat placed on this page raises none of these notes
+    own.filter(m=>isStartPin(m.name)||(isFinishPin(m.name)&&!finOf(m))).forEach(p=>own.filter(x=>!isLineMark(x.name)).forEach(x=>{const d=geo(p,x).m;
       if(d<PIN_NEAR_M)add(p,'check',Math.round(d)+' m from the Race '+r+' '+x.name+' ('+at(x)+'): a pin this close may have been recorded at the mark.');}));
     // the start line against the leg to the first mark of the race's first course; the line ends as the race has them
     const cb=latestOf(r,isCB), pin=latestOf(r,isStartPin); let first=null;
@@ -2664,11 +2915,11 @@ function fxChecks(list){
           (pin.race<r?' from Race '+pin.race:'')+') is '+Math.round(off)+'° off square to the leg to '+first.name+': one end may be wrong.';
         if(pin.race===r)add(pin,'check',t);else rf.push({race:r,txt:t,ask:askText('Start Pin',r)});}}
     // no finish time is kept: a Start Pin later than the race's last Finish Pin, or a Finish Pin later than the next race's first start
-    const fp=own.filter(x=>isFinishPin(x.name)&&fixMoment(x)!==null).sort((a,b)=>fixMoment(b)-fixMoment(a))[0];
+    const fp=own.filter(x=>isFinishPin(x.name)&&!finOf(x)&&fixMoment(x)!==null).sort((a,b)=>fixMoment(b)-fixMoment(a))[0];
     if(fp)own.filter(m=>isStartPin(m.name)&&fixMoment(m)>fixMoment(fp)).forEach(p=>
       add(p,'check','Recorded at '+at(p)+', after the Race '+r+' Finish Pin ('+at(fp)+'). Where one line serves as start and finish this can be expected; otherwise check which race it belongs to.','afterFinish'));
     const nx=startMoment(r+1,0);
-    if(nx!==null)own.filter(m=>isFinishPin(m.name)&&fixMoment(m)>nx).forEach(p=>
+    if(nx!==null)own.filter(m=>isFinishPin(m.name)&&!finOf(m)&&fixMoment(m)>nx).forEach(p=>
       add(p,'check','Recorded at '+at(p)+', after Race '+(r+1)+' started ('+S.startTimes[ckey(r+1,0)]+'). Check which race it belongs to.'));
     if(!own.some(m=>isCB(m.name))){const c=latestOf(r,isCB);
       rf.push({race:r,txt:'Race '+r+' has no committee boat fix of its own'+(c?'; the Race '+c.race+' committee boat ('+at(c)+') is carried forward.':', and none from an earlier race.'),
@@ -2738,7 +2989,7 @@ function fxResolve(all,scope){
       const d=(m,w)=>'the '+ROLE[w].nm+' ('+at(m)+(cands.has(refFor(m))?', candidate':m.race<r?', carried from Race '+m.race:'')+')';
       flag(r,c.st,'A dotted candidate line joins '+d(c.a,'cb')+' and '+d(c.b,'pin')+'; not used by default.');});
     // the Finish Pin: no time limit, so one per race
-    const fp=autoEnd('fpin',r,ref0).m, fo=ownOf(r,'fpin'), t1=startMoment(r,0);
+    const fp=autoEnd('fpin',r,ref0).m, fo=ownOf(r,'fpin').filter(m=>!finOf(m)), t1=startMoment(r,0);
     if(!fp)flag(r,null,'no Finish Pin recorded.');
     else if(fp.race<r)flag(r,null,'no Finish Pin of its own; the Race '+fp.race+' Finish Pin ('+at(fp)+') is carried forward by default.');
     else{if(fo.length>1){outline.add(refFor(fp));flag(r,null,fo.length+' Finish Pin fixes recorded; the line joins the latest ('+at(fp)+'); the others are shown but not joined.');}
@@ -2831,7 +3082,7 @@ function renderFix(){
     '<span class="fxK"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="var(--surface)" stroke="var(--sea)" stroke-width="2" stroke-dasharray="2 2"/></svg>Course Card mark, at its card position</span>'+
     (ov.wps.length?'<span class="fxK"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="'+FX_WP+'"/></svg>routing waypoint chosen by the RO</span>':'')+
     '. The page\'s default finish is the start line. The recorded lines are the page\'s automatic defaults, not the RO\'s choices; the as-sailed course (below) is the course built in section 3. A dark outline: the fix a line joins where a mark has several.'+
-    (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'')+
+    (fxAll?' W windward · L leeward · G gybe · O offset · CB committee boat · SP start pin · FP finish pin · FB finish boat · cand. candidate · a grey ring: check · a ring in the warning colour: likely wrong':'')+
     (ov.legs.length?'<br><span class="fxK"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="'+fxCol(r)+'" stroke-width="'+FX_AS.w+'"/></svg>'+
       'As sailed (selected race and start: Race '+r+', Start '+(S.start+1)+'), with its direction; drawn over the recorded lines</span>'+
       '<span class="fxK"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="var(--ink)" stroke-width="'+(FX_UNUSED.w*1.4)+'" stroke-dasharray="'+FX_UNUSED.dash+'" opacity="'+FX_UNUSED.op+'"/></svg>'+
@@ -3083,7 +3334,7 @@ async function pull(quiet){
       ['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';$(id).className='status';});
       // "All course changes saved" speaks only for the day loaded (STATUS A48); it comes back with this day's next save
       saveState.okAt=0; showSave();
-      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
+      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // A8: the day's series likewise: one set for this day before it could be loaded stays, unsent; nothing carries over
       if(!mine('_day')||!S.daySeries){delete S.daySeries;delete S.courseDay._day;}
@@ -3129,7 +3380,7 @@ async function pull(quiet){
       const rq=await keyFetch(ENDPOINT+'?type=seriesbefore&date='+encodeURIComponent(day),{}), jq=await rq.json();
       if(rq.ok&&jq.ok&&!stale()&&typeof jq.series==='string'&&typeof jq.from==='string')S.carry={day,series:jq.series,from:jq.series?jq.from:''};
     }catch(_){}}
-    if(!stale()){checkLineRefs(ln);checkGoneRefs(ln);}
+    if(!stale()){checkLineRefs(ln);checkGoneRefs(ln);checkFinRefs(ln);}
     if(!stale()){pullOk=true; lastPullAt=Date.now(); reopenWait=false; reopenFrom='';}
     // A34: say when this load leads to a save; while no load has succeeded saves wait (saveCourses), so anything unsent
     // then was edited while the day was not loaded
@@ -3221,6 +3472,24 @@ function checkGoneRefs(ln){
         '\'s fixes (withdrawn, moved to another race, or gone): removed from the replaced ends saved with this start.';});
     stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[4];});
 }
+/* A63 (5f): a finish line end saved with a start (the set Finish Pin, the placed Finish boat, the midpoint, or a replaced
+   one) whose fix is no longer among the day's fixes, from any race (a copied line uses another race's), is removed from
+   the start's record, which is saved, and said under that end's list, never silently */
+function checkFinRefs(ln){
+  Object.keys(S.lineFin||{}).forEach(k=>{if(!/^\d+\|\d+$/.test(k))return;const[r,st]=k.split('|').map(Number);
+    const z=Object.assign({},S.lineFin[k]), said=[], ls=S.lineSel[k]||{};
+    const flag=(w,t)=>{S.lineFlags[k]=S.lineFlags[k]||{};const was=S.lineFlags[k][w];S.lineFlags[k][w]=(was?was+' ':'')+t;said.push(w);};
+    const where=', saved with Race '+r+' Start '+(st+1)+', is no longer among the day\'s fixes (withdrawn, moved or gone): ';
+    if(z.pin&&!refFix(z.pin.ref,'fpin')){flag('fpin','The Finish Pin'+(z.pin.at?' set at '+z.pin.at:'')+where+'removed from this start\'s finish line'+(z.pin.side?', with its side':'')+'.');delete z.pin;}
+    if(z.cb&&!refFix(z.cb.ref,'fcb')){flag('fcb','The '+finWords(z.cb)+where+'removed from this start\'s finish line.');delete z.cb;if(ls.fcb==='none')delete ls.fcb;}
+    if(z.mid&&!refFix(z.mid.ref,'fpin')){flag('fpin','The Finish Pin used as the finish line midpoint'+where+'the midpoint is removed.');delete z.mid;if(ls.fcb==='none')delete ls.fcb;}
+    if(z.gone){const keep=z.gone.filter(g=>refFix(g.ref,g.w));
+      z.gone.filter(g=>!keep.includes(g)).forEach(g=>flag(g.w,'The '+finGoneWords(g)+', replaced'+where+'removed from the replaced ends saved with this start.'));
+      if(keep.length)z.gone=keep;else delete z.gone;}
+    if(!said.length)return;
+    if(z.src&&!z.pin&&!z.cb&&!z.mid&&!ls.fpin)delete z.src;
+    finSet(k,z);stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[5];});
+}
 /* Line choices were held as phone-side fix ids before 2026-10-01.8; they become references once. The saved record
    already sent references, so nothing changes on the server and nothing looks unsent. */
 if(S.lineShape!==2){Object.keys(S.lineSel||{}).forEach(k=>{const ls=S.lineSel[k]||{};Object.keys(ls).forEach(w=>{const v=ls[w];
@@ -3267,11 +3536,13 @@ function recordFor(k){
           ...(S.startPt&&S.startPt[k]?{startPt:S.startPt[k]}:{}),
           ...(S.linePinAt&&S.linePinAt[k]?{linePinAt:Object.assign({},S.linePinAt[k])}:{}),
           // A78: replaced ends not yet withdrawn (only when there are any, so every other course saves as before)
-          ...(S.lineGone&&S.lineGone[k]&&S.lineGone[k].length?{lineGone:S.lineGone[k].map(g=>Object.assign({},g))}:{})};
+          ...(S.lineGone&&S.lineGone[k]&&S.lineGone[k].length?{lineGone:S.lineGone[k].map(g=>Object.assign({},g))}:{}),
+          // A63: the finish line set with the helper (only when there is one)
+          ...(finRec(k)?{lineFin:finSaved(k)}:{})};
 }
-function isEmptyRec(k,r){if(k==='_day')return !r.series;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt||r.lineGone)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
+function isEmptyRec(k,r){if(k==='_day')return !r.series;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt||r.lineGone||r.lineFin)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
 // the day-wide _starts is never sent: only each race's own groups are; the day's series is _day (A8)
-function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}))))];}
+function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}),Object.keys(S.lineFin||{}))))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null, savingP=null, saveStop=false, dayDrop=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
@@ -3284,7 +3555,8 @@ function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses
    (400), full (429), server (500 and any other reply). */
 const SAVE_TIMEOUT_MS=20000, DAY_WAIT_MS=25000;
 const LOAD_WHY=['a course built before this day was loaded','a line end whose fix is gone was cleared',
-  "a fix reference updated to the server's copy",'edits made while the day was not loaded','a replaced line end whose fix is gone was removed'];
+  "a fix reference updated to the server's copy",'edits made while the day was not loaded','a replaced line end whose fix is gone was removed',
+  'a finish line end whose fix is gone was removed'];
 let saveState={err:null,refused:{},okAt:0,loadNote:null,dayNote:null,dayBlock:null,waiting:'',verHeld:false};
 function nOf(n,one,many){return n+' '+(n===1?one:many);}
 function saveLabel(k){const p=k.split('|');return k==='_day'?'Series name':k.indexOf('_starts|')===0?'Race '+p[1]+' start groups':'Race '+p[0]+' Start '+(+p[1]+1);}
@@ -3453,6 +3725,7 @@ function applyServerCourses(obj){
       if(rec.startPt==='Grassy Mid')S.startPt[k]='Grassy Mid'; else delete S.startPt[k];
       const pa=rec.linePinAt; if(pa&&typeof pa==='object'&&typeof pa.ref==='string'&&/^s:/.test(pa.ref))S.linePinAt[k]={ref:pa.ref,at:String(pa.at||'')}; else delete S.linePinAt[k];
       const lg=goneNorm(rec.lineGone); S.lineGone=S.lineGone||{}; if(lg)S.lineGone[k]=lg; else delete S.lineGone[k];   // A78
+      finSet(k,finNorm(rec.lineFin));   // A63
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
       // card setup: a record from a page before 2026-10-01.7 has no "card" and leaves this phone's alone; card:null clears it
       if('card' in rec){S.cardCfg=S.cardCfg||{};
@@ -3642,6 +3915,7 @@ document.addEventListener('change',e=>{const t=e.target.closest('.estIn');if(t)e
 document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');if(!b)return;
   const k=ckey(S.race,S.start), st=$('readStatus'), say=(t,ok)=>{st.textContent=t;st.className='status '+(ok?'ok':'err');};
   const act=b.dataset.act;
+  if(/^fin/.test(act)){await finAct(act,b,k,say);return;}   // A63: the finish line helper
   if(act==='mid'){const f=endPick(b.dataset.w).m;if(!f)return;S.lineMid[k]={w:b.dataset.w,ref:refFor(f)};stamp(k);commit();return;}
   if(act==='undoMid'){delete S.lineMid[k];stamp(k);commit();return;}
   // the Grassy start on a hand-built start, and its Undo (A58 part 2)
@@ -3721,10 +3995,86 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     stamp(k,true);await pull(true);commit();
     say(its.length>1?'Estimate undone: the Start Pin and the committee boat placed as estimates are withdrawn.':
       'Estimate undone: the '+its[0].m.name+' '+('at' in its[0].e?'set at '+its[0].e.at:'placed by distance and bearing')+' is withdrawn.',true);}});
+/* A63: the finish line helper's buttons, for start k. A Finish Pin set or a Finish boat placed is a typed position timed
+   at the start time unless the RO types another time on the water, as for the start line. Setting or placing again
+   replaces this start's own end, which is withdrawn as A78 says (withdrawReplaced). */
+async function finAct(act,b,k,say){const z0=finRec(k)||{}, ls=()=>(S.lineSel[k]=S.lineSel[k]||{}), d=estDraftFor(k);
+  const day=S.pulledDay||$('day').value||todayISO();
+  const when=v=>{const tt=String(v||'').trim()||startTime(), hm=tt.match(/^(\d{1,2})[:.](\d{2})$/);
+    return !hm||+hm[1]>23||+hm[2]>59?null:new Date(+day.slice(0,4),+day.slice(5,7)-1,+day.slice(8,10),+hm[1],+hm[2]).getTime();};
+  const add=(nm,p,t)=>{const fix=1+S.marks.filter(m=>m.race===S.race&&m.name.toLowerCase()===nm.toLowerCase()).length, id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+    S.outbox.push({action:'add',id,date:day,race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:t});
+    push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(t),pending:true,pid:id});return 's:'+id;};
+  if(z0.src)return;   // a copied line is changed in the Finish list only
+  if(act==='finSide'){const p=z0.mid?refFix(z0.mid.ref,'fpin'):endPick('fpin').m;if(!p)return;
+    const v=FIN_SIDES.includes(b.dataset.v)?b.dataset.v:'', z=Object.assign({},z0);
+    if(z.pin)z.pin=Object.assign({},z.pin,{side:v});else if(v)z.pin={ref:sref(p),at:'',side:v};
+    if(z.pin&&!z.pin.at&&!z.pin.side)delete z.pin;
+    finSet(k,z);stamp(k);commit();return;}
+  if(act==='finPinAt'){if(z0.mid)return;const src=estRef(String(d.fat||''));
+    if(!src||!isFinite(src.lat)){say('Choose the mark the Finish Pin is at: nothing placed.',false);return;}
+    const t=when(d.fptime);if(t===null){say('Give the time on the water as hh:mm, for example 11:09: nothing placed.',false);return;}
+    const ref=add('Finish Pin',src,t), at=src.card&&!src.atFix?src.name:fixWords2(src);
+    const z=Object.assign({},z0), old=z.pin&&z.pin.at?Object.assign({},z.pin):null;
+    z.pin={ref,at,side:z.pin&&z.pin.side||''};finSet(k,z);
+    if(old)finGoneAdd(k,{w:'fpin',ref:old.ref,at:old.at});   // A78: saved with this start until it is withdrawn
+    ls().fpin=ref;
+    if(S.lineAuto[k]){delete S.lineAuto[k].fpin;if(!Object.keys(S.lineAuto[k]).length)delete S.lineAuto[k];}
+    if(S.lineFlags[k])delete S.lineFlags[k].fpin;
+    estDraft={};stamp(k);commit();sendOutbox();
+    say('Finish Pin set at '+at+' ('+ddm(src.lat,true)+' '+ddm(src.lon,false)+'), saved to the race record: sending…'+
+      (endPick('fcb').m?'':' Now place the Finish boat from it, or choose the committee boat.'),true);
+    if(old)await withdrawReplaced(k,'fpin',old,'set at '+old.at);
+    return;}
+  if(act==='finPlace'){if(z0.mid)return;const have=endPick('fpin').m;if(!have)return;
+    const dist=+d.fdist, brgM=+d.fbrg;
+    if(!(dist>0&&dist<=5000)||String(d.fbrg).trim()===''||!(brgM>=0&&brgM<=360)){say('Type a distance in metres (1 to 5000) and a bearing from 0 to 360 °M: nothing placed.',false);return;}
+    const t=when(d.ftime);if(t===null){say('Give the time on the water as hh:mm, for example 11:09: nothing placed.',false);return;}
+    const p=geoDest(have,((brgM-varW())%360+360)%360,dist), f=finOf(have);
+    const rec={ref:add('Finish boat',p,t),from:f&&f.at?'Finish Pin '+f.at:fixWords2(have),m:Math.round(dist),brgM:Math.round(brgM)%360};
+    const z=Object.assign({},z0), old=z.cb?Object.assign({},z.cb):null;z.cb=rec;finSet(k,z);
+    if(old)finGoneAdd(k,Object.assign({w:'fcb'},old));   // A78
+    ls().fcb='none';   // 5a: pages before .42 see no committee boat rather than clear and save one they cannot read
+    if(S.lineFlags[k])delete S.lineFlags[k].fcb;
+    estDraft={};stamp(k);commit();sendOutbox();
+    say('Finish boat placed as an estimate: '+finWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',true);
+    if(old)await withdrawReplaced(k,'fcb',old,'placed '+old.m+' m at '+pad(old.brgM,3)+'°M');
+    return;}
+  if(act==='finMid'){if(z0.cb)return;const p=endPick('fpin').m;if(!p)return;
+    finSet(k,Object.assign({},z0,{mid:{ref:sref(p)}}));ls().fcb='none';stamp(k);commit();return;}
+  if(act==='finUndoMid'){if(!z0.mid)return;const z=Object.assign({},z0);delete z.mid;finSet(k,z);
+    if(ls().fcb==='none')delete S.lineSel[k].fcb;stamp(k);commit();return;}
+  // Undo: this start's own Finish boat and set Finish Pin, the Finish boat first, after one confirmation; refused while
+  // another start uses them (a copy of this line, say). The Finish boat is withdrawn as the start line's Undo does; the
+  // Finish Pin is named in lineSel, so it is taken out of the finish line and saved first, then withdrawn (5b), and kept
+  // as replaced, with the A78 note, if it cannot be withdrawn now
+  if(act==='finUndo'){const its=finOwn(k).sort((a,b)=>(a.w==='fcb'?0:1)-(b.w==='fcb'?0:1));if(!its.length)return;
+    const others=[...new Set(its.reduce((a,i)=>a.concat(lineUsers(i.m,k)),[]))];
+    if(others.length){say('Not undone: '+its.map(i=>'the '+i.m.name).join(' and ')+(its.length>1?' are':' is')+' also used by '+others.join(', ')+'. Undo would change '+(others.length>1?'their':'its')+' finish line too.',false);return;}
+    if(its.some(i=>i.m.pending||!i.m.sid)){say('The finish line ends are still being sent: try again in a moment.',false);return;}
+    if(!verReady(say))return;   // A65
+    if(!confirm('Undo? '+its.map((i,j)=>(j?'the ':'The ')+i.m.name+' '+(i.w==='fpin'?'set at '+i.e.at:'placed '+i.e.m+' m at '+pad(i.e.brgM,3)+'°M')).join(' and ')+
+      (its.length>1?' are':' is')+' withdrawn from the race record (kept, marked withdrawn).'))return;
+    for(const i of its){const z=Object.assign({},finRec(k)||{});
+      if(i.w==='fcb'){
+        try{await postFix({action:'withdraw',date:S.pulledDay,id:i.m.sid,reason:'estimate undone by the RO'},OUTBOX_TIMEOUT_MS);}
+        catch(err){stamp(k,true);commit();say('Not undone: '+((err&&err.text)||(err&&err.message)||'no reply')+'.',false);return;}
+        delete z.cb;finSet(k,z);if(ls().fcb==='none')delete S.lineSel[k].fcb;stamp(k,true);continue;}
+      delete z.pin;finSet(k,z);finGoneAdd(k,{w:'fpin',ref:i.e.ref,at:i.e.at});
+      if(ls().fpin===i.e.ref)delete S.lineSel[k].fpin;
+      stamp(k,true);commit();
+      await withdrawReplaced(k,'fpin',i.e,'set at '+i.e.at);}
+    stamp(k,true);await pull(true);commit();
+    const kept=its.filter(i=>goneOf(i.m));
+    say(kept.length?'Undone, but the Finish Pin is kept until it is withdrawn: see the note under the Finish Pin list.':
+      'Undone: '+its.map(i=>'the '+i.m.name).join(' and ')+(its.length>1?' are':' is')+' withdrawn.',!kept.length);}}
 function setEnd(w,v){const k=ckey(S.race,S.start);S.lineSel[k]=S.lineSel[k]||{};
   if(v==='auto')delete S.lineSel[k][w]; else S.lineSel[k][w]=v;
   if(S.lineAuto[k]){delete S.lineAuto[k][w];if(!Object.keys(S.lineAuto[k]).length)delete S.lineAuto[k];}   // auto again: saved afresh (stamp)
   if(S.lineFlags[k])delete S.lineFlags[k][w];   // the RO has looked at this end again
+  // A63: a side given for a Finish Pin chosen in the list stays with the Finish Pin chosen next
+  if(w==='fpin'){const z=finRec(k);if(z&&z.pin&&!z.pin.at){const p=endPick('fpin').m, n=Object.assign({},z);
+    if(p)n.pin=Object.assign({},z.pin,{ref:sref(p)});else delete n.pin;finSet(k,n);}}
   stamp(k); commit();}
 $('course').addEventListener('change',e=>{const t=e.target.closest('.endSel');if(t)setEnd(t.dataset.w,t.value);});
 $('course').addEventListener('click',e=>{const t=e.target.closest('.endAuto');if(t)setEnd(t.dataset.w,'auto');});
@@ -3738,7 +4088,12 @@ $('laidNote').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)retur
   if(b.dataset.a==='no')S.laidNo[b.dataset.k]=(S.laidNo[b.dataset.k]||[]).concat(b.dataset.f);
   if(b.dataset.a!=='no')stamp();   // OK and Use this fix are the RO's choice: saved with the course
   commit();};
-$('finishSel').onchange=e=>{S.finishes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
+// A63: a finish line of an earlier start is used only when chosen here (finCopy); any other choice leaves a copied line
+$('finishSel').onchange=e=>{const k=ckey(S.race,S.start), v=e.target.value;
+  if(/^from:/.test(v)){const t=finCopy(k,v.slice(5));
+    if(t){$('readStatus').textContent=t;$('readStatus').className='status err';render();return;}
+    stamp(k);commit();return;}
+  finUncopy(k);S.finishes[k]=v;stamp();commit();};
 $('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};
 // the start time is complete once the RO leaves the box (keyboard, or a phone or tablet time picker): only then are the
 // start's auto line-end choices saved, for the time as finally set (freezeLines; fix 1)
