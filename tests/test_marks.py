@@ -75,6 +75,11 @@ still present and unchanged:
                 the day itself, a later day, a _day with "" or a malformed series, a damaged courses file and a history
                 file are not counted; "" and "" with none; a bad or missing date 400, a wrong key 403; nothing written;
                 ?type=series still reads series.json
+ 21  wind       .44: the day's wind ("wind": {"twd", "tws"}) in _day beside the series: a wind alone gets series ""; a
+                series-only save (a page before .44) keeps the saved wind, and an identical one writes nothing; numbers
+                kept as text; the wind cleared keeps the series; refused 400, writing nothing: direction over 360, not a
+                number, negative or with 3 decimals, speed over 99, a field missing or extra, a list, null, text, another
+                field beside it, a bad series beside a good wind
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -845,6 +850,44 @@ def t19_day_series():
            f'GET {s_get} {read}; series.json {"absent" if not os.path.exists(series_file(d)) else "WRITTEN"}; {detail}')
 
 
+def t21_day_wind():
+    """.44 (Pat, 22 October 2026): the day's wind in the _day record beside the series; a part not sent keeps what is
+    saved, so a page that sends only the series (before .44) never clears the wind."""
+    d = setup('t21')
+    _, want = fixture()
+    s = [req(d, body=course('_day', {'wind': {'twd': '215', 'tws': '12'}}))[0]]      # no _day yet: wind only
+    wind_only = load(course_file(d))['_day']['data']
+    s.append(req(d, body=course('_day', {'series': 'Autumn League'}))[0])           # an older page: series only
+    merged = load(course_file(d))['_day']['data']
+    before = (sha(course_file(d)), sha(history_file(d)))
+    s_same, j_same = req(d, body=course('_day', {'series': 'Autumn League'}))
+    unchanged = (sha(course_file(d)), sha(history_file(d))) == before and j_same.get('unchanged') is True
+    s.append(req(d, body=course('_day', {'series': 'Autumn League', 'wind': {'twd': 220, 'tws': 14.5}}))[0])   # numbers kept as text
+    both = load(course_file(d))['_day']['data']
+    s.append(req(d, body=course('_day', {'wind': {'twd': '', 'tws': ''}}))[0])      # the wind cleared, the series kept
+    cleared = load(course_file(d))['_day']['data']
+    others = all(load(course_file(d)).get(k) == v for k, v in want.items())
+    before = (sha(course_file(d)), sha(history_file(d)))
+    bad = {'direction 361': {'wind': {'twd': '361', 'tws': ''}}, 'direction text': {'wind': {'twd': 'NW', 'tws': ''}},
+           'direction negative': {'wind': {'twd': '-5', 'tws': ''}}, 'speed 100': {'wind': {'twd': '', 'tws': '100'}},
+           'three decimals': {'wind': {'twd': '215.125', 'tws': ''}}, 'speed missing': {'wind': {'twd': '215'}},
+           'extra wind field': {'wind': {'twd': '215', 'tws': '', 'gust': '20'}}, 'wind a list': {'wind': ['215', '12']},
+           'wind null': {'wind': None}, 'wind text': {'wind': '215'}, 'other field': {'wind': {'twd': '1', 'tws': ''}, 'x': 1},
+           'bad series beside a good wind': {'series': '<b>A</b>', 'wind': {'twd': '215', 'tws': ''}}}
+    got = {n: req(d, body=course('_day', v))[0] for n, v in bad.items()}
+    refused = all(v == 400 for v in got.values()) and (sha(course_file(d)), sha(history_file(d))) == before
+    s_get, g = req(d, 'GET', query=f'type=courses&date={DAY}')
+    read = g.get('courses', {}).get('_day', {}).get('data')
+    ok, detail = intact(d)
+    report('21 day wind (_day)', ok and s == [200] * 4 and wind_only == {'series': '', 'wind': {'twd': '215', 'tws': '12'}}
+           and merged == {'series': 'Autumn League', 'wind': {'twd': '215', 'tws': '12'}} and s_same == 200 and unchanged
+           and both == {'series': 'Autumn League', 'wind': {'twd': '220', 'tws': '14.5'}}
+           and cleared == {'series': 'Autumn League', 'wind': {'twd': '', 'tws': ''}} and others and refused
+           and s_get == 200 and read == cleared and not leftovers(d),
+           f'statuses {s}; wind only {wind_only}; merged {merged}; identical save wrote nothing {unchanged}; both {both}; '
+           f'cleared {cleared}; courses kept {others}; refused {got}, files {"unchanged" if refused else "CHANGED"}; GET {s_get} {read}; {detail}')
+
+
 def t20_series_before():
     d = setup('t20')
     data = os.path.join(d, 'data')
@@ -887,7 +930,7 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before):
+                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before, t21_day_wind):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

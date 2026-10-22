@@ -82,6 +82,41 @@ function out($code, $data) {
   echo json_encode($data);
   exit;
 }
+/* The day's record (_day): {"series": text of 60 characters or fewer} and, from .44 (Pat, 22 October 2026), the day's wind
+   {"wind": {"twd": direction 0 to 360 or "", "tws": speed 0 to 99 or ""}}, at least one of the two and nothing else; the
+   values kept as the text the page sends. null if anything is wrong. */
+function day_record($data) {
+  if (!is_array($data) || count($data) < 1) return null;
+  foreach ($data as $key => $v) if ($key !== 'series' && $key !== 'wind') return null;
+  $o = array();
+  if (array_key_exists('series', $data)) {
+    $s = name_text($data['series'], 60);
+    if ($s === null) return null;
+    $o['series'] = $s;
+  }
+  if (array_key_exists('wind', $data)) {
+    $w = $data['wind'];
+    if (!is_array($w) || count($w) !== 2 || !array_key_exists('twd', $w) || !array_key_exists('tws', $w)) return null;
+    $d = wind_value($w['twd'], 360);
+    $sp = wind_value($w['tws'], 99);
+    if ($d === null || $sp === null) return null;
+    $o['wind'] = array('twd' => $d, 'tws' => $sp);
+  }
+  return $o;
+}
+function wind_value($v, $max) {      // '' or a number from 0 to $max with at most 2 decimals, as text; null otherwise
+  if ($v === '') return '';
+  if (is_int($v) || is_float($v)) $v = (string)$v;
+  if (!is_string($v) || !preg_match('/^\d{1,3}(\.\d{1,2})?$/D', $v) || (float)$v > $max) return null;
+  return $v;
+}
+// the saved day record with what a save sends: a part not sent is kept; the series always first, as pages read it
+function day_merge($new, $old) {
+  $o = array('series' => array_key_exists('series', $new) ? $new['series'] : (isset($old['series']) && is_string($old['series']) ? $old['series'] : ''));
+  if (array_key_exists('wind', $new)) $o['wind'] = $new['wind'];
+  elseif (isset($old['wind']) && is_array($old['wind'])) $o['wind'] = $old['wind'];
+  return $o;
+}
 function arg($arr, $k, $def) { return (is_array($arr) && isset($arr[$k])) ? $arr[$k] : $def; }
 function same($a, $b) {               // constant-time compare, also on PHP 5.3-5.5 (no hash_equals before 5.6)
   if (function_exists('hash_equals')) return hash_equals($a, $b);
@@ -292,10 +327,9 @@ if ($action === 'course') {
   $data = arg($in, 'data', null);
   if (!is_string($k) || !preg_match('/^(\d{1,2}\|\d{1,2}|_starts(\|[1-9])?|_day)$/D', $k)) out(400, array('ok' => false, 'error' => 'bad course name'));
   if (!is_array($data) || strlen(json_encode($data)) > 50000) out(400, array('ok' => false, 'error' => 'bad course'));
-  if ($k === '_day') {               // exactly {"series": text of 60 characters or fewer}, stored as the server reads it
-    $s = (count($data) === 1 && array_key_exists('series', $data)) ? name_text($data['series'], 60) : null;
-    if ($s === null) out(400, array('ok' => false, 'error' => 'bad series: up to 60 characters, no < or >'));
-    $data = array('series' => $s);
+  if ($k === '_day') {               // the day's series and (.44) its wind: day_record, merged with what is saved below
+    $data = day_record($data);
+    if ($data === null) out(400, array('ok' => false, 'error' => 'bad day record: series up to 60 characters, no < or >; wind direction 0 to 360 and speed 0 to 99, or empty'));
   }
   $by = name_text(arg($in, 'by', null), 10000);     // optional: who saved this version; cut to NAME_MAX, else dropped
   $by = ($by !== null && preg_match('/^.{0,' . NAME_MAX . '}/us', $by, $mm)) ? trim($mm[0]) : '';
@@ -305,6 +339,10 @@ if ($action === 'course') {
   $c  = load_json($f);
   if (!isset($c[$k]) && count($c) >= 200) out(429, array('ok' => false, 'error' => 'too many courses'));
   $old = (isset($c[$k]) && is_array($c[$k])) ? $c[$k] : null;
+  if ($k === '_day') {               // a part not sent keeps what is saved: a page before .44 sends only the series
+    $od = $old !== null ? arg($old, 'data', null) : null;
+    $data = day_merge($data, is_array($od) ? $od : array());
+  }
   if ($old !== null && json_encode(arg($old, 'data', null)) === json_encode($data)) {   // nothing changed: nothing written
     flock($lh, LOCK_UN); fclose($lh);
     out(200, array('ok' => true, 'unchanged' => true));

@@ -128,6 +128,12 @@ altered in ways it must refuse and checks that it writes nothing:
                 shares byte for byte. Refused in a LOCAL build (and written nothing), but built normally: tradboats.ie or
                 orc-ireland.org named anywhere (a comment too), a full web address not in LOCAL_URLS, one starting //,
                 and one that only begins like an allowed host; an unknown label or a build time not HHMM is refused
+ 29  pins       static guards for the pin routes in .44 (Pat, 22 October 2026): with a committee boat in use, both Set
+                Start Pin at and Place Start Pin; the Start Pin's "from" list is the committee boat in use and this race's
+                laid marks only, a held harbour-mark "from" refused; an earlier race's Start or Finish Pin set at its
+                position; Place Finish Pin from the committee boat end in use only, saved, read and shown as an estimate;
+                the committee boat placed from a harbour mark sets the Start Pin at it, and with another pin in use
+                nothing is placed; one pin record per start; saved data read as before. Guards, not proof
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -160,7 +166,6 @@ def report(name, ok, detail=''):
 def run(page, out, sw=SW, label=''):
     return subprocess.run([sys.executable, SCRIPT, '--page', page, '--sw', sw, '--marks', MARKS, '--out', out]
                           + (['--label', label] if label else []), capture_output=True, text=True, encoding='utf-8')
-
 
 
 def read(p, mode='r'):
@@ -343,7 +348,7 @@ def t6_a38_guards():
     ns = ns[:ns.find('\n', ns.find("removed from this device.','');commit();};"))]
     g('the typing message follows its fix: sent, refused, waiting', 'function readSays(f,msg,cls)' in code
       and "readSays(f,outRefused(f,why),'err')" in so and "readSays(f,outName(f)+': sent.'" in so
-      and 's0.outbox.forEach(q=>readSays(q,outWait(q,stop.k,stop.e),' in so)
+      and "const own=s0.outbox.filter(q=>{readSays(q,outWait(q,stop.k,stop.e),'');return fixSays(q,'wait',outReason(stop.k,stop.e));})" in so)
     g('the typing message follows its fix: sending again, removed',
       "readSays(x.f,outName(x.f)+': sending again" in ns and "readSays(x.f,outName(x.f)+': removed from this device.'" in ns)
     g('readSays changes only a message still about that fix', "actMsgs[x].t.indexOf(outName(f)+':')===0);if(!key)return;" in code)
@@ -516,8 +521,11 @@ def t7_a40_guards():
             # and the series out of the name: "x-series" only (Pat, 16 October 2026)
             body = re.sub(r"\n[ ]*\n  const label=\[ccDate\(", "\n  const label=[ser,ccDate(", body)
             body = body.replace("side),\n    notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])};}", 'side)};}')
+            # .44 (Pat, 22 October 2026): the start's own wind or the day's (windOf); the same for a start with its own
+            body = body.replace("const w=windOf(k), num=", "const w=(S.winds||{})[k]||{}, num=")
         if head == 'function setCC(':   # .37 T14: the plain and orange notes after the warnings
             body = body.replace("+(d.notes||[]).map(n=>'<p class=\"'+n.cls+'\">'+esc(n.t)+'</p>').join('')", '')
+            body = body.replace("'<p class=\"cardnote '+(/^INCOMPLETE/.test(t)?'flag':'caut')+'\">'", "'<p class=\"cardnote flag\">'")
         got = hashlib.sha256(body.encode()).hexdigest()
         g(head.split()[1].rstrip('(') + ' unchanged from 2026-10-06.29' + (' apart from its routing waypoint line' if
           head == 'function ccDoc(' else ''), got == want)
@@ -704,7 +712,8 @@ def t12_changes35_guards():
       and 'o.laid=ld' in fn_body(code, 'function recordFor(') and '{lineAuto:Object.assign({},S.lineAuto[k])}' in fn_body(code, 'function recordFor(')
       and 'Object.keys(S.laidFrz||{})' in fn_body(code, 'function allKeys('))
     g('7 a saved auto choice is used, and a newer fix waits for the RO', "mode='saved'" in fn_body(code, 'function laidState(')
-      and "reason:'Auto, as saved with the course',live:" in fn_body(code, 'function autoUse(') and "' – use it?'" in code)
+      and "reason:'Auto (saved)',live:" in fn_body(code, 'function autoUse(')
+      and "e.saved&&e.live?use(((fixMoment(e.live)||0)>(fixMoment(e.m)||0)?'Newer: ':'Auto now gives: ')+fixText(e.live,w),e.live):''" in fn_body(code, 'function endPicker('))
     g('7 only fixes saved on the server are saved as choices', 'st.latest&&st.latest.sid' in fn_body(code, 'function freezeLaid(')
       and 'e.m&&e.m.sid' in fn_body(code, 'function freezeLines('))
 
@@ -731,7 +740,7 @@ def t13_changes36_guards():
     g('A49: a typed position from another date says it', "time:hhmm(m.time)+otherDate(m,day)" in code)
     g('A50: no chip of its own for a fix under a laid mark\'s name', 'const bm=bm0.filter(m=>!underLaid(m));' in code
       and '!isPasted(m)&&laidK.has(norm(m.name))' in code)
-    g('A54: the start line under the Start line lists', "+lineInfo()+'</div>'+" in code and 'No start line yet: no start time is set, so auto finds no committee boat or Start Pin.' in code)
+    g('A54: the start line under the Start line lists', "<div id=\"lineInfo\" class=\"endSec\">'+lineInfo()+'</div>'+gsLink+" in code and "'<div class=\"meta cautTxt\">Set the start time, or choose both ends.</div>'" in code)
     g('A55: the scale bar in metres below 0.1 nm', "barNm<0.1?Math.round(barNm*1852)+' m'" in code)
     g('A56: a wind direction used only from 0 to 360, saved when the box is left', 'function twdOk(v)' in code and page.count('id="twdWarn"') == 1
       and "twdBad='';S.twd=v;buildLegs();};" in code and "twdBad='';S.twd=v;saveWind();};" in code)
@@ -739,7 +748,7 @@ def t13_changes36_guards():
     g('A10: opening an old race never writes a choice: device-only laid choices from before .35 are not saved by a load, and a load-led save adds no auto choice',
       'S.laidLegacy[key])return;' in fn_body(code, 'function laidRec(') and "if(S.laidShape!==35)" in code
       and code.count('stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[') == 4 and 'if(!noFreeze)freezeFor(k);' in code)
-    g('A54: section 3\'s start line note follows the wind box as section 4 does', "sMiss+'<div id=\"lineInfo\">'+lineInfo()+'</div>'+" in code
+    g('A54: section 3\'s start line note follows the wind box as section 4 does', "sMiss+'<div id=\"lineInfo\" class=\"endSec\">'+lineInfo()+'</div>'+gsLink+" in code
       and "if($('lineInfo')){$('lineInfo').innerHTML=lineInfo();paintMsgs();}" in fn_body(code, 'function buildLegs('))
     g('A56: an out-of-range direction is used as none and never saved', "twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}" in code
       and code.count("if(!twdWarnSay(v)){twdBad=ckey(S.race,S.start);S.twd='';buildLegs();return;}") == 2 and 'if(twdBad)S.twd=\'\';' in code)
@@ -754,9 +763,9 @@ def t14_one_end_line_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok: report('14 .36 A58: ' + name, ok)
     eo = fn_body(code, 'function estOffer(')
-    g('the options only with a start time and exactly one end, not on a Card mark start', "if(!startTime()||lineOff()||midLine())return '';" in eo
+    g('the options only with a start time and exactly one end, not on a Card mark start', "if(!startTime()||lineOff()||midLine()||!!cb===!!pin)return '';" in eo
       and "function lineOff(r,st){return cardEndMode('s',r,st)==='card'||!!gsOf(r,st);}" in code
-      and "if(!!cb===!!pin)return '';" in eo)
+      and "const can=!!startTime()&&!lineOff()&&!midLine();" in fn_body(code, 'function startSec(') and "const open=!e.m||helpIs('start',w);" in fn_body(code, 'function startSec('))
     g('the options write nothing until the RO acts (no save, stamp or commit in the offer)', not re.search(r'(commit|save|stamp|scheduleSave|saveCourses|sendOutbox)\(', eo))
     g('option 1 saves a typed position named for the missing end, and the line end of this start',"nm=w==='cb'?'Committee boat':'Start Pin'" in code
       and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});" in code and 'geoDest(ref,((brgM-varW())%360+360)%360,dist)' in code)
@@ -764,7 +773,7 @@ def t14_one_end_line_guards():
       and "return midLine(r,st)||startLine(r,st,sel);}" in code)
     g('both saved with the course and read back', "{lineMid:Object.assign({},S.lineMid[k])}" in code and "{lineEst:estSaved(k)}" in code
       and 'S.lineMid[k]={w:lm.w,ref:lm.ref}' in code)
-    g('a real end recorded later is offered, never taken', "' is now available – use it? '" in code)
+    g('a real end recorded later is offered, never taken (.44: only when newer, "Newer: …")', "re?use('Newer: '+fixText(re,w),re):" in code and "Recorded '+(md.w==='cb'?'Start Pin':'committee boat')+' now available '" in code)
     g('Copy for Sail Scoring says x-estimate; the WhatsApp text does not', "'  \"x-estimate\": '+JSON.stringify(xEst(r,st))" in code
       and "function xEst(r,st){const a=lineEstNow(r,st), b=finEstNow(r,st);return a&&b?a.x+'; '+b.x:a?a.x:b?b.x:'';}" in code
       and 'estimate' not in fn_body(code, 'function setOut('))
@@ -782,25 +791,29 @@ def t15_start_line_setup_guards():
     es = fn_body(code, 'function estSuggest(')
     g('the helper offers write nothing (no save, stamp, commit or send)', not any(re.search(r'(commit|save|stamp|scheduleSave|saveCourses|sendOutbox)\(', b)
       for b in (eo, bo, li, es, fn_body(code, 'function raceMarkOpts('), fn_body(code, 'function fixedOpts('))))
-    g('both ends missing: offered only with a start time, no Card mark or Grassy start, no midpoint and no end found',
-      "if(!startTime()||lineOff()||midLine())return '';" in bo and "if(endPick('cb').m||endPick('pin').m)return '';" in bo)
-    g('suggestions are greyed placeholders only: the boxes keep what the RO typed', 'placeholder="200" value="\'+esc(d.dist)+\'"' in eo
-      and 'placeholder="\'+ph+\'" value="\'+esc(d.brg)+\'"' in eo and 'd.dist=' not in code and 'd.brg=' not in code)
+    g('the Start Pin set at a mark, offered only with a start time, no Card mark or Grassy start, no midpoint; .44: beside placing it when a committee boat is in use, and set again',
+      "const can=!!startTime()&&!lineOff()&&!midLine();" in fn_body(code, 'function startSec(')
+      and "pinAtBox(!!oth)+(oth?routeOr()+placeBox('pin',oth,!e.m):'')" in fn_body(code, 'function startSec(')
+      and "if(endPick('cb').m)return;" not in code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")])
+    g('suggestions are greyed placeholders only: the boxes keep what the RO typed', 'placeholder="200" value="\'+esc(d.dist)+\'"' in fn_body(code, 'function placeBox(')
+      and 'placeholder="\'+ph+\'" value="\'+esc(d.brg)+\'"' in fn_body(code, 'function placeBox(') and 'd.dist=' not in code and 'd.brg=' not in code)
     g('starboard: committee boat 90 deg right of the pin looking upwind or to the first mark; pin = cb - 90; port swaps',
       "const turn=(w==='cb'?90:-90)*(d.port==='1'?-1:1)" in es and 'n(+S.twd)' in es and 'n(magOf(geo(have,f.m).brg,varW()))' in es)
     g('no wind or no first mark: a warning, no suggestion', "'No wind direction: type it in the wind box first" in es and "'No first mark yet: add the course first" in es)
     g('the first mark skips routing waypoints', 'if(m&&isRwCard(m)){rw=true;continue;}' in fn_body(code, 'function firstMarkOf('))
-    g('the "from" list and the Start Pin list offer the full Fixed marks list', eo.count('fixedOpts(d.ref)') == 1 and bo.count('fixedOpts(d.at)') == 1
-      and 'Object.keys(CARD.marks).forEach' in fn_body(code, 'function fixedOpts('))
+    g('the committee boat\'s "from" list and the Start Pin list offer the Fixed marks list, real marks only (.44 fault 4); the Start Pin\'s "from" list does not (group 29)', fn_body(code, 'function placeBox(').count('fixedOpts(d.ref)') == 1
+      and fn_body(code, 'function pinAtBox(').count('fixedOpts(d.at)') == 1
+      and 'Object.keys(CARD.marks).forEach(nm=>{if(!isRealMark({card:nm}))return;' in fn_body(code, 'function fixedOpts('))
     g('a Start Pin set at a mark: a typed position and this start\'s pin, the RO\'s choice, not an estimate (answer 2 corrected)', "name:'Start Pin',lat:src.lat,lon:src.lon,acc:0,time:t" in code
-      and "S.linePinAt[k]={ref:'s:'+id,at};" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
+      and "S.linePinAt[k]=Object.assign({ref:'s:'+id,at},was?{was}:{});" in code and "S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{pin:'s:'+id});" in code
       and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}" in code
       and "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code)
-    g('its time defaults to the start time', "tt=String(d.ptime||'').trim()||startTime()" in code)
+    g('its time defaults to the start time', "tt=String(v||'').trim()||startTime()" in fn_body(code, 'function onWater(')
+      and "const t=onWater(d.ptime);" in code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")])
     g('one Undo withdraws every estimate of the start, committee boat first, after one confirmation', "sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1))" in code
       and code.count("reason:'estimate undone by the RO'") == 2)
-    g('a recorded end while auto uses an estimate: offered, never taken', "re=e.how==='auto'?realEnd(w,e.m):null" in code
-      and 'data-f="\'+esc(refFor(re))+\'">Use it</button>' in code)
+    g('a recorded end while auto uses an estimate: offered, never taken (.44: only a newer one)', "re=e.how==='auto'&&e.m&&helpOf(e.m)?newerEnd(w,e.m):null" in code
+      and "const use=(t,f)=>'<div class=\"newer\">'+esc(t)+' <button type=\"button\" class=\"endLive\" data-w=\"'+w+'\" data-f=\"'+esc(refFor(f))+'\">Use it</button></div>';" in code)
     g('Grassy start: hand-built only, saved as startPt, read back, line not used, finish at Grassy Mid on Start line',
       "if(act==='grassy'){if(cardCfgNow())return;S.startPt[k]='Grassy Mid';" in code and "{startPt:S.startPt[k]}" in code
       and "if(rec.startPt==='Grassy Mid')S.startPt[k]='Grassy Mid'; else delete S.startPt[k];" in code
@@ -817,10 +830,11 @@ def t15_start_line_setup_guards():
     g('the chart labels an estimated line', "ln.est?(ln.kind==='finish'?'Finish line: estimate':'Start line: estimate')" in code and "permanent:true,direction:'bottom',offset:[0,12],className:'estTip'" in code)
     g('decision 2a: an estimated end carries forward only within its race; a later race is offered it, never given it by auto',
       "&&!(m.race<r&&helpOf(m))&&!(isFinW(w)&&finOf(m))&&!goneOf(m)).sort(" in fn_body(code, 'function candidates(') and "eo=!e.m&&e.how==='unset'?estEarlier(w):null" in code
-      and "(estOf(eo)?'A start line estimate from Race '+eo.race:'A Start Pin set in Race '+eo.race)+' is available – use it? '" in code)
+      and "eo?use((estOf(eo)?'Estimate from Race '+eo.race:'Start Pin set in Race '+eo.race)+': '+fixText(eo,w),eo):" in code)
     g('T7: a helper end named by what the RO did, time last, in lists, notes and Check recorded marks; short on the drawings',
-      "'Start Pin: '+p.at+' ('+fixWhen(m)+')'" in code and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')" in code
-      and "'Start Pin ('+p.at+')'" in code and "' (est.)'" in code and "function fixText(m,w){if(helpOf(m))return helpLong(m);" in code
+      "const setFor=(lab,at)=>lab+': at '+at+', set for Race '+m.race+' at '" in code and "if(p)return setFor('Start Pin',p.at);" in code
+      and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')" in code
+      and "'Start Pin ('+shortAt(p.at)+')'" in code and "' (est.)'" in code and "function fixText(m,w){if(helpOf(m))return helpLong(m);" in code
       and "const lab1=m=>helpOf(m)?helpLong(m):" in code)
     g('T7: no "unattributed": a typed position, pasted, or phone not known', "'unattributed'" not in code
       and "isPasted(m)?'pasted':isTypedPos(m)?'typed position':'phone not known'" in code)
@@ -852,7 +866,8 @@ def t16_day_guards():
     g('the 30-second refresh never loads a day by itself while held', "!dayHeld()&&(reopenWait||pullOk&&$('day').value===todayISO()))pull(true);" in code)
     g('reopening the page when a day was loaded before says so when that was another day (changed by group 17)',
       "if(S.pulledDay){const was=S.pulledDay, now=$('day').value;" in code and "'The page was reopened: Race day is back to today, '" in code)
-    g('T1: no comma before "time on the water"', "</select>, time on the water" not in code and code.count("</select> time on the water '") == 3)
+    g('T1: no comma before "on the water", in every helper (Set Start Pin at, Set Finish Pin at, Place, Place Finish boat)', ", on the water" not in page
+      and code.count("</select> on the water '") == 4 and "°M from the '+esc(pw)+' on the water '" in fn_body(code, 'function finBoatBox('))
     g('Q1: one end found and no line in use is drawn on the sketch and the chart, named an estimate when it is one',
       "const one=!sl&&!lineOff()&&!midLine()?[endPick('cb').m,endPick('pin').m].filter(Boolean):[];" in code
       and "label:helpShort(m)||m.name" in code and "plot(pts,plotLines,solo);" in code and "(P.solo||[]).map(m=>({a:m,b:m}))" in code)
@@ -914,7 +929,7 @@ def t18_gone_start_guards():
     g('lineUsers: a start using the fix by its choice, saved auto, its estimate, set-pin or midpoint record, or auto right now',
       "Object.values(S.lineSel[k]||{}).concat(Object.values(S.lineAuto[k]||{})).some(v=>refIs(v,m))" in lu
       and "(placed?[]:estsOf(k).concat(S.linePinAt[k]?[S.linePinAt[k]]:[])).concat(S.lineMid[k]?[S.lineMid[k]]:[],frec).some(e=>refIs(e.ref,m))" in lu
-      and "frec=[fz.mid].concat(placed&&!fz.src?[]:[fz.cb,fz.pin&&fz.pin.at?fz.pin:null]).filter(Boolean);" in lu
+      and "frec=[fz.mid].concat(placed&&!fz.src?[]:[fz.cb,finPinOwn(fz.pin)?fz.pin:null]).filter(Boolean);" in lu
       and "function lineUsers(m,skip,placed){" in code
       and "['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m)" in lu and "if(k===skip)return;" in lu)
     g('lineUsers looks at every start of the day',
@@ -923,10 +938,11 @@ def t18_gone_start_guards():
       "const others=[...new Set(its.reduce((a,i)=>a.concat(lineUsers(i.m,k)),[]))];" in code
       and "'Not undone: this estimate is also used by '+others.join(', ')+'. Undo would change '" in code
       and code.index("const others=[...new Set(") < code.index("await postFix({action:'withdraw',date:S.pulledDay,id:i.m.sid,reason:'estimate undone by the RO'}"))
-    g('b: placing an end or setting the pin clears that end\'s "None" on the start',
-      "if((S.lineSel[k]||{})[w]==='none')delete S.lineSel[k][w];" in code and "if((S.lineSel[k]||{}).pin==='none')delete S.lineSel[k].pin;" in code)
+    g('b, .44: placing an end or setting the pin clears that end\'s choice on the start ("None" or a fix chosen in its list)',
+      "if((S.lineSel[k]||{})[w])delete S.lineSel[k][w];" in code and "if((S.lineSel[k]||{}).pin)delete S.lineSel[k].pin;" in code)
     g('c: a placed end\'s time on the water defaults to the start\'s own time, as the set pin does',
-      "const tt=String(estDraft.time||'').trim()||startTime();" in code and "String(ref.time||have.time||'')" not in code
+      "const t=onWater(estDraft.time);" in code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
+      and "tt=String(v||'').trim()||startTime()" in fn_body(code, 'function onWater(') and "String(ref.time||have.time||'')" not in code
       and """data-f="time" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'\"""" in code)
     g('d: one estimate record per end of a start; placing one end keeps the other',
       "S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});" in code
@@ -984,13 +1000,14 @@ def t20_time_and_remove_guards():
       and fl.index("document.activeElement===$('startTime')") < fl.index("['cb','pin','fpin'].forEach"))
     g('1: leaving the box saves the choices for the time as set, redrawing only when something is saved',
       "$('startTime').addEventListener('blur',()=>{if(startTime()&&freezeNow()){render();scheduleSave();}});" in code)
-    g('1: the start time itself is still saved on every change', "$('startTime').onchange=e=>{S.startTimes[ckey(S.race,S.start)]=e.target.value;stamp();commit();};" in code)
+    g('1: the start time itself is still saved on every change (.44: dropping unused Auto picks first)',
+      "$('startTime').onchange=e=>{const k=ckey(S.race,S.start), used=startUsed(k);S.startTimes[k]=e.target.value;if(!used)dropAutoPicks(k);stamp();commit();};" in code)
     ra = fn_body(code, 'async function removeStartAsked(')
     g('2: the Remove Start button goes through removeStartAsked', "if(rm)rm.onclick=()=>removeStartAsked(S.start);" in code
       and "rm.onclick=()=>{removeStart(" not in code)
     g('2: the removed start\'s own placed ends and set pin are found', "estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w})).concat(S.linePinAt[k]?[{e:S.linePinAt[k],w:'pin'}]:[]," in ra
       and "fOwn&&fz.cb?[{e:fz.cb,w:'fcb'}]:[],fg.filter(g=>g.w==='fcb').map(e=>({e,w:'fcb'}))" in ra
-      and "const post=fix((fOwn&&fz.pin&&fz.pin.at?[{e:fz.pin,w:'fpin'}]:[]).concat(fg.filter(g=>g.w==='fpin').map(e=>({e,w:'fpin'}))));" in ra)
+      and "const post=fix((fOwn&&finPinOwn(fz.pin)?[{e:fz.pin,w:'fpin'}]:[]).concat(fg.filter(g=>g.w==='fpin').map(e=>({e,w:'fpin'}))));" in ra)
     g('2: refused, naming the starts, while any other start uses one of them',
       "const others=[...new Set(all.reduce((a,x)=>a.concat(lineUsers(x.m,k)),[]))];" in ra
       and "' not removed: its '" in ra and ra.index('const others=') < ra.index("action:'withdraw'"))
@@ -1019,7 +1036,7 @@ def t21_t14_guards():
       "notes:(gsN.length?[{cls:'cardnote',t:'Grassy start: '+gsN.join('; ')+'.'}]:[]).concat(gsA?[{cls:'cardnote amberTxt',t:gsA}]:[])" in code
       and "(d.notes||[]).map(n=>'<p class=\"'+n.cls+'\">'+esc(n.t)+'</p>').join('')" in fn_body(code, 'function setCC('))
     g('real stand-ins keep their wording and colour', "'from the card\\'s '+ccfg.s+' start, standing in because no start line is recorded'" in code
-      and "warns.map(t=>'<p class=\"cardnote flag\">'+esc(t)+'</p>')" in fn_body(code, 'function setCC('))
+      and "warns.map(t=>'<p class=\"cardnote '+(/^INCOMPLETE/.test(t)?'flag':'caut')+'\">'+esc(t)+'</p>')" in fn_body(code, 'function setCC('))
     g('the Grassy start point and finish point are found exactly as before', "gsOf(r,st)?cardEnd('Grassy Mid','Start')" in code)
 
 
@@ -1038,9 +1055,9 @@ def t22_day_series_guards():
       code.count("course-series") == 1 and "try{localStorage.removeItem(STORE+'course-series');}catch(e){}" in code)
     g('no "saved for every RO device"', 'every RO device' not in page)
     g("the day's series is the _day record of the course-save machinery",
-      "if(k==='_day')return {series:S.daySeries||''};" in fn_body(code, 'function recordFor(')
-      and "function isEmptyRec(k,r){if(k==='_day')return !r.series;" in code
-      and "function allKeys(){return [...new Set((typeof S.daySeries==='string'?['_day']:[]).concat(" in code
+      "if(k==='_day'){const o={};if(typeof S.daySeries==='string')o.series=S.daySeries;" in fn_body(code, 'function recordFor(')
+      and "function isEmptyRec(k,r){if(k==='_day')return !r.series&&!r.wind;" in code
+      and "function allKeys(){return [...new Set((typeof S.daySeries==='string'||(S.dayWind&&S.dayWind.day===workDay())?['_day']:[]).concat(" in code
       and "k==='_day'?'Series name':" in fn_body(code, 'function saveLabel('))
     ap = fn_body(code, 'function applyServerCourses(')
     g("a load takes the server's series unless this device has an unsent edit, and labels it with its day",
@@ -1165,7 +1182,8 @@ def t24_version_gate_guards():
       < code.find("postFix({action:'withdraw',date:S.pulledDay,id:i.m.sid,reason:'estimate undone by the RO'}", u))
     g('verReady used exactly five times', code.count('if(!verReady(') == 5)
     g('new fixes never wait', 'verOk' not in fn_body(code, 'async function sendOutbox(') and 'verReady' not in fn_body(code, 'async function sendOutbox('))
-    g('Send never waits', 'function freezeSend(){if(freezeNow()){render();saveCourses();}}' in code and 'await saveCourses' not in fn_body(code, 'function freezeSend('))
+    g('Send never waits', "const kept=keepWind(k,'sent'), fz=freezeNow();if(first||kept||fz){render();saveCourses();}}" in fn_body(code, 'function freezeSend(')
+      and 'await' not in fn_body(code, 'function freezeSend('))
     g('the waiting and stuck lines', "['','Waiting: checking the page version']" in code
       and 'A newer page is on the server but this device keeps getting the old one.' in code)
     g('"All course changes saved" never while held', '!st.verHeld&&!verStuck&&st.okAt&&!n' in code)
@@ -1202,8 +1220,10 @@ def t25_a78_guards():
     g("the note shows under the end's list while the position is loaded", "+orphanNotes(w)+note;" in fn_body(code, 'function endPicker(')
       and "S.marks.some(x=>(x.sid||x.pid)===id)" in fn_body(code, 'function orphanNotes('))
     h = code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")]
-    g('setting the Start Pin again hands the replaced set pin to withdrawReplaced, after the new one is in place',
-      0 < h.find('const old=S.linePinAt[k]||null;') < h.find("S.linePinAt[k]={ref:'s:'+id,at};") < h.find("if(old)await withdrawReplaced(k,'pin',old,'set at '+old.at);"))
+    sp = fn_body(code, 'function setPinAt(')
+    g('setting the Start Pin again hands the replaced set pin to withdrawReplaced, after the new one is in place (.44: setPinAt)',
+      0 < sp.find('old=S.linePinAt[k]||null') < sp.find("S.linePinAt[k]=Object.assign({ref:'s:'+id,at},was?{was}:{});") < sp.find("olds.push([old,'set at '+old.at]);")
+      and 0 < h.find('set=setPinAt(k,src,t);') < h.find("for(const[o,did] of set.olds)await withdrawReplaced(k,'pin',o,did);"))
     h = code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
     g('placing an end again hands the replaced end to withdrawReplaced, after the new one is in place',
       0 < h.find('const old=(S.lineEst[k]||{})[w]||null;') < h.find('S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});')
@@ -1211,8 +1231,9 @@ def t25_a78_guards():
     g('verReady still used exactly five times (the placement is never refused for the version)', code.count('if(!verReady(') == 5)
     # .41: a replaced end stays known as a page-placed end on every device until it is withdrawn
     h = code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")]
-    g('a replaced set pin is stored with its start before the withdrawal is tried',
-      0 < h.find("if(old)goneAdd(k,{w:'pin',ref:old.ref,at:old.at});") < h.find('stamp(k);commit();') < h.find('if(old)await withdrawReplaced('))
+    g('a replaced set pin is stored with its start before the withdrawal is tried (.44: in setPinAt)',
+      "if(old){goneAdd(k,{w:'pin',ref:old.ref,at:old.at});" in fn_body(code, 'function setPinAt(')
+      and 0 < h.find('set=setPinAt(k,src,t);') < h.find('stamp(k);commit();') < h.find('await withdrawReplaced('))
     h = code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
     g('a replaced placed end is stored with its start before the withdrawal is tried',
       0 < h.find('if(old)goneAdd(k,Object.assign({},old));') < h.find('stamp(k);commit();') < h.find('if(old)await withdrawReplaced('))
@@ -1220,7 +1241,8 @@ def t25_a78_guards():
       "function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}" in code
       and "function setOf(m){return m?Object.values(S.linePinAt||{}).find(refHit(m))||goneAll().find(g=>'at' in g&&refHit(m)(g))||null:null;}" in code)
     hl = fn_body(code, 'function helpLong(')
-    g('it is labelled ", replaced" in every shape (Start Pin set, start end placed, Finish Pin set, Finish boat placed)', "const rp=goneOf(m)?', replaced':'';" in hl and hl.count('+rp') == 3 and "fixWhen(m)+rp;};" in hl)
+    g('it is labelled ", replaced" in every shape (Start Pin set, start end placed, Finish Pin set, Finish boat placed)', "const rp=goneOf(m)?', replaced':'';" in hl and hl.count('+rp') == 2 and "fixWhen(m)+rp;};" in hl
+      and "String(m.time||'').replace(/ on \\S+ \\d{1,2} \\S+$/,'')+rp;" in hl and "setFor('Finish Pin',fz.at)" in hl and "setFor('Start Pin',p.at)" in hl)
     g('auto (every race) and the earlier-race offer leave a replaced end out; the list still offers it',
       '&&!(m.race<r&&helpOf(m))&&!(isFinW(w)&&finOf(m))&&!goneOf(m)).sort(' in fn_body(code, 'function candidates(')
       and '&&helpOf(m)&&!goneOf(m)&&' in fn_body(code, 'function estEarlier(') and 'goneOf' not in fn_body(code, 'function endChoices('))
@@ -1235,14 +1257,14 @@ def t25_a78_guards():
       'const its=fix(estsOf(k).concat((S.lineGone||{})[k]||[]).map(e=>({e,w:e.w}))' in rs
       and "const fix=l=>l.map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m);" in rs
       and '.map(i=>Object.assign(i,{m:refFix(i.e.ref,i.w)})).filter(i=>i.m)' in rs
-      and "'lineGone','lineFin'];" in code[code.find('const START_KEYED='):code.find('const START_KEYED=') + 200])
+      and "'lineGone','lineFin','sent'];" in code[code.find('const START_KEYED='):code.find('const START_KEYED=') + 200])
     g('saved with the course only when there is one, counted as content, and read back (goneNorm)',
       '...(S.lineGone&&S.lineGone[k]&&S.lineGone[k].length?{lineGone:' in fn_body(code, 'function recordFor(')
       and '||r.linePinAt||r.lineGone||r.lineFin)return false;' in fn_body(code, 'function isEmptyRec(')
       and 'const lg=goneNorm(rec.lineGone); S.lineGone=S.lineGone||{}; if(lg)S.lineGone[k]=lg; else delete S.lineGone[k];' in fn_body(code, 'function applyServerCourses('))
     cg = fn_body(code, 'function checkGoneRefs(')
     g('a stored entry whose fix is gone from its race is removed on load, saved and said under the end\'s list (never silently)',
-      'if(!stale()){checkLineRefs(ln);checkGoneRefs(ln);checkFinRefs(ln);}' in code
+      'if(!stale()){finFollowAll();checkLineRefs(ln);checkGoneRefs(ln);checkFinRefs(ln);}' in code
       and '(S.lineGone[k]||[]).forEach(g=>{const m=refFix(g.ref,g.w);(m&&m.race===r?keep:out).push(g);});' in cg
       and 'if(!out.length)return;' in cg and 'S.lineFlags[k][g.w]=' in cg and 'stamp(k,true);if(ln&&!ln[k])ln[k]=LOAD_WHY[4];' in cg
       and "'a replaced line end whose fix is gone was removed',\n  'a finish line end whose fix is gone was removed'];" in code)
@@ -1296,7 +1318,7 @@ def t26_fixes43_guards():
     g('4: the finish choice goes home before the rows are redrawn and into the Finish line row after',
       "$('finishHome').appendChild($('finishCard'));$('finishHome').appendChild($('finishFields'));" in rd
       and rd.index("$('finishHome').appendChild") < rd.index("const ol=$('course');ol.innerHTML='';")
-      and "box.appendChild($('finishCard'));box.appendChild($('finishFields'));" in rd
+      and "box.appendChild($('finishFields'));box.appendChild($('finishCard'));" in rd
       and "<div class=\"finChoice\"></div>'+msgSlot('finishSel')+msgSlot('finFollow')+" in rd)
     # fix 5
     g('5: one plain line of this race\'s own line ends under the chips, never chips',
@@ -1312,14 +1334,15 @@ def t26_fixes43_guards():
       "if(c.lfc==='start'||c.lfc==='finishpin'||c.lfc==='last')r.lfc=c.lfc;" in fn_body(code, 'function cardRec(')
       and "if(c.lfc==='last')return {kind:'last'};" in fst and fst.index("c.lfc==='last'") < fst.index('if(finPinLine(r,st,sel))return {kind:\'finishpin\'};')
       and "if(c.lfc)return c.lfc;return c.lfs==='start'&&!finPinLine(r,st)?'start':'finishpin';" in fn_body(code, 'function finChoiceOf(')
-      and "if(c&&cardEndMode('f')==='laid'){c.lfc=v;if(v==='start')c.lfs='start';else delete c.lfs;}else S.finishes[k]=v;" in code)
+      and "else{c.lf='laid';c.lfc=v;if(v==='start')c.lfs='start';else delete c.lfs;}}" in code and "else S.finishes[k]=v;}" in code)
     # fix 8
     fa = fn_body(code, 'async function finAct(')
     g('8: copies follow their source on every render, and before the end the source replaces is withdrawn',
       rd.index('finFollowAll();') < rd.index('msgsMoved();')
-      and fa.count('finFollowAll();commit();') == 2
+      and fa.count('finFollowAll();commit();') == 6   # .44: also placing the Finish Pin, a newer fix, box 3 and the emergency midpoint
       and fa.index('finFollowAll();commit();') < fa.index("if(old)await withdrawReplaced(k,'fpin'")
-      and fa.rindex('finFollowAll();commit();') < fa.index("if(old)await withdrawReplaced(k,'fcb'"))
+      and all(fa.rfind('finFollowAll();commit();', 0, i) > fa.rfind('return;}', 0, i)
+              for i in [x.start() for x in re.finditer(r"if\(old\)await withdrawReplaced\(k,'f(pin|cb)'", fa)]))
     g('8: Undo and Remove Start of a source are refused while starts share its line, naming them',
       "if(shr.length){say('Not undone: '+shr.join(', ')" in fa
       and "if(shr.length){say('Start '+(i+1)+' not removed: '+shr.join(', ')" in fn_body(code, 'async function removeStartAsked('))
@@ -1335,6 +1358,83 @@ def t26_fixes43_guards():
       "return lab+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
       and "le.fromWhen?{fromWhen:String(le.fromWhen)}:{}" in fn_body(code, 'function estRec(')
       and "v.cb.fromWhen?{fromWhen:String(v.cb.fromWhen)}:{}" in fn_body(code, 'function finNorm('))
+
+
+def t27_fixes44_guards():
+    """.44 (Pat, 21 October 2026): four faults and the tidy of the Start line and Finish line rows. Guards, not proof: no
+    JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('27 .44: ' + name, ok, detail)
+    so = fn_body(code, 'async function sendOutbox(')
+    fa = fn_body(code, 'async function finAct(')
+    # fault 1
+    g('fault 1: a helper\'s "sending…" follows its fix: sent, refused, waiting; such fixes stay out of the committee boat line',
+      "if(!fixSays(f,'sent'))said.push(" in so and "if(!fixSays(f,'refused',why))said.push(outRefused(f,why));" in so
+      and "fixSays(q,'wait',outReason(stop.k,stop.e));" in so
+      and "msgFix('finPinAt',k,ref.slice(2));" in fa and "msgFix('finPlace',k,rec.ref.slice(2));" in fa
+      and "msgFix('pinAt',k,set.id);" in code and "msgFix('place',k,id);" in code and "msgFix(b.dataset.area||'finPinPlace',k,rec.ref.slice(2));" in fa
+      and "x.t=x.base.replace('sending…',now);" in fn_body(code, 'function fixSays('))
+    # fault 2
+    cf = fn_body(code, 'function checkFinRefs(')
+    g('fault 2: copies are brought into step before the stale check, which never reports what a copy holds and removes such notes',
+      'if(!stale()){finFollowAll();checkLineRefs(ln);checkGoneRefs(ln);checkFinRefs(ln);}' in code
+      and "if(z.pin&&!z.src&&!refFix(z.pin.ref,'fpin')){" in cf and "if(z.cb&&!z.src&&!refFix(z.cb.ref,'fcb')){" in cf
+      and "if(z.mid&&!z.src&&!refFix(z.mid.ref,'fpin')){" in cf and "/, saved with Race \\d+ Start \\d+, is no longer among the day's fixes/.test(f[w])" in cf)
+    # fault 3
+    g('fault 3: the midpoint and a placed Finish boat keep the committee boat end they replaced, and Undo puts it back',
+      "const was=x=>typeof x.fcb==='string'&&(x.fcb==='none'||/^[sl]:/.test(x.fcb))?{fcb:x.fcb}:{};" in fn_body(code, 'function finNorm(')
+      and "mid:Object.assign({ref:sref(p)},was?{fcb:was}:{})" in fa and "{const was=z0.cb?z0.cb.fcb:ls().fcb;if(was)rec.fcb=was;}" in fa
+      and "back=finBack(k,z0.mid);" in fa and "const back=finBack(k,z.cb);" in fa
+      and "if(refFix(was,'fcb')){L.fcb=was;return '';}" in fn_body(code, 'function finBack('))
+    # fault 4
+    g('fault 4: only real marks in "Start Pin at", "Finish Pin at" and the Place helper\'s "from" list',
+      "return !!m&&(!c||!c.rw&&c.type!=='Start/finish modelling point');" in fn_body(code, 'function isRealMark(')
+      and "if(!isRealMark({card:nm}))return;" in fn_body(code, 'function fixedOpts(')
+      and "&&!isLineMark(m.name)&&isRealMark(m)).map(m=>[m.id,m])" in fn_body(code, 'function raceMarkOpts(')
+      and "&&!isLineMark(m.name)&&isRealMark(m);" in fn_body(code, 'function finPinOpts('))
+    # a: colours
+    g('a: the caution colour, light and dark, and its classes',
+      page.count('--caution:') == 3 and '.cautTxt{color:var(--caution)!important}' in page and '.note.caut{border-color:var(--caution);color:var(--caution)}' in page
+      and '.muteTxt{color:var(--muted)!important}' in page)
+    bl = fn_body(code, 'function buildLegs(')
+    g('a: section 4 keeps red only for what holds Send back; leg rows: depth notes grey, line estimates amber',
+      "const warnC=farLine.concat(checks(ents,cs)), warnR=warn.filter(x=>!warnC.includes(x));" in bl
+      and "(fixNote?'<br><span class=\"viaTxt muteTxt\">'+esc(fixNote)+'</span>':'')" in bl
+      and "'<br><span class=\"viaTxt cautTxt\">start line: estimate</span>'" in bl and "'<br><span class=\"viaTxt cautTxt\">finish line: estimate</span>'" in bl)
+    g('a: Copy for Sail Scoring: INCOMPLETE red, the rest amber; Check recorded marks: Likely wrong red, Check amber',
+      "(/^INCOMPLETE/.test(t)?'flag':'caut')" in fn_body(code, 'function setCC(') and "(f.lvl==='bad'?' bad':' caut')" in fn_body(code, 'function fxFlag('))
+    # b: two sections per row, in Pat's order
+    rd = fn_body(code, 'function render(')
+    fr = fn_body(code, 'function finRowHtml(')
+    g('b: the Start line row is the Committee boat section, the Start Pin section, then the line',
+      "startSec('cb',!!cardS)+startSec('pin',!!cardS);" in rd and "sw+ends+sMiss+'<div id=\"lineInfo\" class=\"endSec\">'+lineInfo()+'</div>'+gsLink+" in rd)
+    g('b: the Finish line row: the Finish type list, then (a finish set) the Finish Pin section, the Committee boat section, the line',
+      "box.appendChild($('finishFields'));box.appendChild($('finishCard'));" in rd and "h=p+c+l;}" in fr
+      and fr.index("<div class=\"secHead\">Finish Pin</div>") < fr.index("<div class=\"secHead\">Committee boat</div>"))
+    # c: helpers open by themselves only when their end is missing
+    g('c: a helper opens by itself only while its end is missing, otherwise behind its Change … button (Close once open)',
+      "const open=!e.m||helpIs('start',w);" in fn_body(code, 'function startSec(') and "open=!set||helpIs('fin','all');" in fr
+      and "changeBtn('fin','all',open?'Close':'Change finish…')" in fr and "return helpIs(row,w)?changeBtn(row,w,'Close'):'';" in fn_body(code, 'function helpTop('))
+    # d and e
+    ep = fn_body(code, 'function endPicker(')
+    g('d: no echo line and no Back to auto under a list; only an estimate in use is said again, in amber',
+      'endAuto' not in ep and "esc(e.reason)" not in ep and "(isEst?'<div class=\"meta cautTxt\">'+esc(helpLong(e.m))+'</div>':'')" in ep)
+    g('e: one note per line: no second "estimate –" note beside an end\'s estimate label',
+      'Finish line: estimate –' not in fn_body(code, 'function finLineNote(') and 'Start line: estimate –' not in fn_body(code, 'function lineInfo('))
+    # f: shorter wording
+    g('f: the shorter wording', "reason:'Auto: latest by '+hm" in code and "reason:'Auto (saved)'" in code and "reason:'As Start '+(from+1)" in code
+      and "opt('none','None (not used)')" in ep and "Pin end:<div class=\"sideBtns\"" in fr and 'auto finds no committee boat or Start Pin' not in code)
+    # g: Finish type, the card switch folded in
+    g('g: "Finish type" is the row\'s main choice: bold label, larger text, dark border',
+      '<label>Finish type<select id="finishSel">' in page and '.finType select{font-size:1.05rem;font-weight:700;border:2px solid var(--ink);padding:12px}' in page)
+    g('g: on a card course the Finish type list holds the card\'s own finish and writes only what the switch wrote',
+      "[['card:auto',mark?'From the card: '+c.f+', the mark itself':'From the card: the Grassy Walk line']]" in fn_body(code, 'function finTypeOpts(')
+      and "if(c){if(v==='card:auto')delete c.lf;else if(v==='card:point')c.lf='card';" in code
+      and "else{c.lf='laid';c.lfc=v;if(v==='start')c.lfs='start';else delete c.lfs;}}" in code
+      and "lineSwitch('f')" not in code)
 
 
 def t28_local_build(tmp):
@@ -1399,6 +1499,194 @@ def t28_local_build(tmp):
     g('refused: --label other than LOCAL on the command line', r.returncode != 0 and not os.path.exists(os.path.join(tmp, 'out28x')))
 
 
+def t29_pin_routes_guards():
+    """.44, the pin routes (Pat, 22 October 2026): a pin placed by distance and bearing is measured from the committee boat
+    in use or another mark laid in this race, never a harbour mark; a pin at a harbour mark is set at it. Guards, not
+    proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('29 pin routes: ' + name, ok, detail)
+    pb, ss, pa = fn_body(code, 'function placeBox('), fn_body(code, 'function startSec('), fn_body(code, 'function pinAtBox(')
+    ok, po = fn_body(code, 'function pinFromOk('), fn_body(code, 'function pinFromOpts(')
+    pin_h = code[code.find("if(act==='pinAt'){"):code.find("if(act==='place'){")]
+    pl_h = code[code.find("if(act==='place'){"):code.find("if(act==='undoPlaced'){")]
+    fa, fr, sp = fn_body(code, 'async function finAct('), fn_body(code, 'function finRowHtml('), fn_body(code, 'function setPinAt(')
+    # 1: both Start Pin routes with a committee boat in use
+    g('1: with a committee boat in use the Start Pin helper offers Set Start Pin at, then Place Start Pin',
+      "pinAtBox(!!oth)+(oth?routeOr()+placeBox('pin',oth,!e.m):'')" in ss and "if(endPick('cb').m)return;" not in pin_h)
+    g('1: the set-pin message drops "Now place the committee boat from it." while a boat is in use',
+      "(cbInUse?'':' Now place the committee boat from it.')" in pin_h and "const cbInUse=!!endPick('cb').m, set=setPinAt(k,src,t);" in pin_h
+      and "(cbInUse?'.':'; then place the committee boat from it.')" in pa)
+    # 2: the Start Pin's "from" list
+    g('2: the Start Pin\'s "from" list: "Committee boat in use: R1 10:50" first, then pinFromOpts, no Fixed marks',
+      "w==='pin'?'Committee boat in use: '+fixWhen(have)" in pb
+      and "(w==='pin'?pinFromOpts(d.ref,have.id):raceMarkOpts(d.ref,have?have.id:'')+fixedOpts(d.ref))" in pb
+      and 'fixedOpts' not in po and 'raceMarkOpts' not in po and 'bank()' not in po)
+    g('2: only this race\'s laid marks: its recorded or typed fixes, or a club laid mark at a fix (not pasted)',
+      "if(!m||m.virtual||m.missing||!isFinite(m.lat)||isLineMark(m.name)||!isRealMark(m))return false;" in ok
+      and "if(m.card)return isLaidCard(m)&&!!m.atFix&&!(m.laidSt&&m.laidSt.use&&isPasted(m.laidSt.use));" in ok
+      and "return m.race===S.race&&!isPasted(m);" in ok and "S.marks.filter(m=>!m.card&&m.race===S.race)" in po)
+    g('2: a held harbour-mark "from" is refused in the Place handler, with Pat\'s wording',
+      "if(w==='pin'&&ref!==have&&!pinFromOk(ref)){" in pl_h
+      and "'A Start Pin is never placed from a harbour mark: use Set Start Pin at to put it at the mark.'" in pl_h)
+    g('2: the committee boat\'s own "from" list keeps the harbour marks (fixedOpts, once)', pb.count('fixedOpts(d.ref)') == 1
+      and "function estRef(v){const c=/^card:/.test(v)&&CARD.marks[v.slice(5)];return c?{name:v.slice(5),lat:c.lat,lon:c.lon,card:v.slice(5)}:v?markById(v):null;}" in code)
+    # 3: an earlier race's pin, set at its position
+    ep = fn_body(code, 'function earlierPinOpts(')
+    g('3: "Start Pin laid for an earlier race (set at its position)" in Set Start Pin at, and the Finish Pin one in Set Finish Pin at',
+      "earlierPinOpts('pin',d.at)" in pa and "earlierPinOpts('fpin',sel)" in fn_body(code, 'function finPinOpts(')
+      and "lab+' laid for an earlier race (set at its position)\">'" in ep and "'Race '+m.race+'\\'s '+lab+' ('+fixWhen(m)+')'" in ep
+      and "m.race<S.race&&test(m.name)&&!isPasted(m)&&!goneOf(m)" in ep)
+    g('3: set at it, named "Race 1\'s Start Pin (recorded R1 10:58)" (or Finish Pin); never "Start Pin Race 1\'s Start Pin"; short "Race 1\'s pin" on drawings',
+      "isStartPin(src.name)&&src.race<S.race?earlierAt('Start Pin',src)" in sp
+      and "isFinishPin(src.name)&&src.race<S.race?earlierAt('Finish Pin',src)" in fa
+      and "function earlierAt(lab,src){return 'Race '+src.race+'\\'s '+lab+' ('+(isTypedPos(src)?'typed':'recorded')+' '+fixWhen(src)+')';}" in code
+      and "function pinName(lab,at){return / Pin$/.test(at)||/'s (Start|Finish) Pin \\(/.test(at)?at:lab+' '+at;}" in code
+      and "function shortAt(at){return String(at).replace(/^(Race \\d+'s) (Start|Finish) Pin\\b.*$/,'$1 pin');}" in code)
+    # 6 (Pat, 22 October 2026): after a manual choice, only a NEWER recorded fix is offered; start ends never after the start
+    fb = fn_body(code, 'function finPinPlaceBox(')
+    nf = fn_body(code, 'function newerEnd(')
+    g('6: "Newer: …" only for a fix newer than the end in use; a start line end never after the start time, a finish end after it too',
+      "fixMoment(x)>t0&&(!startEnd||fixMoment(x)<=ts)" in nf and "const startEnd=w==='cb'||w==='pin'" in nf and "!helpOf(x)" in nf
+      and "re?use('Newer: '+fixText(re,w),re):" in code and "data-act=\"finUse\"" in fr and "if(act==='finUse'){" in fa
+      and "if(t.dataset.w==='fcb'){setEnd('fcb',t.dataset.f);return;}" in code)
+    g('6: the in-use wording: "Start Pin: at …, set for Race 2 at 13:00" (Finish Pin the same)',
+      "const setFor=(lab,at)=>lab+': at '+at+', set for Race '+m.race+' at '" in fn_body(code, 'function helpLong('))
+    # 7: the start's estimated committee boat at the finish
+    g('7: the finish Auto uses the start\'s estimated committee boat, marked as an estimate; the finish line is then an estimate',
+      "if(s.m&&helpOf(s.m))return {m:s.m,how:'auto',reason:'Auto: the start\\'s committee boat – estimate',est:true};" in fn_body(code, 'function autoEnd(')
+      and "sc=!f&&estOf(fl.cb)" in fn_body(code, 'function finEstNow(') and "estWords(sc)+' (the start\\'s estimate)'" in fn_body(code, 'function finEstNow(')
+      and 'Start boat is an estimate: choose a committee boat or place the Finish boat' not in code)
+    # 5 and 12, 16: the suggested pin end, Square to the last leg, the Option 1 note
+    g('5: the Finish Pin end suggested from the approach, on its button only, until the RO taps a side (sideSet)',
+      "const sg=!side&&!(z.pin&&z.pin.sideSet)?finSideSuggest():null;" in fr and "' (suggested from the approach from '+esc(sg.from)+')'" in fr
+      and "z.pin=Object.assign({},z.pin,{side:v,sideSet:true})" in fa and "return {v:rel<180?'starboard':'port',from:p.name};" in fn_body(code, 'function finSideSuggest(')
+      and 'sideSet' not in fn_body(code, 'function setOut('))
+    sqr = fn_body(code, 'function finSqRow(')
+    g('12: "Suggest: Square to the last leg" in box 1, with which end the pin goes', "finSqRow(1,d)+note" in fb and 'data-act="sqLeg" data-b="\'+n+\'"' in sqr
+      and 'Square to the last leg</button>' in sqr and "(n===2?'Committee boat':'Finish Pin')+': '+finSqEnd(n,d)+' end</button>" in sqr and 'function finSuggest(' not in code)
+    g('16: Option 1 of the Finish Pin says it is saved at that mark\'s position', "Saved at that mark\\'s position as this start\\'s Finish Pin." in fn_body(code, 'function finPinBox('))
+    # 4: Place Finish Pin from the committee boat end in use only
+    fb = fn_body(code, 'function finPinPlaceBox(')
+    fp = fa[fa.find("if(act==='finPinPlace'){"):fa.find("if(act==='finPlace'){")]
+    g('4: box 1 is the committee boat that stays (its list), then Place Finish Pin from it, with no list of marks',
+      "const b1=endPicker('fcb')+(ce.m?finPinPlaceBox(ce.m):" in fn_body(code, 'function finBoxes(') and 'data-f="ref"' not in fb and '<select' not in fb
+      and "°M from the '+who+' in use: '+esc(fixWhen(cb))+' on the water '" in fb and 'data-act="finPinPlace">Place pin</button>' in fb)
+    g('4: placed from endPick(\'fcb\') only, a typed position saved as this start\'s Finish Pin, an estimate',
+      "const have=endPick('fcb').m;if(!have)return;" in fp and "const p=geoDest(have,((brgM-varW())%360+360)%360,dist);" in fp
+      and "rec={ref:add('Finish Pin',p,t),at:'',side:z0.pin&&z0.pin.side||'',from:fixWords2(have),m:Math.round(dist),brgM:Math.round(brgM)%360};" in fp
+      and 'ls().fpin=rec.ref;' in fp and "if(old)finGoneAdd(k,finPinRec(old));" in fp and "if(old)await withdrawReplaced(k,'fpin',old,endDid(old));" in fp)
+    g('4: a placed Finish Pin is saved and read back (m, from, brgM) and counts as this start\'s own end everywhere',
+      "+v.pin.m>0?Object.assign({from:String(v.pin.from||''),m:+v.pin.m,brgM:+v.pin.brgM||0}" in fn_body(code, 'function finNorm(')
+      and "+g.m>0?{from:String(g.from||''),m:+g.m,brgM:+g.brgM||0}:{}" in fn_body(code, 'function finGoneRec(')
+      and "function finPinOwn(p){return !!p&&(!!p.at||+p.m>0);}" in code
+      and code.count('finPinOwn(') >= 10 and 'z.pin&&z.pin.at' not in code and 'fz.pin&&fz.pin.at' not in code)
+    g('4: it is an estimate: amber, in the leg table and Copy for Sail Scoring ("Finish Pin placed …"), helpLong "Finish Pin – estimate"',
+      "function finIsEst(m){const f=finOf(m);return !!f&&(f.w==='fcb'||+f.m>0);}" in code
+      and "const est=m=>m&&(estOf(m)||finIsEst(m));" in fr and "const isEst=e.m&&(estOf(e.m)||finIsEst(e.m));" in code
+      and "fp&&fp.w==='fpin'&&+fp.m>0?finPinWords(fp):''" in fn_body(code, 'function finEstNow(')
+      and "(+fz.m>0?placed('Finish Pin',fz):" in fn_body(code, 'function helpLong(')
+      and "function finPinWords(e){return 'Finish Pin placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+    g('4: box 2 sets the Finish Pin at the mark, then places the Finish boat from it (finPinAt, finPlace)',
+      "await finAct('finPinAt',{dataset:{}},k,sayIn('finPinAt',k));" in fa and "await finAct('finPlace',{dataset:{}},k,sayIn('finPlace',k));" in fa
+      and "if(act==='finPlace'){if(z0.mid)return;const have=endPick('fpin').m;if(!have)return;" in fa)
+    # 5: the committee boat placed from a harbour mark
+    g('5: from a harbour mark with no Start Pin in use, the Start Pin is set at that mark too (one placement, both ends)',
+      "const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref);" in pl_h
+      and "set=harbour&&ref!==have?setPinAt(k,ref,t,prev):null;" in pl_h and "', and the Start Pin set at '+set.at+(prevW?' in place of '+prevW:'')+'; both saved as typed positions'" in pl_h
+      and "if(w==='cb')h+=open?(e.m?helpTop('start','cb'):'')+placeBox('cb',oth,!e.m):changeBtn('start','cb','Change boat…');" in ss
+      and 'From a harbour mark, the Start Pin is set at that mark too, so one placement gives both ends.' in pb)
+    g('13: with a different Start Pin in use it is switched for the harbour mark, named, and Undo puts it back',
+      "if(harbour&&have){const sp=setOf(have);if((sp&&sp.at===ref.card)||geo(have,ref).m<1)ref=have;else prev=have;}" in pl_h
+      and 'Not placed: the Start Pin in use is' not in code and "was=prev?pinWas(k,prev):null" in sp
+      and "const back=was?pinBack(k,was):'';" in code and "S.outbox.push({action:'add',id,date:day,race:S.race,name:'Start Pin',lat:was.lat,lon:was.lon,acc:0,time:t});" in fn_body(code, 'function pinBack(')
+      and "const was=pinWasNorm(pa.was);" in code)
+    g('5: from a laid mark or the Start Pin in use the Start Pin is unchanged (only a harbour mark sets it)',
+      pl_h.count('setPinAt(') == 1 and 'isCourseCard(ref)' in pl_h)
+    # one pin record per start: setting replaces a placed pin and placing replaces a set one, each kept as replaced (A78)
+    g('one Start Pin of this start at a time: set replaces placed, placed replaces set, each kept as replaced until withdrawn',
+      "if(oldP){estDrop(oldP);goneAdd(k,Object.assign({},oldP));" in sp
+      and "if(oldAt){delete S.linePinAt[k];goneAdd(k,{w:'pin',ref:oldAt.ref,at:oldAt.at});}" in pl_h
+      and "if(oldAt)await withdrawReplaced(k,'pin',oldAt,'set at '+oldAt.at);" in pl_h)
+    # 6: saved data read as before
+    g('6: saved data read as before: placements from a harbour mark keep their wording (from, estWords, helpLong)',
+      "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl_h
+      and "function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+    # layout (Pat, 22 October 2026): each pin route in its own box, its message inside it, "or" only between two
+    rb = fn_body(code, 'function routeBox(')
+    g('layout: "Option 1 – Pin at a mark" and "Option 2 – Pin by distance and bearing", each a bordered box',
+      "(n===1?'Option 1 – Pin at a mark':'Option 2 – Pin by distance and bearing')" in rb and '<div class="routeBox" data-route="' in rb
+      and '.routeBox{border:1px solid var(--line);border-radius:8px;' in page and "function routeOr(){return '<div class=\"routeOr\">or</div>';}" in code)
+    g('layout: Set Start Pin at is Option 1, Place Start Pin is Option 2, each with its message inside its box',
+      pa.startswith('function pinAtBox(cbInUse){') and "return routeBox(1,'<div class=\"meta estBox\">Set Start Pin at " in pa
+      and "msgSlot('pinAt')+" in pa and pa.rstrip().endswith("'</div>');}")
+      and "const body='<div class=\"meta estBox\">Place '+what+': " in pb and "return (w==='pin'?routeBox(2,body):body)+" in pb
+      and pb.index("msgSlot('place')") < pb.index("return (w==='pin'?routeBox(2,body):body)+") and pb.index("data-act=\"sqWind\"") < pb.index("return (w==='pin'?routeBox(2,body):body)+"))
+    g('layout: "or" only between the Start Pin\'s two routes, where a committee boat is in use',
+      "pinAtBox(!!oth)+(oth?routeOr()+placeBox('pin',oth,!e.m):'')" in ss and code.count('routeOr()+') == 1)
+    # .44 (Pat, 22 October 2026): the finish set as the RO works on the day
+    bx = fn_body(code, 'function finBoxes(')
+    fbx = fn_body(code, 'function finBox(')
+    g('finish (item 2): the three ways in order, with Pat\'s titles, each collapsed to its title until tapped, one open at a time',
+      bx.index("finBox(1,'1. Committee boat remains, place new Finish Pin',b1)") < bx.index("finBox(2,'2. Choose Finish mark and position Committee boat',b2)")
+      < bx.index("finBox(3,'3. Move Committee boat and Finish Pin',b3)") and "return h+(open&&!z.mid?finBoxes(ce):'');}" in fr
+      and 'data-act="finBoxOpen" data-b="\'+n+\'" aria-expanded="\'+o+\'"' in fbx and "+(o?body:'')+'</div>';}" in fbx
+      and "if(act==='finBoxOpen'){const x=k+'|'+b.dataset.b, was=!!finOpen[x];finBoxesShut(k);if(!was)finOpen[x]=true;render();return;}" in code
+      and "if(set&&!open)finBoxesShut(k);" in fr and "if(row==='fin')finBoxesShut(k);" in code and 'routeHead' not in fbx)
+    g('finish: box 2\'s midpoint is an emergency option below its main action; box 3 (item 3) is a new recorded fix, then the pin from it, only',
+      bx.index('data-act="finPinBoat" data-b="2"') < bx.index('Emergency only, no committee boat: ') and 'data-act="finMidAt"' in bx
+      and 'data-act="finCbPin"' in bx and 'data-b="3">Place boat' not in bx and 'that mark is the Finish Pin' not in bx and 'b3at' not in code
+      and 'finPinBoat3' not in code and "isCB(m.name)&&!helpOf(m)&&!goneOf(m)" in bx and "m.race===S.race" in bx)
+    g('finish (items 4, 5): boxes 2 and 3 have "Square to the last leg" and their end switch, box 2 the committee boat\'s, box 3 the Finish Pin\'s',
+      "msgSlot('finPinBoat')+finSqRow(2,d)+s2.note+" in bx and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx
+      and "inp('b2brg',s2.ph,'5em',1)" in bx and "inp('b3pbrg',s3.ph,'5em',1)" in bx
+      and "2:{sq:'b2sq',end:'b2end',dist:'b2dist',brg:'b2brg',what:'committee boat'}" in code and "3:{sq:'b3sq',end:'b3end',dist:'b3pdist',brg:'b3pbrg',what:'pin'}" in code
+      and "if(act==='sqLeg')d[f.sq]=d[f.sq]==='leg'?'':'leg';else d[f.end]=finSqEnd(n,d)==='port'?'starboard':'port';" in code
+      and "return n===1?endPick('fcb').m:n===2?estRef(String(d.b2at||'')):refFix(String(d.b3cb||''),'fcb');" in fn_body(code, 'function finSqFrom('))
+    g('finish (fault 6): square to the leg from the last mark to the line\'s midpoint, for the length typed or 200 m, in all three boxes',
+      "const al=Math.acos(len/(2*g.m))*180/Math.PI, t=((g.brg+(end==='port'?al:-al))%360+360)%360;" in fn_body(code, 'function sqLegBrg(')
+      and "if(!(g.m>len/2+1))return" in fn_body(code, 'function sqLegBrg(') and "len=+d[f.dist]>0?+d[f.dist]:200" in fn_body(code, 'function finSq(')
+      and code.count('sqLegBrg(') == 2 and "if(n)finSqPaint(n);" in code and "['ref','b2at','b3cb'].includes(t.dataset.f)" in code)
+    g('finish (fault 7): the emergency midpoint withdraws a placed Finish boat, kept as replaced until then',
+      "if(z.cb){old=Object.assign({w:'fcb'},z.cb);delete z.cb;finSet(k,z);finGoneAdd(k,old);if(old.fcb)ls().fcb=old.fcb;else delete ls().fcb;}" in fa
+      and "if(old){finFollowAll();commit();await withdrawReplaced(k,'fcb',old,endDid(old));}" in fa)
+    g('finish (item 11): a finish line more than FIN_ALONG off square to the last leg (to its midpoint) is said in amber',
+      'const FIN_ALONG=30;' in code and "⚠ Finish line runs nearly along the last leg ('+Math.round(off)+'° off square)" in fn_body(code, 'function finLineNote(')
+      and "return 90-Math.min(x,180-x);" in fn_body(code, 'function finOffSquare('))
+    pl = fn_body(code, 'function plot(')
+    g('sketch (fault 8): labels keep off every line drawn, and by their own mark',
+      pl.count('drawn.push(') == 3 and "drawn.filter(l=>cross(b,l)).length*6+(!ofLine&&notOwn(b,x,y)?8:0)" in pl and 'ring(95)' in pl
+      and "const w=tw(txt,fs)+4," in pl and "mctx.measureText(t).width" in pl and pl.count("'var(--warn)',true)") == 2)
+    g('start (item 9): Change boat… suggestions from a harbour mark chosen under "from" (it becomes the Start Pin)',
+      "const hr=w==='cb'&&d.ref?harbourRef(d.ref):null, base=hr||(!d.ref?have:null);" in pb and "const sg=base?estSuggest(base,w,d):null" in pb
+      and "(have||w==='cb'?'<div class=\"meta estBox\">Suggest: " in pb
+      and "return r&&isFinite(r.lat)&&isCourseCard(r)&&isRealMark(r)?r:null;" in fn_body(code, 'function harbourRef('))
+    g('finish: the Finish type list has no "At the last mark" except on a start saved with it; "Shared from another start"',
+      "const own=[['start','Same as the start line'],['finishpin','Committee boat & Finish Pin']].concat(old?[['last','At the last mark (saved before .44)']]:[]);" in fn_body(code, 'function finTypeOpts(')
+      and '<optgroup label="Shared from another start">' in code and 'Finish lines set on earlier starts' not in code
+      and 'At the last mark</option>' not in page)
+    ep2 = fn_body(code, 'function endPick(')
+    g('finish: Auto never picks a Finish Pin for a start set up in .44; an earlier version\'s pick is kept, flagged "check it"',
+      "if(w==='fpin'&&v&&v!=='auto')return {m:null,how:'none',reason:'No finish set'};" in ep2 and "if(w==='fpin'&&a.m)a.legacy=true;" in ep2
+      and "if(!S.lineSel[k].fpin||S.lineSel[k].fpin==='auto')S.lineSel[k].fpin='none';" in code and "S.lineSel[k].fpin='none';   // .44: no Finish Pin, never Auto" not in code
+      and "if(ls().fpin===i.e.ref)S.lineSel[k].fpin='none';" in fa
+      and "⚠ Finish Pin chosen by Auto in an earlier version: '+esc(fixWords2(pin))+(pin.race<S.race?' (from Race '+pin.race+')':'')+' – check it</div>'" in fr)
+    g('finish: a Finish Pin a RIB recorded for this race is offered ("Use it"), never chosen',
+      "m.race===S.race&&isFinishPin(m.name)&&!helpOf(m)&&!goneOf(m)" in fr and "use('Finish Pin recorded for this race: '+fixText(rec,'fpin'),'fpin',rec)" in fr)
+    g('finish: "No finish set" in amber in the row and on the leg table\'s last leg; Copy for Sail Scoring keeps INCOMPLETE, as .43 did',
+      '<div class="meta cautTxt finNone">No finish set</div>' in fr and "(noFinSet&&i===L.legs.length-1?'<br><span class=\"viaTxt cautTxt\">no finish set</span>':'')" in code
+      and 'No finish set: the course ends at the last mark.' not in code and "noF=!L.fPt&&!finIsLast(r,st);" in fn_body(code, 'function ccDoc('))
+    g('Start Pin: the list holds this race\'s fixes (and one chosen); one carried from an earlier race says so',
+      "(w!=='pin'||m.race===S.race||refFor(m)===v)" in fn_body(code, 'function endChoices(')
+      and "'<div class=\"meta cautTxt\">carried from Race '+e.m.race+' ('+(isTypedPos(e.m)?'typed':'recorded')+' '+fixWhen(e.m)+')</div>'" in code
+      and "if(!list.length&&!e.m&&!a.m)return" in fn_body(code, 'function endPicker('))
+    g('a change in the Start line or Finish line row clears that row\'s old messages (the leftover Undo message)',
+      "msgClear(w==='fcb'||w==='fpin'?'finish':'start');" in fn_body(code, 'function setEnd(') and "v=e.target.value;msgClear('finish');" in code
+      and "const row=act==='open'?null:b.closest('#startRow,#finishRow');if(row)msgClear(row.id==='finishRow'?'finish':'start');" in code)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1428,7 +1716,9 @@ def main():
         t24_version_gate_guards()
         t25_a78_guards()
         t26_fixes43_guards()
+        t27_fixes44_guards()
         t28_local_build(tmp)
+        t29_pin_routes_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
