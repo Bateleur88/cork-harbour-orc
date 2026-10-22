@@ -123,6 +123,11 @@ altered in ways it must refuse and checks that it writes nothing:
                 every withdrawal, Undo and Remove Start handle it; an entry whose fix is gone from its race is removed
                 on load, saved and said (checkGoneRefs), and Remove Start never withdraws a fix already gone. Guards,
                 not proof: no JavaScript is run
+ 28  LOCAL      --label LOCAL, the local test site's build: PAGE_VERSION <version>-test-L<HHMM>, "LOCAL TEST" banner and
+                title, BUILD.txt says LOCAL; nothing else differs from the normal build, whose worker and marks.php it
+                shares byte for byte. Refused in a LOCAL build (and written nothing), but built normally: tradboats.ie or
+                orc-ireland.org named anywhere (a comment too), a full web address not in LOCAL_URLS, one starting //,
+                and one that only begins like an allowed host; an unknown label or a build time not HHMM is refused
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -152,9 +157,10 @@ def report(name, ok, detail=''):
         failed.append(name)
 
 
-def run(page, out, sw=SW):
-    return subprocess.run([sys.executable, SCRIPT, '--page', page, '--sw', sw, '--marks', MARKS, '--out', out],
-                          capture_output=True, text=True, encoding='utf-8')
+def run(page, out, sw=SW, label=''):
+    return subprocess.run([sys.executable, SCRIPT, '--page', page, '--sw', sw, '--marks', MARKS, '--out', out]
+                          + (['--label', label] if label else []), capture_output=True, text=True, encoding='utf-8')
+
 
 
 def read(p, mode='r'):
@@ -1331,6 +1337,68 @@ def t26_fixes43_guards():
       and "v.cb.fromWhen?{fromWhen:String(v.cb.fromWhen)}:{}" in fn_body(code, 'function finNorm('))
 
 
+def t28_local_build(tmp):
+    """--label LOCAL: the local test site's build (php -S on this PC), never uploaded."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    live = read(PAGE)
+    v = re.search(r"const PAGE_VERSION='([^']+)';", live).group(1)
+    g = lambda name, ok, detail='': report('28 LOCAL: ' + name, ok, detail)
+    norm, loc = os.path.join(tmp, 'out28n'), os.path.join(tmp, 'out28l')
+    rn, rl = run(PAGE, norm), run(PAGE, loc, label='LOCAL')
+    g('normal and LOCAL builds exit 0', rn.returncode == 0 and rl.returncode == 0, rn.stdout + rl.stdout + rl.stderr)
+    if rn.returncode or rl.returncode:
+        return
+    nt, lt = read(os.path.join(norm, 'course-test', 'index.html')), read(os.path.join(loc, 'course-test', 'index.html'))
+    m = re.search(r"const PAGE_VERSION='([^']+)';", lt)
+    lv = m.group(1) if m else ''
+    g('PAGE_VERSION is <version>-test-L<HHMM>', re.fullmatch(re.escape(v) + r'-test-L\d{4}', lv) is not None, lv)
+    g('the LOCAL TEST banner with that version, no TEST COPY',
+      f'>LOCAL TEST – not live data · /marks-test/ · PAGE_VERSION {lv}</div>' in lt and 'TEST COPY' not in lt)
+    g('the LOCAL TEST title', lt.count('<title>LOCAL TEST – ') == 1)
+    b = read(os.path.join(loc, 'BUILD.txt'))
+    g('BUILD.txt names the version and LOCAL', f'PAGE_VERSION {lv}\n' in b and 'label LOCAL: for the local test site only' in b)
+    g('the normal build names no LOCAL', 'LOCAL' not in nt and 'label LOCAL' not in read(os.path.join(norm, 'BUILD.txt')))
+    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test';")
+              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test</div>')
+              .replace('<title>LOCAL TEST – ', '<title>TEST – ')
+              .replace('>LOCAL TEST – not live data · ', '>TEST COPY – not live data · '))
+    g('nothing else differs from the normal build', back == nt)
+    for f in ('course-test/sw.js', 'marks-test/marks.php'):
+        g(f + ' byte-identical to the normal build\'s', read(os.path.join(loc, f), 'rb') == read(os.path.join(norm, f), 'rb'))
+    # refused in a LOCAL build, built normally; a refusal leaves the earlier LOCAL build as it was
+    before = read(os.path.join(loc, 'course-test', 'index.html'), 'rb')
+    script_end = live.rindex('</script>')
+    inject = lambda code: live[:script_end] + code + '\n' + live[script_end:]
+    cases = {
+        'tradboats.ie in a comment': live.replace('<head>', '<head>\n<!-- copied from tradboats.ie -->', 1),
+        'orc-ireland.org in a string': inject("const HOST='orc-ireland.org';"),
+        'TRADBOATS in capitals': inject("const H='TRADBOATS.IE';"),
+        'a web address not in the list': inject("const U='https://example.com/x';"),
+        'an http address': inject("const U='http://192.168.0.34:8765/course-test/';"),
+        'an address starting //': inject("const U='//example.com/x';"),
+        'an address that only begins like an allowed host': inject("const U='https://fonts.googleapis.com.example.com/x';"),
+        'another path on an allowed host': inject("const U='https://unpkg.com/other@1.0.0/x.js';"),
+    }
+    for name, text in cases.items():
+        p = os.path.join(tmp, 'bad28.html')
+        with open(p, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+        r, rn2 = run(p, loc, label='LOCAL'), run(p, os.path.join(tmp, 'out28n2'))
+        after = read(os.path.join(loc, 'course-test', 'index.html'), 'rb')
+        g('refused: ' + name, text != live and r.returncode != 0 and 'REFUSED' in r.stdout and after == before
+          and rn2.returncode == 0, f'LOCAL exit {r.returncode}; normal exit {rn2.returncode}; {r.stdout.strip()[:160]}')
+    for name, args in {'an unknown label': ('TEST', '1432'), 'a build time not HHMM': ('LOCAL', '14:32')}.items():
+        try:
+            build_test.build_page(live, *args)
+            g('refused: ' + name, False, 'built')
+        except build_test.Refused:
+            g('refused: ' + name, True)
+    r = subprocess.run([sys.executable, SCRIPT, '--page', PAGE, '--out', os.path.join(tmp, 'out28x'), '--label', 'TEST'],
+                       capture_output=True, text=True)
+    g('refused: --label other than LOCAL on the command line', r.returncode != 0 and not os.path.exists(os.path.join(tmp, 'out28x')))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1360,6 +1428,7 @@ def main():
         t24_version_gate_guards()
         t25_a78_guards()
         t26_fixes43_guards()
+        t28_local_build(tmp)
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

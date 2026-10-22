@@ -2,7 +2,7 @@
 """Build a parallel TEST copy of the race officer page and marks.php, for /course-test/ and /marks-test/.
 
     python scripts/build_test.py [--page pages/course/course_v8.html] [--sw pages/course/sw.js] [--marks pages/marks/marks.php]
-                                 [--out build/test]
+                                 [--out build/test] [--label LOCAL]
 
 Writes, and nothing else:
     OUT/course-test/index.html   the RO page, talking only to /marks-test/ and keeping its own browser data
@@ -35,6 +35,11 @@ Refuses, and writes nothing, if:
       (the RIB worker deletes those, STATUS A18), names its cache other than "coursepage|"+folder+"|"+version, cleans up
       other than its own folder, or keeps a page that is not its own version (worker_problems).
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
+
+--label LOCAL builds for the local test site on this PC (php -S), never for upload. It differs from the normal build only in:
+    PAGE_VERSION 'X-test-L<HHMM>' (the build time, so every local rebuild is a new version), the title "LOCAL TEST – " and
+    the banner "LOCAL TEST – not live data · /marks-test/ · PAGE_VERSION ...". It also refuses a page that names tradboats.ie
+    or orc-ireland.org anywhere, or any full web address not in LOCAL_URLS. Without the flag the build is unchanged.
 """
 import argparse
 import hashlib
@@ -44,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_BASE, TEST_STORE = '/marks-test/', 'test-'
@@ -65,6 +71,13 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "return !!VERSION&&!!m&&m[1]===VERSION;",
            "const net=fetch(r).then(res=>{copy=res.clone();return res;});",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
+# --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
+# whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
+LOCAL_URLS = ('https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://unpkg.com/leaflet@1.9.4/dist/',
+              'https://tile.openstreetmap.de/', 'https://tiles.openseamap.org/seamark/', 'https://wa.me/')
+LIVE_HOSTS = re.compile(r'tradboats|orc-ireland', re.I)
+URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s\'"<>)\\`]*', re.I)
+URL_NO_SCHEME = re.compile(r'(?<![\w:/])//[a-z0-9-]+(?:\.[a-z0-9-]+)+', re.I)
 
 
 class Refused(Exception):
@@ -198,14 +211,38 @@ def build_worker(src):
     return t
 
 
-def build_page(src):
+def local_url_problems(text):
+    """For a LOCAL build: every mention of a live host, and every full web address not in LOCAL_URLS, as readable lines.
+    Addresses with a scheme are looked for in the whole page, comments included; addresses starting // only in the
+    code, so a comment such as "//e.g." is not read as one."""
+    out = [f'line {text.count(chr(10), 0, x.start()) + 1}: names {x.group(0)!r}' for x in LIVE_HOSTS.finditer(text)]
+    found = [x.group(0) for x in URL.finditer(text)] + [x.group(0) for x in URL_NO_SCHEME.finditer(strip_comments(text))]
+    for u in found:
+        if not any(u == a or u.startswith(a if a.endswith('/') else a + '/') or (not a.endswith('/') and u.startswith(a + '?'))
+                   for a in LOCAL_URLS):
+            out.append(f'a full web address not in LOCAL_URLS: {u[:80]!r}')
+    return out
+
+
+def build_page(src, label='', stamp=''):
+    """The test page and its PAGE_VERSION. label 'LOCAL' (with stamp, the build time as HHMM) makes the local test site's
+    page instead; without it the result is the normal test copy."""
+    if label not in ('', 'LOCAL'):
+        raise Refused(f'unknown label {label!r}: the only label is LOCAL')
+    if label and not re.fullmatch(r'\d{4}', stamp):
+        raise Refused(f'a LOCAL build needs the build time as HHMM, not {stamp!r}')
     problems = storage_problems(src)
     if problems:
         raise Refused('the live page uses a browser storage key without STORE:\n  ' + '\n  '.join(problems))
+    if label:
+        problems = local_url_problems(src)
+        if problems:
+            raise Refused('a LOCAL build refuses this page:\n  ' + '\n  '.join(problems))
     m = re.findall(r"const PAGE_VERSION='([^']+)';", src)
     if len(m) != 1:
         raise Refused(f'expected exactly one PAGE_VERSION, found {len(m)}')
-    version = m[0] + '-test'
+    version = m[0] + '-test' + (f'-L{stamp}' if label else '')
+    title_pre, banner_pre = ('LOCAL TEST – ', 'LOCAL TEST – ') if label else ('TEST – ', 'TEST COPY – ')
     t = src
     t = replace_once(t, '<script src="/marks/key.js"></script>', f'<script src="{TEST_BASE}key.js"></script>', 'key.js tag')
     t = replace_once(t, "const MARKS_BASE='/marks/', STORE='';",
@@ -214,11 +251,11 @@ def build_page(src):
     titles = re.findall(r'<title>([^<]*)</title>', t)
     if len(titles) != 1:
         raise Refused(f'expected exactly one <title>, found {len(titles)}')
-    t = replace_once(t, f'<title>{titles[0]}</title>', f'<title>TEST – {titles[0]}</title>', 'title')
+    t = replace_once(t, f'<title>{titles[0]}</title>', f'<title>{title_pre}{titles[0]}</title>', 'title')
     t = replace_once(t, '<meta charset="utf-8">',
                      '<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', 'charset meta')
     banner = ('<div id="testBanner" role="note" style="position:sticky;top:0;z-index:9999;background:#B3261E;color:#FFFFFF;'
-              'font:700 14px/1.35 system-ui,sans-serif;text-align:center;padding:6px 10px">TEST COPY – not live data · '
+              f'font:700 14px/1.35 system-ui,sans-serif;text-align:center;padding:6px 10px">{banner_pre}not live data · '
               f'{TEST_BASE} · PAGE_VERSION {version}</div>')
     t = replace_once(t, '<body>', '<body>\n' + banner, 'body tag')
     # the result: no way back to live data, every storage key prefixed, the TEST markings present
@@ -229,10 +266,14 @@ def build_page(src):
     if problems:
         raise Refused('the test page uses a browser storage key without STORE:\n  ' + '\n  '.join(problems))
     for need in (f"STORE='{TEST_STORE}'", f"MARKS_BASE='{TEST_BASE}'", "ENDPOINT=MARKS_BASE+'marks.php'",
-                 'id="testBanner"', f'PAGE_VERSION {version}</div>', '<title>TEST – ',
+                 'id="testBanner"', f'PAGE_VERSION {version}</div>', f'<title>{title_pre}',
                  '<meta name="robots" content="noindex,nofollow">'):
         if t.count(need) != 1:
             raise Refused(f'the test page must contain {need!r} exactly once (found {t.count(need)})')
+    if label:
+        problems = local_url_problems(t)
+        if problems:
+            raise Refused('the LOCAL page:\n  ' + '\n  '.join(problems))
     return t, version
 
 
@@ -264,10 +305,11 @@ def main():
     ap.add_argument('--sw', default=os.path.join(ROOT, 'pages', 'course', 'sw.js'))
     ap.add_argument('--marks', default=os.path.join(ROOT, 'pages', 'marks', 'marks.php'))
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'test'))
+    ap.add_argument('--label', choices=['LOCAL'], default='', help='LOCAL: for the local test site only, never uploaded')
     a = ap.parse_args()
     try:
         with open(a.page, encoding='utf-8', newline='') as f:
-            page, version = build_page(f.read())
+            page, version = build_page(f.read(), a.label, time.strftime('%H%M') if a.label else '')
         with open(a.sw, encoding='utf-8', newline='') as f:
             worker = build_worker(f.read())
         with open(a.marks, 'rb') as f:
@@ -303,6 +345,7 @@ def main():
                     f'worker built from {sw_src}\n'
                     f'marks.php copied from {marks_src}\n'
                     f'PAGE_VERSION {version}\n'
+                    + ('label LOCAL: for the local test site only, never uploaded\n' if a.label else '') +
                     f'course-test/index.html sha256 {sha(pb)}\n'
                     f'course-test/sw.js      sha256 {sha(wb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
@@ -319,7 +362,7 @@ def main():
         return 1
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    print(f'test build {version} from {commit}{" (uncommitted changes in pages/)" if dirty else ""} written to {a.out}')
+    print(f'{"LOCAL " if a.label else ""}test build {version} from {commit}{" (uncommitted changes in pages/)" if dirty else ""} written to {a.out}')
     print(f'  page built from {page_src}')
     print(f'  worker built from {sw_src}')
     print(f'  marks.php copied from {marks_src}')
