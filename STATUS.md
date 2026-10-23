@@ -24,9 +24,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next race:** race-day precautions while the course page is on .37 or .38: don't reload or close the course page while the signal is poor; once a start has gone, don't tap Undo on its start line; check the series name reads "Autumn League" before the first course.
 
-**.45 (built and tested, not released):** released next, in one release over live .37: .38 (A8, A71), .39 (A65, A82 course page icons), .41 (A78), .44 (A63, A94 to A112), A117 to A119, A121 and A122; the build is .45b (PAGE_VERSION 2026-10-06.45b). With the series backfill for 27 September, 4, 11 and 18 October. .44 passed on the test copy on phone and tablet (GPS fixes, opening offline, Copy and Share), and so did .45 (A117 to A119); A121 and A122 are tested in the harness, and .45b has a short round on the test copy next. The test copy's page before the .44 upload was not backed up and is not known; the possible pages, its worker and `marks.php` are in the test backup with a note. Never within 12 hours of a race.
+**.45 (built and tested, not released):** released next, in one release over live .37: .38 (A8, A71), .39 (A65, A82 course page icons), .41 (A78), .44 (A63, A94 to A112), A117 to A119, A121 and A122; the build is .45b (PAGE_VERSION 2026-10-06.45b). With the series backfill for 27 September, 4, 11 and 18 October. .44 passed on the test copy on phone and tablet (GPS fixes, opening offline, Copy and Share), and so did .45 (A117 to A119) and .45b (A121, A122). The test copy's page before the .44 upload was not backed up and is not known; the possible pages, its worker and `marks.php` are in the test backup with a note. Never within 12 hours of a race.
 
-**Next:** A25 (key by header only), A70 (remove Copy legs).
+**Next:** A123 (start line warnings), A25 (key by header only), A70 (remove Copy legs).
 
 **Then:** A60 (copy a course from any start).
 
@@ -194,8 +194,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A117 | Box 2's layout: the Suggest buttons on the same line as "from it"; "Set pin and place boat" bigger and bold | BUILT AND TESTED | In .45, not released; passed on the test copy |
 | A118 | Box 3's "New committee boat fix" list shows no accuracy for a recorded fix | BUILT AND TESTED | In .45, not released: "±N m" as the Committee boat lists and All fixes and marks show it; a typed position has none; passed on the test copy |
 | A119 | A green "… typed position …: sent." line stays on screen long after it was sent | BUILT AND TESTED | In .45, not released: a green "…: sent." line clears after 10 seconds if unchanged; red, amber and not-sent lines never clear this way; passed on the test copy |
-| A121 | Box 3's layout as box 2's (A117): the Suggest buttons on its line; "Use the boat and place the pin" bigger and bold on its own line | BUILT AND TESTED | In .45b, not released; tested in the harness |
-| A122 | Section 4's square-to-wind line measured the mark named Windward from the course's first mark when there was no start line, giving figures such as "132° right of square · move 0 m" | BUILT AND TESTED | In .45b, not released: "First mark (name) …", from the start line's midpoint to the first mark after the start, whatever its name; with no start line, a note and no figure; the calculation unchanged; tested in the harness |
+| A121 | Box 3's layout as box 2's (A117): the Suggest buttons on its line; "Use the boat and place the pin" bigger and bold on its own line | BUILT AND TESTED | In .45b, not released; passed on the test copy |
+| A122 | Section 4's square-to-wind line measured the mark named Windward from the course's first mark when there was no start line, giving figures such as "132° right of square · move 0 m" | BUILT AND TESTED | In .45b, not released: "First mark (name) …", from the start line's midpoint to the first mark after the start, whatever its name; with no start line, a note and no figure; the calculation unchanged; passed on the test copy |
+| A123 | Start line row: with no start line, a red critical warning "Line not set" beside the Start line heading; section 4's "First mark: set the start line to see how square it is to the wind" shows in orange | NOT STARTED | |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 
