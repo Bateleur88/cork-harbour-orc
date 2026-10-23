@@ -256,6 +256,47 @@ job and each fact lives in one place: `STATUS.md` for where things stand,
 how it got here, and `CLAUDE.md` for how Claude Code works here. Regression
 testing moves to scripts, leaving manual steps for what needs a person's eyes.
 
+## 20. 16–17 October: opening with no signal
+
+On the water the course page has to open where there is no signal, so .39 gave it
+a service worker that keeps a copy of the page and the race key and uses it only
+when the network fails or is slow. Its saved copies are named for its own folder
+and version, so it never touches the RIB page's or the test copy's, and it keeps
+only a page of its own version, because the host can serve an older page from its
+cache. Saves and withdrawals wait until the page has confirmed its version with
+the server, so an old copy can never overwrite what a newer page saved; new fixes
+and Send never wait. Testing on the test copy found the worker holding the page
+while it read a copy of it, which stalled Reload, and it was changed to hand the
+page over at once. A kill switch was kept ready, and both pages gained embedded
+icons.
+
+## 21. 18–19 October: withdrawing replaced line ends
+
+After the race of 18 October, a wrongly placed start line end stayed in its list
+and was offered back through "Use it?". .40 let the RO withdraw a placed or typed
+line end from Check recorded marks once nothing uses it, and made placing an end
+again withdraw the one it replaces, saying under the list when it cannot. .41 kept
+a replaced end that could not yet be withdrawn with its start's course, so every
+device treats it as a replaced estimate: never offered back, never taken by Auto,
+and still able to be withdrawn.
+
+## 22. 19–22 October: the finish line, tested on the PC
+
+The finish line was built like the start line in three rounds (.42 to .44). To
+test faster than uploading to the test copy each time, a local test site was set
+up on the PC, with a build labelled LOCAL, a made-up race day and scripts to reset
+it, so the tablet and phone could test over the home network; a browser harness
+drove the same made-up day and compared every saved day against the released page.
+Each round on the tablet changed the design: the finish became three ways that
+follow how the RO works on the day (the boat stays, a mark and the boat placed
+from it, or the boat has moved), no finish is shown as "No finish set" rather than
+guessed from another race, and the suggested bearings were made square to the leg
+to the line's midpoint. The same rounds settled the Start Pin's routes (a harbour
+mark only ever as the pin itself), moved the wind to the day with each start
+keeping its own once used, and turned every fault found into a tracked item. Both
+test files passed on the local site on 22 October, with one Undo result that could
+not be reproduced, carried to the test copy.
+
 ## Related repositories and issues
 
 -   `Bateleur88/cork-harbour-orc`

@@ -152,7 +152,8 @@ web access to `data/` (Apache or LiteSpeed only: check that a request for a file
 there is refused with 403).
 
 - *Courses* are keyed `race|start`; each race's start groups and picked chips are
-  `_starts|race`; the day's series name is `_day`, saved like a course. `GET
+  `_starts|race`; the day's series name and wind are `_day`, saved like a course (a
+  save that sends only one of them keeps the other). `GET
   ?type=seriesbefore&date=` returns the series of the latest earlier day that has
   one. The older single series file, `series.json`, is still served for pages from
   before series names were per day.
@@ -215,25 +216,37 @@ only, shown in red with **Save to the race record**. A card mark's own name is
 refused in the typing and pasting boxes. **Add to Race N chips** in Check recorded
 marks brings any RIB fix of the day into a race as a picked chip.
 
-**Line ends.** The Committee boat, Start Pin and Finish Pin lists offer every
-recorded fix of that type from every race of the day, or **None**. On auto a line
-end takes the latest fix of its race or an earlier one at or before the start
-time (the Finish Pin has no time limit); a fix after the start is shown as a
-candidate, never used by default. When a course is saved, auto's choice is saved
-with it, so the course rebuilds the same on every device; a newer fix is offered
-("A newer fix … – use it?"), never taken by itself. A start's line-end choices are
-saved only once its start time is complete.
+**Line ends.** The Committee boat lists offer every recorded committee boat fix
+of the day; the Start Pin list offers this race's fixes only, with **Auto** and
+**None**. On Auto a start line end takes the latest fix of its race or an earlier
+one at or before the start time; a fix after the start is shown as a candidate,
+never used by default, and a Start Pin carried from an earlier race says so
+("carried from Race N"). When a course is saved, Auto's choice is saved with it, so
+the course rebuilds the same on every device. A start's saved Auto choices are
+picked again when its start time changes, until the start is used: its course has
+been sent, or, on the race day, its start time has passed. After a choice of the
+RO's own (a fix chosen, a pin set or an end placed) a recorded fix is offered only
+when it is newer ("Newer: … Use it"), never taken by itself. A start's line-end
+choices are saved only once its start time is complete.
 
-**Missing start line ends.** With a start time and no usable line, the Start line
-row offers:
-- the **Grassy start** (the Grassy Walk line, measured from Grassy Mid);
-- **Start Pin at** a mark, then **Set Start Pin here**;
-- **Place committee boat** or **Place Start Pin**: the missing end by distance and
-  bearing (°M) from the known end or a mark, with greyed suggestions (200 m,
-  **Square to wind** or **Square to first mark**, committee boat at the starboard
-  or port end) used only if typed in;
-- with one end found, that end **as the line midpoint**, drawn as a 200 m line
-  square to the first leg.
+**Start line.** The Start line row has a **Committee boat** section, a **Start
+Pin** section, then the line. With a start time each section has its helper, open
+by itself while its end is missing and otherwise behind **Change boat…** or
+**Change pin…**:
+- the Start Pin **at a mark** (Option 1: a mark of the course, a harbour mark, or an
+  earlier race's Start Pin, set at its position), or **placed by distance and
+  bearing** (Option 2) from the committee boat in use or a mark laid in this race,
+  never from a harbour mark;
+- the committee boat placed by distance and bearing (°M) from the Start Pin or
+  another mark. Placed from a harbour mark, that mark becomes the Start Pin, set at
+  it, in the same placement; a different pin in use is switched out, and Undo puts
+  it back;
+- greyed suggestions (200 m, **Square to wind** or **Square to first mark**, which
+  end the committee boat is at), worked from the end in use or from a harbour mark
+  chosen under "from", used only if typed in;
+- the **Grassy start** (the Grassy Walk line, measured from Grassy Mid), and, with
+  one end found, that end **as the line midpoint**, drawn as a 200 m line square to
+  the first leg.
 
 A placed end is saved as a typed position timed at the start time and flagged as
 an estimate on the page, the leg table, the sketch, the chart and Copy for Sail
@@ -246,8 +259,35 @@ or Auto. A placed or typed line end that is no longer an estimate, or that was
 replaced by placing again, can be withdrawn from **Check recorded marks**.
 **Remove Start** moves
 every later start's records down with it, withdraws the removed start's own placed
-ends, and is refused while another start uses them. A finish line with one end
-missing has no helper.
+ends, and is refused while another start uses them.
+
+**Finish line.** The **Finish type** list offers **Same as the start line**,
+**Committee boat & Finish Pin**, and the finish line of another start ("Shared from
+another start", which follows that start's changes). A start saved with "At the
+last mark" keeps it, shown as "(saved before .44)" only on that start. With
+Committee boat & Finish Pin and no finish set, the row says **No finish set** in
+amber, as does the leg table's last leg, and Copy for Sail Scoring is INCOMPLETE;
+Send is not held back. A Finish Pin a RIB recorded for the race is offered ("Use
+it"), never chosen by itself, and no other race's Finish Pin is ever used. The
+finish is set in one of three boxes, closed to their titles, one open at a time:
+1. **Committee boat remains, place new Finish Pin**: the pin by distance and
+   bearing from the committee boat in use;
+2. **Choose Finish mark and position Committee boat**: the Finish Pin at a mark
+   (any mark; the last mark finishes at the last mark), and the committee boat
+   placed from it; below it, for emergencies only, the mark as the finish line's
+   midpoint with no committee boat;
+3. **Move Committee boat and Finish Pin**: a new recorded committee boat fix, then
+   the Finish Pin placed from it.
+
+Each box suggests a bearing **square to the last leg** (from the last mark to the
+line's midpoint, for the length typed or 200 m) and which end the placed end goes,
+used only if typed in; the likely Finish Pin end is marked as a suggestion until
+the RO taps a side. A finish line more than 30° off square to the last leg is said
+in amber. Placed finish ends are estimates, as start line ends are; **Undo**
+withdraws them and puts back the committee boat end they replaced. A course saved
+before the Finish Pin stopped using Auto keeps the pin Auto chose then, in amber:
+"Finish Pin chosen by Auto in an earlier version: … – check it". **Change
+finish…** reopens the boxes.
 
 **Laid marks** (Curlane, Dutchman, White Bay) take their position from the latest
 RIB fix, saved typed position or pasted position of the race or an earlier one
@@ -270,9 +310,14 @@ Magnetic Model at the course's first leg (noon UTC on the race date), as Sail
 Scoring computes it; with no measured leg, the map centre, said beside the wind
 arrow.
 
-**Wind and the start line.** The wind direction (0 to 360 °M, saved when the box
-is left) gives TWA per leg, how far the line is off square and which end is
-favoured. Without wind the line's length and bearing still show.
+**Wind.** The day's wind (direction 0 to 360 °M, large, and speed) is set in
+section 1, under Race day; while it is empty an amber line asks for it. Each start
+shows its own wind under its start time: it follows the day's wind until the start
+is used, keeps a wind typed for it (clearing the box makes it follow again), and
+says where its value came from ("from the day's wind", "set for this start",
+"kept: course sent at hh:mm"). A start's wind gives TWA per leg, how far its line
+is off square and which end is favoured. Without wind the line's length and
+bearing still show.
 
 **Check recorded marks** (closed by default, in both views): a sketch or map of
 every fix of the race (or all races), with the recorded lines, the as-sailed
@@ -350,7 +395,8 @@ signal before each race day.
                               committee boat, pin or finish.
     scripts/rebuild_page.py   Embeds that snapshot in the race officer page and bumps PAGE_VERSION.
     scripts/xlsx_edit.py      Surgical workbook edits, and a cell-level diff of two workbooks.
-    scripts/build_test.py     Builds the parallel test copy of the RO page and marks.php (see Test copy).
+    scripts/build_test.py     Builds the parallel test copy of the RO page and marks.php (see Test copy), or with
+                              --label LOCAL the local test site's copy (see Local test site).
     scripts/backfill_day_series.py  One-off: writes a series name into chosen past days, through marks.php,
                               after backing them up.
 
@@ -361,7 +407,7 @@ Command lines:
                                   [--spacing 5.0] [--criterion 1.5] [--out chord_evidence.csv] [--date "30 Sep 2026"]
     python scripts/make_snapshot.py WORKBOOK [--out cardsnap.json]
     python scripts/rebuild_page.py WORKBOOK [--page pages/course/course_v8.html] [--dry-run]
-    python scripts/build_test.py [--page ...] [--marks ...] [--out build/test]
+    python scripts/build_test.py [--page ...] [--marks ...] [--out build/test] [--label LOCAL]
     python scripts/backfill_day_series.py --url URL --backup-dir DIR [--key-js PATH] [--series NAME] [--dates ...] [--dry-run]
 
 Dependencies: `pandas`, `numpy`, `tifffile`, `openpyxl` (diff only).
@@ -409,12 +455,27 @@ alone is over 5 GB) and are not in the repository.
 `test_marks.py` checks that every request the pages send is accepted, that bad
 input and failed writes leave the data intact, and the course history, typed
 position withdraw and correct, the day's series, the RO key and the decisions
-endpoint. It needs `php-cgi` on PATH or in `PHP_CGI`; run it on PHP 8.4 and on PHP
-5.5 (as the live host) before any change to `marks.php`. `test_build_test.py`
+endpoint. It needs `php-cgi` on PATH or in `PHP_CGI`; run it on PHP 8.4, PHP 8.1
+(which the live host may move to) and PHP 5.5 (as the live host) before any change
+to `marks.php`. `test_build_test.py`
 builds a test copy into a throwaway folder and checks it talks only to
 `/marks-test/` with `test-` storage keys, and that the build refuses pages it
 must; it also holds static guards over the course page's source. None of these
 runs the page's JavaScript.
+
+**Browser regression harness.** Kept outside the repository, in
+`E:\CorkHarbourORC_backups\harness`, because it reads copies of real data. It drives
+the page in headless Edge against `marks.php` on PHP 5.5:
+- `regress.py` and `compare.py`: every start of every day in a throwaway copy of
+  the live or test data, read by the released page and by the new one, and
+  compared (points, legs, totals, Copy for Sail Scoring, the saved record, the
+  WhatsApp text);
+- `madeup*.py`: a made-up day built by the page itself through the real
+  `marks.php` on throwaway data, one check per line, then read back by the
+  previous version;
+- `legacy*.py`: chosen saved starts on a data copy read as before;
+- `guards*.py`: each release's edits to the static guards, applied to the test
+  file before it and checked to reproduce the committed one.
 
 ## Deploying the pages
 
@@ -475,11 +536,37 @@ test build back, restore the page, `sw.js` and the data folder; if the restored
 page has no service worker, upload `pages/course/sw-kill.js` as `/course-test/sw.js`
 instead.
 
+## Local test site
+
+A copy of the test site on this PC, for testing on the tablet and phone over the
+local network before the test copy. Its folder, `E:\CorkHarbourORC_local`, is
+outside the repository: `site/` is served (`/course-test/` and `/marks-test/`,
+with a made-up race key and a copy of the test data), `seed/` holds the data to
+reset to, and `stage/` the last build.
+
+    build-local.ps1     python scripts/build_test.py --label LOCAL into stage/, then the worker, page and
+                        marks.php copied into site/, each checked against BUILD.txt (refused if built in the
+                        same minute as the page served)
+    start.ps1           PHP 5.5's server on port 8765 with router.php (which refuses /marks-test/data with 403);
+                        prints RUNNING and the PAGE_VERSION served
+    stop.ps1            stops the php.exe on port 8765 and checks the port is closed
+    reset-data.ps1      puts the data back to the seed, checked file by file by SHA-256
+    add-day-*.ps1       writes a made-up test day (positions in Cork Harbour) into the local data only,
+                        with the server stopped
+
+The local build differs from the test copy only in `-L<HHMM>` on its
+`PAGE_VERSION` and "LOCAL TEST" in its title and banner, and the build refuses a
+page that names a live host or an address outside the allowed list. Run the
+server in a visible terminal and stop it when testing ends. GPS does not work over
+http, so new fixes, opening offline, and Copy and Share on the devices are tested
+on the test copy. Norton's behavioural protection can stop `php -S` after a few
+seconds: the PHP folder and the local site's folder need exclusions.
+
 ## Releasing to a live site
 
 1. **Timing.** Nothing goes to the live paths within 12 hours of a race.
 2. **Tests.** `tests/test_build_test.py` passes; if `marks.php` changed,
-   `tests/test_marks.py` passes on PHP 8.4 and PHP 5.5. The build has passed on the
+   `tests/test_marks.py` passes on PHP 8.4, PHP 8.1 and PHP 5.5. The build has passed on the
    test copy: a script regression on copies of the live and test data (every
    start's legs, totals, outputs and saves against the released page), and the
    manual steps for what needs a person's eyes.

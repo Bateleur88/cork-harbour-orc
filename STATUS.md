@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 19 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38; .41 (A78), which includes .39. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 22 October 2026. Live: course page PAGE_VERSION 2026-10-06.37 (released 15 October 2026). Built and tested, not released: .38 (A8, A71); .39 (A65), which includes .38; .41 (A78), which includes .39; .44 (A63, A94 to A112), which includes .41, on the local test site only. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -30,9 +30,11 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **.41 (built and tested, not released):** A78, on top of .39. Released after .39; never within 12 hours of a race.
 
+**.44 (built and tested on the local test site, not on the test copy):** A63, A94 to A112, on top of .41. Next: the final round on the test copy (GPS fixes, opening offline, Copy and Share on the devices, A113 repeated). Released after .41; never within 12 hours of a race.
+
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
-**Then:** A63 (finish line), A60 (copy a course from any start).
+**Then:** A60 (copy a course from any start).
 
 **Then:** A7, A12, A13, A39, A17 to A19, A81, A82 (RIB page icons) (RIB page and server; tested on the water).
 
@@ -102,11 +104,12 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 | Ref | Item | State | Current note |
 |---|---|---|---|
-| A23 | Server tests | BUILT AND TESTED | `marks.php` and backfill tests pass on PHP 8.4 and 5.5 |
-| A24 | No tests of the page's logic | NOT STARTED | Static source guards only; the browser regression harness is outside git. To do: script tests on the saved race days, golden outputs from .37, a committed runner |
+| A23 | Server tests | BUILT AND TESTED | `marks.php` tests pass on PHP 8.4, 8.1 and 5.5; backfill tests on 8.4 and 5.5 |
+| A24 | No tests of the page's logic | NOT STARTED | Static source guards only; the browser regression harness is outside git (see README, Tests). To do: script tests on the saved race days, golden outputs from .37, a committed runner |
 | A25 | Race key accepted as `?key=` | DECIDED | Stop accepting it, on both sites |
 | A26 | Live host checks | OPEN | PHP 5.5.38, Apache, `data/` 403 checked. RO key stays unset until C9 part 2 |
 | A28 | `build_test.py` source-commit record | BUILT AND TESTED | Kept |
+| A93 | Local test site on the PC: `build_test.py --label LOCAL`, server scripts, reset and a made-up day | BUILT AND TESTED | Used for .44; GPS does not work over http there |
 
 ### As-sailed course repair and Sail Scoring hand-off
 
@@ -147,7 +150,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A60 | Copy the course from any other start | NOT STARTED | Design points to decide |
 | A61 | Straight legs across land or drying ground | NOT STARTED | Parked |
 | A62 | Mark with no rounding side holds the WhatsApp text | DECIDED | Built with gates |
-| A63 | Finish line built like the start line; recorded Finish Pin as default | DECIDED | |
+| A63 | Finish line set up as the RO works on the day; a RIB-recorded Finish Pin offered, never chosen silently | BUILT AND TESTED | In .44, not released: Same as the start line, Committee boat & Finish Pin, or shared from another start; three boxes, one open at a time; "No finish set" in amber, Copy for Sail Scoring INCOMPLETE; courses saved earlier keep their Auto Finish Pin with "check it"; a line over 30° off square warned; see Next |
 | A64 | Never show or save a course for another day than the Race day box | BUILT AND TESTED | Released in .37 |
 | A65 | Course page opens with no signal | BUILT AND TESTED | Service worker, own version only, saved copy keeps Content-Type only; saves and direct fix actions wait for the version check, new fixes and Send never wait; kill switch `pages/course/sw-kill.js`; not released; see Next |
 | A66 | Server refuses Withdraw while a saved auto choice uses the fix | DECIDED | |
@@ -156,12 +159,12 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A69 | Remove Start left later starts' line ends behind | CONFIRMED LIVE | Released in .37 |
 | A71 | Loading a day opens the start left open on another day | BUILT AND TESTED | In .38, not released |
 | A72 | Orange note when a day's series is changed after the day was copied for Sail Scoring | DECIDED | Needs the page to record each copy |
-| A73 | Layout and colour: start line section (one line per end, one status line, one next action), Card mark / Laid line labels (say "estimated" when either end is an estimate), messages beside their button, finish line drawn over the estimated start line, sketch start line and labels | DECIDED | Colour rule: red only for what holds Send back or could lose data; laid marks at their planning position shown red as chips but not in the Fixed marks list, to be made consistent |
+| A73 | Layout and colour: start line section (one line per end, one status line, one next action), Card mark / Laid line labels (say "estimated" when either end is an estimate), messages beside their button, finish line drawn over the estimated start line, sketch start line and labels | IN PROGRESS | In .44, not released: the Start line and Finish line rows as sections with one next action, messages inside their boxes, amber for cautions, sketch labels clear of lines, labels and marks. To do: Card mark / Laid line labels; laid marks at their planning position red as chips but not in the Fixed marks list |
 | A74 | Save and load lines call pins set at a mark and placed ends "typed position"; a placed fix's detail says "Phone none" | DECIDED | Name them by what the RO did |
 | A75 | Favoured end ignores the first mark | DECIDED | Add which end is nearer the first mark, and by how much; whether to switch to distance when the first leg isn't a beat is open |
 | A76 | "Record the missing end…" shows with no start time and no ends | DECIDED | Reword or remove |
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
-| A78 | A placed line end replaced by placing again can't be withdrawn on its own | BUILT AND TESTED | Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); until it is withdrawn, a replaced end is saved with its start's course and treated as a placed estimate on every device; not released; see Next |
+| A78 | A placed line end replaced by placing again can't be withdrawn on its own | BUILT AND TESTED | Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); until it is withdrawn, a replaced end is saved with its start's course and treated as a placed estimate on every device; in .44 the same for finish line ends and a Start Pin a harbour mark replaces; not released; see Next |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
 | A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
 | A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: tested on the test copy, not released; see Next. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
@@ -173,6 +176,26 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A90 | The Chart is blank or only partly drawn on first load (Chrome on PC), also with the service worker bypassed; switching Sketch → Chart draws it | NOT STARTED | Seen on the test copy, not in a quick check of the live page; no errors logged; cause not known |
 | A91 | In a line-end list, the Auto option and an explicit entry can read exactly the same, so the RO can't tell which keeps the start on Auto | NOT STARTED | For example two identical "Committee boat – estimate: 200 m …" lines |
 | A92 | Saving the day's series (A8) adds nothing to the course history | NOT STARTED | Check whether that is intended |
+| A94 | The day's wind in section 1, and each start's wind under its start time | BUILT AND TESTED | In .44, not released: a start follows the day's wind until it is used, keeps a wind typed for it, and says where its value came from; `marks.php` keeps the wind in the day record |
+| A95 | Start Pin routes: set at a mark (harbour marks only this way), or placed from the committee boat in use or a mark laid in the race | BUILT AND TESTED | In .44, not released: the committee boat placed from a harbour mark makes that mark the Start Pin, switching out a different pin, which Undo puts back |
+| A96 | The Start Pin list holds this race's fixes only | BUILT AND TESTED | In .44, not released: earlier races' pins only under "laid for an earlier race (set at its position)"; Auto carrying one says "carried from Race N" |
+| A97 | Recorded fixes offered after the RO's own choice | BUILT AND TESTED | In .44, not released: only when newer ("Newer: …"); the in-use label says where the pin is |
+| A98 | A start's saved Auto picks when its start time changes | BUILT AND TESTED | In .44, not released: dropped while the start is not used; used means its course was sent, or its start time passed on the race day |
+| A99 | A helper's "sending…" message didn't follow its fix to "sent." or "not sent" | BUILT AND TESTED | In .44, not released |
+| A100 | A start sharing another's finish line was reported as no longer among the day's fixes on another device | BUILT AND TESTED | In .44, not released |
+| A101 | The midpoint and a placed Finish boat didn't keep the committee boat end they replaced, so Undo went to Auto | BUILT AND TESTED | In .44, not released |
+| A102 | The pin lists offered entries that aren't real marks | BUILT AND TESTED | In .44, not released |
+| A103 | "undefined" in the Finish Pin's "on the water" box | BUILT AND TESTED | In .44, not released |
+| A104 | A sent item stayed in the "not sent" line near the top of the page | BUILT AND TESTED | In .44, not released |
+| A105 | Sketch labels overlapped each other and lines, sat by the wrong mark, or were clipped at the edge | BUILT AND TESTED | In .44, not released |
+| A106 | Row messages ("Finish line updated from …", "Undone: …") stayed after the row changed | BUILT AND TESTED | In .44, not released: any change in the row clears them |
+| A107 | The Start Pin's "from" list offered harbour marks | BUILT AND TESTED | In .44, not released |
+| A108 | Auto chose another race's Finish Pin silently | BUILT AND TESTED | In .44, not released: never chosen; "No finish set" shown instead |
+| A109 | "Square to the last leg" was square to the leg to the boat, not to the line's midpoint | BUILT AND TESTED | In .44, not released: worked out for the length typed, in all three finish boxes |
+| A110 | The emergency midpoint kept an already placed Finish boat | BUILT AND TESTED | In .44, not released: the boat is withdrawn |
+| A111 | Change boat… suggestions did nothing with "from" set to a harbour mark | BUILT AND TESTED | In .44, not released |
+| A112 | The Start Pin row said "Not recorded" while Auto carried an earlier race's pin | BUILT AND TESTED | In .44, not released; found by the harness |
+| A113 | Undo returned the Finish line's committee boat to Auto once in a test | NOT STARTED | Seen once on the local site; not reproduced in the harness; repeated on the test copy so its save history can be read if it recurs |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
 
