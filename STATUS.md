@@ -24,13 +24,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next race:** race-day precautions while the course page is on .37 or .38: don't reload or close the course page while the signal is poor; once a start has gone, don't tap Undo on its start line; check the series name reads "Autumn League" before the first course.
 
-**.38 (built and tested, not released):** A8, A71. Released next, with the series backfill for 27 September, 4, 11 and 18 October; never within 12 hours of a race.
-
-**.39 (built and tested, not released):** A65, A82 (course page icons), on top of .38. Released after .38; never within 12 hours of a race.
-
-**.41 (built and tested, not released):** A78, on top of .39. Released after .39; never within 12 hours of a race.
-
-**.45 (built and tested, not released):** A63, A94 to A112, A117 to A119, on top of .41, in place of .44. .44 passed on the test copy on phone and tablet (GPS fixes, opening offline, Copy and Share); A117 to A119 are tested in the harness, and .45 has a short round on the test copy next. The test copy's page before the .44 upload was not backed up and is not known; the possible pages, its worker and `marks.php` are in the test backup with a note. Released after .41; never within 12 hours of a race.
+**.45 (built and tested, not released):** released next, in one release over live .37: .38 (A8, A71), .39 (A65, A82 course page icons), .41 (A78), .44 (A63, A94 to A112) and A117 to A119. With the series backfill for 27 September, 4, 11 and 18 October. .44 passed on the test copy on phone and tablet (GPS fixes, opening offline, Copy and Share); A117 to A119 are tested in the harness, and .45 has a short round on the test copy next. The test copy's page before the .44 upload was not backed up and is not known; the possible pages, its worker and `marks.php` are in the test backup with a note. Never within 12 hours of a race.
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
