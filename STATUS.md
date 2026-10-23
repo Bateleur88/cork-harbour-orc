@@ -71,7 +71,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A2 | No separate original course: recorded marks are the original; the course is derived from them plus saved choices | DECIDED | Nothing to build |
 | A5 | Leg table from the stored course, not live page state | NOT STARTED | Later stage |
 | A7 | Recorded fixes are never deleted or rewritten | DECIDED | RIB Delete becomes Withdraw; "wrong race" move makes a new linked record |
-| A8 | Series name per race day, saved and loaded with the day | BUILT AND TESTED | In .38, not released; saved with the race key; sent to Sail Scoring as x-series only; backfill runs at release; then recreate 10 September in the August / September series |
+| A8 | Series name per race day, saved and loaded with the day | BUILT AND TESTED | In .38, not released; saved with the race key; sent to Sail Scoring as x-series only; backfill runs at release; 10 September is not being recreated (decided 23 October 2026), its archived files stay in `E:\CorkHarbourORC_backups\test-data-archive_2026-10-16\` |
 | A9 | Laid mark on auto has no start-time limit | DECIDED | Latest fix at or before the race's first start |
 | A10 | Laid-mark choice and auto line ends saved with the course | CONFIRMED LIVE | |
 | A11 | Magnetic variation by race date (WMM at the course's first leg) | CONFIRMED LIVE | |
