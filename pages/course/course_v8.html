@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2E8E47">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Course plot – race officer</title>
 <link rel="icon" type="image/png" sizes="16x16" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACxElEQVR42m3TWWyMURQH8P+9/T4zlrEkrSW20mrEVmuQClFeREQ8iCoSQiISopGIl9YSHngQRGyRiAeCBxJrggeEBrE1ilYpho52OtNldLZ+893z92Aq1fF/PueXc+89FwBAsoJkmKQhKSLChp+hJEkhSWMM05F0TZhkBdLN5ewWY4Qk+eT5u8SO3afjv35F3R5I95SDZKyb/AeRP8jWvec6Zy8tc77/aHJ6ICbdE8P/2PQUUvelMVG84YjMWLTZCTSFHFIyJtEAiB7RWiEaS9DtjJqiOZNcNSjX3lJ2mDDKAIAR01VKRfIfgCSUUgg0hd2HlVXJqRMnexNZtEIt9ZiQn8vR2cMVAAgFWmlkAABAEO2RqASaWuVZrNK6WnUbPzqCSHY6KMgei50LNmNh3lwIJRMgAFJgKNhxex8uvbqFIb4cFOfNwYgBw1Ad/IjKby9xcMkurCpchoxLdI1Lkjz+5Dxz9kxj8ZkS1gQ/sS0R4f26x6wP+7n8/CaOO7SAtc2faWWeXyPpOrjx4T5sy8bGWSUYPzgfi8+uQXVjLYb6ctDb9sIVg8tVN6G7A0JCK8VA+0+GY63wWh5MGlqA+hY//K0NGDNoJLTSSKaS8Fg2apvr8fcZRQRZWuPeo+qUvyECX98+cEwKjR0hDOs/GB7bA397AG2JCAAFkvBaHmoASkhorXH97tPOfSeusZfjkXHZuSAF515cgYbCxdVHsa1oPU6uOICCnDGIJKOYnzdbaRHERYQv3nzsCIcj5srRLVnzZhaotYUr0cuy8brhHUovbUdN8DOKcmegOdqCt401MnPUFJYULosrkuUA9ndE466vXx+raw8UFC5X3cDBB6fQEm9DyqQgIBw3hXljZ+HCumMYmOWrUF3fGUCZa8xArZTSWquuTXsf/ISr1XdQF/oKr+3h3FHTWTpteVtv23tMKbX/N8b6LTNIdUCgAAAAAElFTkSuQmCC">
@@ -223,6 +225,7 @@ body.dayHeld .wrap>.raceOnly,body.dayHeld #seriesBox,body.dayHeld #seriesAsk,bod
 .finHead{display:block;width:100%;min-height:40px;text-align:left;background:none;border:0;padding:4px 0;font:inherit;font-weight:700;font-size:.95rem;color:inherit;cursor:pointer}
 .finCaret{display:inline-block;width:1em}
 .finBig{font-weight:700;font-size:1.05rem;padding:10px 20px;margin-top:4px}
+.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}
 .routeOr{text-align:center;font-size:.85rem;font-weight:700;color:var(--muted);margin:4px 0}
 /* .44: the Finish Pin side suggested from the approach, until the RO taps a side */
 .sideBtns .sugSide{border-style:dashed;font-style:italic}
@@ -488,7 +491,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.45b';
+const PAGE_VERSION='2026-10-06.46';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -1544,7 +1547,9 @@ function render(){
         '<div class="meta"><button type="button" class="ghost estAct chgBtn" data-act="grassy">Start from Grassy Mid (Grassy Walk line)</button></div>';
   const sMiss=sm==='laid'&&!slRec?'<div class="meta cautTxt">⚠ Start line missing (Laid line): the first leg is not measured. '+
       '<button type="button" class="ghost lineAct chgBtn" data-act="useCard">Use Card mark</button></div>':'';
-  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
+  // .46, A123 (Pat, 23 October 2026): a start that needs a committee boat and Start Pin and lacks either says so at once
+  const notSet=!slRec&&!lineOff()&&!midLine()?' <span class="lineNotSet" role="status">Line not set</span>':'';
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+notSet+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
     (sl0||gs0||sm==='card'||sm==='laid'?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
         (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
         '. Record the committee boat and pin to measure the real line and its bias.'+
@@ -2826,7 +2831,7 @@ function analysis(cs,twdT){const vA=varW();
      note instead of a figure */
   const w=firstMarkOf().m;
   if(w&&twdT!==null){
-    if(!sl){const line='First mark: set the start line to see how square it is to the wind';bits.push('<p class="note">'+line+'</p>');txt.push(line);}
+    if(!sl){const line='First mark: set the start line to see how square it is to the wind';bits.push('<p class="note caut">'+line+'</p>');txt.push(line);}   // .46, A123: amber
     else{
     const r=geo(sl.mid,w);
     let d=((r.brg-twdT+540)%360)-180; // +ve: mark right of square

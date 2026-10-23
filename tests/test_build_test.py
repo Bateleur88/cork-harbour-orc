@@ -142,6 +142,12 @@ altered in ways it must refuse and checks that it writes nothing:
                 line, Use the boat and place the pin bigger and bold on its own line, its message under it); A122, how
                 square the first mark after the start is to the wind, from the start line's midpoint, named, with a note
                 and no figure when there is no start line
+ 32  .46        static guards and builds for .46 (Pat, 23 October 2026): A123, "Line not set" in red beside the Start line
+                heading while a start that needs a committee boat and Start Pin lacks either, and section 4's first-mark
+                note in amber; A80, the manifest link and theme colour in the page, the live manifest's fields, the icon
+                sources and their sizes; the test build writes the test manifest (TEST names, /course-test/ only) and the
+                TEST icons byte for byte, and refuses a live manifest not naming /course/, a page whose manifest link is
+                not relative, and a missing test icon; the worker still handles only the page and key.js
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -1703,7 +1709,7 @@ def t30_v45_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('30 .45: ' + name, ok, detail)
     bx, sq = fn_body(code, 'function finBoxes('), fn_body(code, 'function finSqRow(')
-    g('PAGE_VERSION 2026-10-06.45 or later', re.search(r"const PAGE_VERSION='2026-10-06\.45[a-z]?';", code) is not None)
+    g('PAGE_VERSION 2026-10-06.45 or later', re.search(r"const PAGE_VERSION='2026-10-06\.(4[5-9])[a-z]?';", code) is not None)
     g('A117: box 2\'s Suggest buttons on the "from it" line, then Set pin and place boat bigger and bold on its own line, its message under it',
       "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx
       and "'<div class=\"meta\"><button type=\"button\" class=\"estAct finBig\" data-act=\"finPinBoat\" data-b=\"2\">Set pin and place boat</button></div>'+msgSlot('finPinBoat')+" in bx
@@ -1731,7 +1737,7 @@ def t31_v45b_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('31 .45b: ' + name, ok, detail)
     bx, an = fn_body(code, 'function finBoxes('), fn_body(code, 'function analysis(')
-    g('PAGE_VERSION 2026-10-06.45b', "const PAGE_VERSION='2026-10-06.45b';" in code)
+    g('PAGE_VERSION 2026-10-06.45b or later', re.search(r"const PAGE_VERSION='2026-10-06\.(45b|4[6-9][a-z]?)';", code) is not None)
     g('A121: box 3\'s Suggest buttons on its line, then Use the boat and place the pin bigger and bold on its own line, its message under it',
       "inp('b3pwhen',startTime(),'4.5em')+' · '+finSqRow(3,d,true)+'</div>'+s3.note+" in bx
       and "'<div class=\"meta\"><button type=\"button\" class=\"estAct finBig\" data-act=\"finCbPin\">Use the boat and place the pin</button></div>'+msgSlot('finCbPin')+" in bx
@@ -1745,6 +1751,89 @@ def t31_v45b_guards():
       and "const across=Math.abs(r.m*Math.sin(rad(d)));" in an and "const dir=(twdT+(d>0?-90:90)+360)%360;" in an
       and "'First mark ('+w.name+') '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir,vA),3)+'°M to square it'" in an
       and "'First mark ('+w.name+') square with the wind, '+r.nm.toFixed(2)+' nm'" in an and 'cs[0]' not in an)
+
+
+def png_size(p):
+    with open(p, 'rb') as f:
+        b = f.read(24)
+    return (int.from_bytes(b[16:20], 'big'), int.from_bytes(b[20:24], 'big')) if b[:8] == b'\x89PNG\r\n\x1a\n' else None
+
+
+def t32_v46(tmp):
+    """.46 (Pat, 23 October 2026): A123 and A80. The page is guarded, not run; the test build is run."""
+    import json
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('32 .46: ' + name, ok, detail)
+    g('PAGE_VERSION 2026-10-06.46', "const PAGE_VERSION='2026-10-06.46';" in code)
+    # A123
+    g('A123: "Line not set" beside the Start line heading, only while a start that needs both ends lacks either',
+      "const notSet=!slRec&&!lineOff()&&!midLine()?' <span class=\"lineNotSet\" role=\"status\">Line not set</span>':'';" in code
+      and "<div><b>Start line</b>'+notSet+sw+ends+sMiss+" in code)
+    g('A123: it is red: the warning colour as its background',
+      '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
+    g('A123: section 4\'s first-mark note is amber (note caut)',
+      "bits.push('<p class=\"note caut\">'+line+'</p>')" in fn_body(code, 'function analysis(') and '.note.caut{border-color:var(--caution);color:var(--caution)}' in page)
+    # A80, the page and the live manifest
+    g('A80: the page links the manifest (relative) and gives the theme colour, once each',
+      page.count('<link rel="manifest" href="manifest.webmanifest">') == 1 and page.count('<meta name="theme-color" content="#2E8E47">') == 1)
+    mp = os.path.join(ROOT, 'pages', 'course', 'manifest.webmanifest')
+    try:
+        man = json.loads(read(mp))
+    except Exception as e:
+        man = {}
+        g('A80: the manifest is valid JSON', False, str(e))
+    want = {'name': 'Course plot – race officer', 'short_name': 'Course', 'id': '/course/', 'start_url': '/course/', 'scope': '/course/',
+            'display': 'standalone', 'background_color': '#F5F8FA', 'theme_color': '#2E8E47'}
+    g('A80: the live manifest\'s fields', all(man.get(k) == v for k, v in want.items()), json.dumps({k: man.get(k) for k in want}, ensure_ascii=False))
+    g('A80: its icons: icon-192.png (192, any), icon-512.png (512, any), icon-maskable-512.png (512, maskable)',
+      [(i.get('src'), i.get('sizes'), i.get('purpose'), i.get('type')) for i in man.get('icons', [])] ==
+      [('icon-192.png', '192x192', 'any', 'image/png'), ('icon-512.png', '512x512', 'any', 'image/png'), ('icon-maskable-512.png', '512x512', 'maskable', 'image/png')])
+    A = os.path.join(ROOT, 'pages', 'course', 'assets')
+    sizes = {f: png_size(os.path.join(A, f)) for f in ('icon-course-192.png', 'icon-course-512.png', 'icon-course-maskable-512.png',
+                                                       'icon-course-test-192.png', 'icon-course-test-512.png', 'icon-course-test-maskable-512.png')}
+    g('A80: the icon sources are in pages/course/assets at their sizes', all(v == ((192, 192) if '192' in f else (512, 512)) for f, v in sizes.items()), str(sizes))
+    sw = read(SW)
+    g('A80: the worker is unchanged in what it handles: the page and key.js, never the manifest or icons',
+      'manifest' not in sw and 'icon' not in sw and "if(!key)return;" in sw)
+    # A80, the test build
+    out = os.path.join(tmp, 'out32')
+    r = run(PAGE, out)
+    g('A80: the test build exits 0', r.returncode == 0, r.stdout + r.stderr)
+    if r.returncode:
+        return
+    ct = os.path.join(out, 'course-test')
+    tm = json.loads(read(os.path.join(ct, 'manifest.webmanifest')))
+    g('A80: the test manifest: "TEST – Course plot", "TEST Course", and /course-test/ as id, start_url and scope',
+      tm.get('name') == 'TEST – Course plot' and tm.get('short_name') == 'TEST Course' and all(tm.get(k) == '/course-test/' for k in ('id', 'start_url', 'scope')))
+    tt = read(os.path.join(ct, 'manifest.webmanifest'))
+    g('A80: the test manifest names /course-test/ and nothing else: no /course/ anywhere', re.search(r'/course(?!-test/)', tt) is None)
+    g('A80: the test manifest is the live one in every other field',
+      {k: v for k, v in tm.items() if k not in ('name', 'short_name', 'id', 'start_url', 'scope')} == {k: v for k, v in man.items() if k not in ('name', 'short_name', 'id', 'start_url', 'scope')})
+    same = all(read(os.path.join(ct, d), 'rb') == read(os.path.join(A, s_), 'rb') for s_, d in build_test.TEST_ICONS)
+    g('A80: the TEST icons copied in byte for byte as icon-192.png, icon-512.png, icon-maskable-512.png', same)
+    b = read(os.path.join(out, 'BUILD.txt'))
+    g('A80: BUILD.txt names the manifest and each icon with its SHA-256',
+      'course-test/manifest.webmanifest sha256 ' in b and all(f'course-test/{d} sha256 ' in b for _, d in build_test.TEST_ICONS))
+    tp = read(os.path.join(ct, 'index.html'))
+    g('A80: the test page links its own manifest (relative), the live theme colour kept', tp.count('<link rel="manifest" href="manifest.webmanifest">') == 1)
+    # refusals, each writing nothing
+    bad = os.path.join(tmp, 'bad32.webmanifest')
+    with open(bad, 'w', encoding='utf-8') as f:
+        f.write(read(mp).replace('"scope": "/course/"', '"scope": "/"'))
+    r = subprocess.run([sys.executable, SCRIPT, '--page', PAGE, '--manifest', bad, '--out', os.path.join(tmp, 'out32b')], capture_output=True, text=True, encoding='utf-8')
+    g('A80: refused: a live manifest whose scope is not /course/', r.returncode != 0 and 'scope' in r.stdout and not os.path.exists(os.path.join(tmp, 'out32b', 'course-test')), r.stdout[:200])
+    bp = os.path.join(tmp, 'bad32.html')
+    with open(bp, 'w', encoding='utf-8', newline='') as f:
+        f.write(page.replace('<link rel="manifest" href="manifest.webmanifest">', '<link rel="manifest" href="/course/manifest.webmanifest">'))
+    r = run(bp, os.path.join(tmp, 'out32c'))
+    g('A80: refused: a page whose manifest link is not the relative manifest.webmanifest', r.returncode != 0 and 'manifest link' in r.stdout, r.stdout[:200])
+    ea = os.path.join(tmp, 'assets32')
+    os.makedirs(ea, exist_ok=True)
+    r = subprocess.run([sys.executable, SCRIPT, '--page', PAGE, '--assets', ea, '--out', os.path.join(tmp, 'out32d')], capture_output=True, text=True, encoding='utf-8')
+    g('A80: refused: a test icon missing', r.returncode != 0 and 'icon' in r.stdout and not os.path.exists(os.path.join(tmp, 'out32d', 'course-test')), r.stdout[:200])
 
 
 def main():
@@ -1781,6 +1870,7 @@ def main():
         t29_pin_routes_guards()
         t30_v45_guards()
         t31_v45b_guards()
+        t32_v46(tmp)
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

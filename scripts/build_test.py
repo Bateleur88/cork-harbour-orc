@@ -2,6 +2,7 @@
 """Build a parallel TEST copy of the race officer page and marks.php, for /course-test/ and /marks-test/.
 
     python scripts/build_test.py [--page pages/course/course_v8.html] [--sw pages/course/sw.js] [--marks pages/marks/marks.php]
+                                 [--manifest pages/course/manifest.webmanifest] [--assets pages/course/assets]
                                  [--out build/test] [--label LOCAL]
 
 Writes, and nothing else:
@@ -34,6 +35,12 @@ Refuses, and writes nothing, if:
       worker still contains "/marks" anywhere other than "/marks-test/", or either worker's code names a "record-" cache
       (the RIB worker deletes those, STATUS A18), names its cache other than "coursepage|"+folder+"|"+version, cleans up
       other than its own folder, or keeps a page that is not its own version (worker_problems).
+A80 (Pat, 23 October 2026): the test copy installs as its own app. The build writes OUT/course-test/manifest.webmanifest
+from the live manifest with the test copy's name ("TEST – Course plot", "TEST Course") and its id, start_url and scope
+/course-test/, and copies the TEST icons (assets/icon-course-test-192.png, -512.png, -maskable-512.png) in as
+icon-192.png, icon-512.png and icon-maskable-512.png. It refuses a live manifest that does not name /course/ for all
+three, a test manifest that names /course/ anywhere, and a page whose manifest link is not the relative
+manifest.webmanifest.
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
 
 --label LOCAL builds for the local test site on this PC (php -S), never for upload. It differs from the normal build only in:
@@ -43,6 +50,7 @@ The keys are never part of the build: key.js and data/ro-key.php are placed on t
 """
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -78,6 +86,12 @@ LOCAL_URLS = ('https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'http
 LIVE_HOSTS = re.compile(r'tradboats|orc-ireland', re.I)
 URL = re.compile(r'\b[a-z][a-z0-9+.-]*://[^\s\'"<>)\\`]*', re.I)
 URL_NO_SCHEME = re.compile(r'(?<![\w:/])//[a-z0-9-]+(?:\.[a-z0-9-]+)+', re.I)
+
+
+TEST_PAGE = '/course-test/'
+TEST_NAMES = {'name': 'TEST – Course plot', 'short_name': 'TEST Course'}
+TEST_ICONS = (('icon-course-test-192.png', 'icon-192.png'), ('icon-course-test-512.png', 'icon-512.png'),
+              ('icon-course-test-maskable-512.png', 'icon-maskable-512.png'))
 
 
 class Refused(Exception):
@@ -211,6 +225,29 @@ def build_worker(src):
     return t
 
 
+def build_manifest(src):
+    """The test copy's manifest (A80): the live one with the test name, and /course-test/ as its id, start_url and
+    scope; nothing else changed."""
+    try:
+        m = json.loads(src)
+    except ValueError as e:
+        raise Refused(f'the manifest is not valid JSON ({e})')
+    if not isinstance(m, dict):
+        raise Refused('the manifest is not a JSON object')
+    for k in ('id', 'start_url', 'scope'):
+        if m.get(k) != '/course/':
+            raise Refused(f'the live manifest\'s {k} must be /course/, not {m.get(k)!r}')
+    m.update(TEST_NAMES)
+    for k in ('id', 'start_url', 'scope'):
+        m[k] = TEST_PAGE
+    t = json.dumps(m, ensure_ascii=False, indent=2) + '\n'
+    if re.search(r'/course(?!-test/)', t):
+        raise Refused('the test manifest names /course/')
+    if any(json.loads(t).get(k) != TEST_PAGE for k in ('id', 'start_url', 'scope')):
+        raise Refused('the test manifest must name /course-test/ as its id, start_url and scope')
+    return t
+
+
 def local_url_problems(text):
     """For a LOCAL build: every mention of a live host, and every full web address not in LOCAL_URLS, as readable lines.
     Addresses with a scheme are looked for in the whole page, comments included; addresses starting // only in the
@@ -238,6 +275,10 @@ def build_page(src, label='', stamp=''):
         problems = local_url_problems(src)
         if problems:
             raise Refused('a LOCAL build refuses this page:\n  ' + '\n  '.join(problems))
+    links = re.findall(r'<link rel="manifest"[^>]*>', src)
+    if links and links != ['<link rel="manifest" href="manifest.webmanifest">']:
+        raise Refused('the page\'s manifest link must be exactly <link rel="manifest" href="manifest.webmanifest">, '
+                      'so the test copy loads its own: ' + ' '.join(links))
     m = re.findall(r"const PAGE_VERSION='([^']+)';", src)
     if len(m) != 1:
         raise Refused(f'expected exactly one PAGE_VERSION, found {len(m)}')
@@ -304,6 +345,8 @@ def main():
     ap.add_argument('--page', default=os.path.join(ROOT, 'pages', 'course', 'course_v8.html'))
     ap.add_argument('--sw', default=os.path.join(ROOT, 'pages', 'course', 'sw.js'))
     ap.add_argument('--marks', default=os.path.join(ROOT, 'pages', 'marks', 'marks.php'))
+    ap.add_argument('--manifest', default=os.path.join(ROOT, 'pages', 'course', 'manifest.webmanifest'))
+    ap.add_argument('--assets', default=os.path.join(ROOT, 'pages', 'course', 'assets'))
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'test'))
     ap.add_argument('--label', choices=['LOCAL'], default='', help='LOCAL: for the local test site only, never uploaded')
     a = ap.parse_args()
@@ -314,6 +357,17 @@ def main():
             worker = build_worker(f.read())
         with open(a.marks, 'rb') as f:
             marks = f.read()
+        man = None
+        if os.path.exists(a.manifest):
+            with open(a.manifest, encoding='utf-8', newline='') as f:
+                man = build_manifest(f.read()).encode('utf-8')
+            icons = []
+            for src, dst in TEST_ICONS:
+                p = os.path.join(a.assets, src)
+                if not os.path.isfile(p):
+                    raise Refused(f'the test icon {src} is missing from {a.assets}')
+                with open(p, 'rb') as f:
+                    icons.append((dst, f.read(), p))
     except Refused as e:
         print('REFUSED, nothing written: ' + str(e))
         return 1
@@ -335,6 +389,12 @@ def main():
             f.write(pb)
         with open(os.path.join(tmp, 'course-test', 'sw.js'), 'wb') as f:
             f.write(wb)
+        if man is not None:
+            with open(os.path.join(tmp, 'course-test', 'manifest.webmanifest'), 'wb') as f:
+                f.write(man)
+            for dst, data, _ in icons:
+                with open(os.path.join(tmp, 'course-test', dst), 'wb') as f:
+                    f.write(data)
         shutil.copyfile(a.marks, os.path.join(tmp, 'marks-test', 'marks.php'))
         with open(os.path.join(tmp, 'marks-test', 'marks.php'), 'rb') as f:
             if f.read() != marks:
@@ -349,6 +409,10 @@ def main():
                     f'course-test/index.html sha256 {sha(pb)}\n'
                     f'course-test/sw.js      sha256 {sha(wb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
+                    + (f'manifest built from {source_of(a.manifest, commit)}\n'
+                       f'course-test/manifest.webmanifest sha256 {sha(man)}\n'
+                       + ''.join(f'course-test/{dst} sha256 {sha(data)} (from {source_of(p, commit)})\n' for dst, data, p in icons)
+                       if man is not None else '') +
                     'key.js and data/ro-key.php are not part of the build: place them on the server by hand.\n')
         for name in ('course-test', 'marks-test', 'BUILD.txt'):
             dst = os.path.join(a.out, name)

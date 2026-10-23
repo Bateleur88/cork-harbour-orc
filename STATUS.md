@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 23 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built and tested, not released: nothing. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 23 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built and tested, not released: .46 (A123, A80 course page part). Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -24,7 +24,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next race:** race-day precautions on .45: open the course page once with signal on each RO device before the race day, so it opens without signal (A65); once a start has gone, don't tap Undo on its start line (A77); check the day's series name reads "Autumn League" and tap Confirm if it shows as carried, before the first course (A8).
 
-**Next:** A123 (start line warnings), A25 (key by header only), A70 (remove Copy legs).
+**.46 (built and tested, not released):** A123, A80 (course page part), on top of live .45; tested in the harness; a round on the test copy next (the test copy installs as its own app, "TEST Course"). Never within 12 hours of a race.
+
+**Next:** A25 (key by header only), A70 (remove Copy legs).
 
 **Then:** A60 (copy a course from any start).
 
@@ -43,7 +45,6 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A26 | Live host: `X-RO-Key` header pass-through not yet checked | Check when C9 part 2 is built |
 | A67, A68 | Design points to settle before building | — |
 | C6 | Repository name and what counts as a venue | Parked; ties to the per-venue direction |
-| A80 | Home-screen icon (manifest) for the course page. On iPhone an icon avoids Safari clearing the copy after about a week, but keeps its own storage, separate from Safari's | None until taken up |
 
 ---
 
@@ -158,7 +159,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
 | A78 | A placed line end replaced by placing again can't be withdrawn on its own | BUILT AND TESTED | Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); until it is withdrawn, a replaced end is saved with its start's course and treated as a placed estimate on every device; in .44 the same for finish line ends and a Start Pin a harbour mark replaces; released in .45 |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
-| A80 | Home-screen icon (manifest) for the course page | OPEN | Option only, kept separate from A65; see Open decisions |
+| A80 | Web app manifest for both pages, so Chrome offers a real Install with no badge on the home-screen icon | IN PROGRESS | Course page in .46, not released: `manifest.webmanifest` and three icons (192, 512, maskable 512) beside the page; the test copy installs as its own app ("TEST Course", `/course-test/`); tested in the harness. RIB page: goes with A82's RIB icons in one release, after Sunday's race. On iPhone an installed icon keeps its own storage, separate from Safari's |
 | A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: released in .45. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
 | A85 | Withdrawn positions shown greyed in All fixes and marks | NOT STARTED | Later |
 | A86 | Restore a withdrawn position | NOT STARTED | Needs a `marks.php` action; later |
@@ -194,7 +195,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A119 | A green "… typed position …: sent." line stays on screen long after it was sent | BUILT AND TESTED | Released in .45: a green "…: sent." line clears after 10 seconds if unchanged; red, amber and not-sent lines never clear this way; passed on the test copy |
 | A121 | Box 3's layout as box 2's (A117): the Suggest buttons on its line; "Use the boat and place the pin" bigger and bold on its own line | BUILT AND TESTED | Released in .45 (build .45b); passed on the test copy |
 | A122 | Section 4's square-to-wind line measured the mark named Windward from the course's first mark when there was no start line, giving figures such as "132° right of square · move 0 m" | BUILT AND TESTED | Released in .45 (build .45b): "First mark (name) …", from the start line's midpoint to the first mark after the start, whatever its name; with no start line, a note and no figure; the calculation unchanged; passed on the test copy |
-| A123 | Start line row: with no start line, a red critical warning "Line not set" beside the Start line heading; section 4's "First mark: set the start line to see how square it is to the wind" shows in orange | NOT STARTED | |
+| A123 | Start line row: with no start line, a red critical warning "Line not set" beside the Start line heading; section 4's "First mark: set the start line to see how square it is to the wind" shows in orange | BUILT AND TESTED | In .46, not released: shown while a start that needs a committee boat and Start Pin lacks either (not for a Grassy start, a card start or a one-end midpoint line); tested in the harness |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 
