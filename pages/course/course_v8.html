@@ -488,7 +488,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.45';
+const PAGE_VERSION='2026-10-06.45b';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -2636,8 +2636,8 @@ function finBoxes(ce){const k=ckey(S.race,S.start), d=estDraftFor(k);
   const cbs=S.marks.filter(m=>!m.card&&m.race===S.race&&isCB(m.name)&&!helpOf(m)&&!goneOf(m)&&isFinite(m.lat)).sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0));
   const b3='<div class="meta estBox">New committee boat fix <select class="estIn" data-f="b3cb"><option value="">choose its fix</option>'+
       cbs.map(m=>'<option value="'+esc(refFor(m))+'"'+(d.b3cb===refFor(m)?' selected':'')+'>'+esc(fixWords2(m)+(m.acc>0?' ±'+Math.round(m.acc)+' m':''))+'</option>').join('')+'</select>'+   // .45, A118
-    ', then Finish Pin '+inp('b3pdist','200','5.5em',1)+' m at '+inp('b3pbrg',s3.ph,'5em',1)+'°M from it on the water '+inp('b3pwhen',startTime(),'4.5em')+' '+
-    '<button type="button" class="estAct" data-act="finCbPin">Use the boat and place the pin</button></div>'+msgSlot('finCbPin')+finSqRow(3,d)+s3.note+
+    ', then Finish Pin '+inp('b3pdist','200','5.5em',1)+' m at '+inp('b3pbrg',s3.ph,'5em',1)+'°M from it on the water '+inp('b3pwhen',startTime(),'4.5em')+' · '+finSqRow(3,d,true)+'</div>'+s3.note+   // .45b, A121
+    '<div class="meta"><button type="button" class="estAct finBig" data-act="finCbPin">Use the boat and place the pin</button></div>'+msgSlot('finCbPin')+
     '<div class="meta sugTxt">A new fix: tap Record committee boat at the top of the page on the boat, then choose it here.</div>';
   return finBox(1,'1. Committee boat remains, place new Finish Pin',b1)+finBox(2,'2. Choose Finish mark and position Committee boat',b2)+finBox(3,'3. Move Committee boat and Finish Pin',b3);}
 function finPinPlaceBox(cb){const k=ckey(S.race,S.start), d=estDraftFor(k), f=finOf(cb), who=f&&f.w==='fcb'?'Finish boat':'Committee boat';
@@ -2821,16 +2821,20 @@ function analysis(cs,twdT){const vA=varW();
   if(finUsesPin(S.race,S.start)){const fe=finEstNow(), fl=finPinLine();
     if(fe)bits.push('<p class="note caut">Finish line: estimate – '+esc(fe.text)+(fe.kind==='mid'?'. No line length.':'.')+'</p>');
     if(fl&&fl.cb){const r=geo(fl.cb,fl.pin);bits.push('<p class="note">Finish line '+Math.round(r.m)+' m, '+pad(magOf(r.brg,vA),3)+'°M</p>');}}
-  const w=cs.find(m=>/windward/i.test(m.name));
+  /* .45b, A122 (Pat, 23 October 2026): how square the course's first mark after the start is to the wind, measured from
+     the start line's midpoint, whatever the mark's name (firstMarkOf skips routing waypoints); with no start line, a
+     note instead of a figure */
+  const w=firstMarkOf().m;
   if(w&&twdT!==null){
-    const from=sl?sl.mid:cs[0];
-    const r=geo(from,w);
+    if(!sl){const line='First mark: set the start line to see how square it is to the wind';bits.push('<p class="note">'+line+'</p>');txt.push(line);}
+    else{
+    const r=geo(sl.mid,w);
     let d=((r.brg-twdT+540)%360)-180; // +ve: mark right of square
     const across=Math.abs(r.m*Math.sin(rad(d)));
     const dir=(twdT+(d>0?-90:90)+360)%360;
-    const line=Math.abs(d)<1?'Windward mark square with the wind, '+r.nm.toFixed(2)+' nm':
-      'Windward mark '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir,vA),3)+'°M to square it';
-    bits.push('<p class="note'+(Math.abs(d)>5?' caut':'')+'">'+line+'</p>'); txt.push(line);
+    const line=Math.abs(d)<1?'First mark ('+w.name+') square with the wind, '+r.nm.toFixed(2)+' nm':
+      'First mark ('+w.name+') '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir,vA),3)+'°M to square it';
+    bits.push('<p class="note'+(Math.abs(d)>5?' caut':'')+'">'+esc(line)+'</p>'); txt.push(line);}
   }
   return {html:bits.join(''),txt};
 }

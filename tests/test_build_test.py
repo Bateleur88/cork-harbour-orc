@@ -138,6 +138,10 @@ altered in ways it must refuse and checks that it writes nothing:
                 and place boat bigger and bold on its own line; A118, box 3's list gives a recorded fix's accuracy, none for a
                 typed position; A119, a green "…: sent." message, and the line under Record committee boat when all it says
                 is what was sent, clears after SENT_CLEAR_MS if unchanged, never a red, amber or not-sent one
+ 31  .45b       static guards for .45b (Pat, 23 October 2026): A121, box 3 laid out as box 2 (its Suggest buttons on the
+                line, Use the boat and place the pin bigger and bold on its own line, its message under it); A122, how
+                square the first mark after the start is to the wind, from the start line's midpoint, named, with a note
+                and no figure when there is no start line
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -1644,7 +1648,7 @@ def t29_pin_routes_guards():
       and 'data-act="finCbPin"' in bx and 'data-b="3">Place boat' not in bx and 'that mark is the Finish Pin' not in bx and 'b3at' not in code
       and 'finPinBoat3' not in code and "isCB(m.name)&&!helpOf(m)&&!goneOf(m)" in bx and "m.race===S.race" in bx)
     g('finish (items 4, 5): boxes 2 and 3 have "Square to the last leg" and their end switch, box 2 the committee boat\'s, box 3 the Finish Pin\'s',
-      "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx
+      "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx and "' · '+finSqRow(3,d,true)+'</div>'+s3.note+" in bx
       and "inp('b2brg',s2.ph,'5em',1)" in bx and "inp('b3pbrg',s3.ph,'5em',1)" in bx
       and "2:{sq:'b2sq',end:'b2end',dist:'b2dist',brg:'b2brg',what:'committee boat'}" in code and "3:{sq:'b3sq',end:'b3end',dist:'b3pdist',brg:'b3pbrg',what:'pin'}" in code
       and "if(act==='sqLeg')d[f.sq]=d[f.sq]==='leg'?'':'leg';else d[f.end]=finSqEnd(n,d)==='port'?'starboard':'port';" in code
@@ -1699,13 +1703,13 @@ def t30_v45_guards():
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('30 .45: ' + name, ok, detail)
     bx, sq = fn_body(code, 'function finBoxes('), fn_body(code, 'function finSqRow(')
-    g('PAGE_VERSION 2026-10-06.45', "const PAGE_VERSION='2026-10-06.45';" in code)
+    g('PAGE_VERSION 2026-10-06.45 or later', re.search(r"const PAGE_VERSION='2026-10-06\.45[a-z]?';", code) is not None)
     g('A117: box 2\'s Suggest buttons on the "from it" line, then Set pin and place boat bigger and bold on its own line, its message under it',
       "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx
       and "'<div class=\"meta\"><button type=\"button\" class=\"estAct finBig\" data-act=\"finPinBoat\" data-b=\"2\">Set pin and place boat</button></div>'+msgSlot('finPinBoat')+" in bx
       and "(inline?'<span class=\"finSugIn\">':'<div class=\"meta estBox\">')" in sq and "(inline?'</span>':'</div>')" in sq
       and '.finBig{font-weight:700;font-size:1.05rem;padding:10px 20px;margin-top:4px}' in page
-      and "finSqRow(1,d)+note" in fn_body(code, 'function finPinPlaceBox(') and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx)
+      and "finSqRow(1,d)+note" in fn_body(code, 'function finPinPlaceBox(') and "' · '+finSqRow(3,d,true)+'</div>'+s3.note+" in bx)
     g('A118: box 3\'s list gives a recorded fix\'s accuracy, a typed position none',
       "esc(fixWords2(m)+(m.acc>0?' ±'+Math.round(m.acc)+' m':''))" in bx)
     fade, cb = fn_body(code, 'function sentFade('), fn_body(code, 'function sentFadeCb(')
@@ -1717,6 +1721,30 @@ def t30_v45_guards():
       "if(!/\\bok\\b/.test(el.className)||!/sent\\.$/.test(t))return;" in cb
       and "if(el.textContent===t&&/\\bok\\b/.test(el.className)){el.textContent='';el.className='status';}" in cb
       and "if(!stop&&!moved&&said.length&&said.every(x=>/sent\\.$/.test(x)))sentFadeCb();" in fn_body(code, 'async function sendOutbox('))
+
+
+def t31_v45b_guards():
+    """.45b (Pat, 23 October 2026): A121, A122. Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('31 .45b: ' + name, ok, detail)
+    bx, an = fn_body(code, 'function finBoxes('), fn_body(code, 'function analysis(')
+    g('PAGE_VERSION 2026-10-06.45b', "const PAGE_VERSION='2026-10-06.45b';" in code)
+    g('A121: box 3\'s Suggest buttons on its line, then Use the boat and place the pin bigger and bold on its own line, its message under it',
+      "inp('b3pwhen',startTime(),'4.5em')+' · '+finSqRow(3,d,true)+'</div>'+s3.note+" in bx
+      and "'<div class=\"meta\"><button type=\"button\" class=\"estAct finBig\" data-act=\"finCbPin\">Use the boat and place the pin</button></div>'+msgSlot('finCbPin')+" in bx
+      and bx.count('finBig') == 2)
+    g('A122: the first mark after the start (firstMarkOf), not a mark found by its name',
+      "const w=firstMarkOf().m;" in an and 'windward' not in an.lower())
+    g('A122: with no start line, the note and no figure',
+      "if(!sl){const line='First mark: set the start line to see how square it is to the wind';" in an)
+    g('A122: with a start line, measured from its midpoint, the calculation as before, the mark named',
+      "const r=geo(sl.mid,w);" in an and "let d=((r.brg-twdT+540)%360)-180;" in an
+      and "const across=Math.abs(r.m*Math.sin(rad(d)));" in an and "const dir=(twdT+(d>0?-90:90)+360)%360;" in an
+      and "'First mark ('+w.name+') '+Math.abs(Math.round(d))+'° '+(d>0?'right':'left')+' of square · move '+Math.round(across)+' m towards '+pad(magOf(dir,vA),3)+'°M to square it'" in an
+      and "'First mark ('+w.name+') square with the wind, '+r.nm.toFixed(2)+' nm'" in an and 'cs[0]' not in an)
 
 
 def main():
@@ -1752,6 +1780,7 @@ def main():
         t28_local_build(tmp)
         t29_pin_routes_guards()
         t30_v45_guards()
+        t31_v45b_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
