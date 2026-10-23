@@ -195,16 +195,13 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A110 | The emergency midpoint kept an already placed Finish boat | BUILT AND TESTED | In .44, not released: the boat is withdrawn |
 | A111 | Change boat… suggestions did nothing with "from" set to a harbour mark | BUILT AND TESTED | In .44, not released |
 | A112 | The Start Pin row said "Not recorded" while Auto carried an earlier race's pin | BUILT AND TESTED | In .44, not released; found by the harness |
-| A113 | Undo returned the Finish line's committee boat to Auto once in a test | WITHDRAWN | Closed: seen once on the local site, not reproduced in the harness, and Undo kept the hand-chosen committee boat on the test copy |
-| A114 | The series-name prompt reads "Confirm", the test steps said "Use it" | WITHDRAWN | Decided: the page is as intended (Confirm on a carried name; "Use it?" on the day's first save); the test steps are left as they are |
 | A115 | After its fixes were moved to another race, a start's rounding list kept them, named with the other race and time | DONE | Decided: kept as now; a start's rounding list keeps pointing at a moved fix, named with its new race. No page change |
 | A116 | A set Finish Pin is offered a newer recorded or typed one ("Newer: … Use it") | DONE | Decided: kept as now; a typed Finish Pin is offered the same way as a recorded one (A97). No page change |
 | A117 | Box 2's layout: the Suggest buttons on the same line as "from it"; "Set pin and place boat" bigger and bold | NOT STARTED | |
 | A118 | Box 3's "New committee boat fix" list shows no accuracy for a recorded fix | NOT STARTED | Show "±N m" as the Committee boat lists and All fixes and marks do; a typed position has none |
 | A119 | A green "… typed position …: sent." line stays on screen long after it was sent | NOT STARTED | Clear it after a short time or at the next action |
-| A120 | The offline Record committee boat message differs from the test steps | WITHDRAWN | Decided: the page's "… – will send when there is signal." is as intended for a fix waiting for signal; the test steps are left as they are |
 
-Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58).
+Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 
 ## 3. Coordination and design decisions
 
