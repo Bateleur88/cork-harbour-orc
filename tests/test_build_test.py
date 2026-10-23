@@ -134,6 +134,10 @@ altered in ways it must refuse and checks that it writes nothing:
                 position; Place Finish Pin from the committee boat end in use only, saved, read and shown as an estimate;
                 the committee boat placed from a harbour mark sets the Start Pin at it, and with another pin in use
                 nothing is placed; one pin record per start; saved data read as before. Guards, not proof
+ 30  .45        static guards for .45 (Pat, 23 October 2026): A117, box 2's suggestions on its "from it" line and Set pin
+                and place boat bigger and bold on its own line; A118, box 3's list gives a recorded fix's accuracy, none for a
+                typed position; A119, a green "…: sent." message, and the line under Record committee boat when all it says
+                is what was sent, clears after SENT_CLEAR_MS if unchanged, never a red, amber or not-sent one
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -1640,7 +1644,7 @@ def t29_pin_routes_guards():
       and 'data-act="finCbPin"' in bx and 'data-b="3">Place boat' not in bx and 'that mark is the Finish Pin' not in bx and 'b3at' not in code
       and 'finPinBoat3' not in code and "isCB(m.name)&&!helpOf(m)&&!goneOf(m)" in bx and "m.race===S.race" in bx)
     g('finish (items 4, 5): boxes 2 and 3 have "Square to the last leg" and their end switch, box 2 the committee boat\'s, box 3 the Finish Pin\'s',
-      "msgSlot('finPinBoat')+finSqRow(2,d)+s2.note+" in bx and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx
+      "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx
       and "inp('b2brg',s2.ph,'5em',1)" in bx and "inp('b3pbrg',s3.ph,'5em',1)" in bx
       and "2:{sq:'b2sq',end:'b2end',dist:'b2dist',brg:'b2brg',what:'committee boat'}" in code and "3:{sq:'b3sq',end:'b3end',dist:'b3pdist',brg:'b3pbrg',what:'pin'}" in code
       and "if(act==='sqLeg')d[f.sq]=d[f.sq]==='leg'?'':'leg';else d[f.end]=finSqEnd(n,d)==='port'?'starboard':'port';" in code
@@ -1687,6 +1691,34 @@ def t29_pin_routes_guards():
       and "const row=act==='open'?null:b.closest('#startRow,#finishRow');if(row)msgClear(row.id==='finishRow'?'finish':'start');" in code)
 
 
+def t30_v45_guards():
+    """.45 (Pat, 23 October 2026): A117, A118, A119. Guards, not proof: no JavaScript is run."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    page = read(PAGE)
+    code = build_test.strip_comments(page)
+    g = lambda name, ok, detail='': report('30 .45: ' + name, ok, detail)
+    bx, sq = fn_body(code, 'function finBoxes('), fn_body(code, 'function finSqRow(')
+    g('PAGE_VERSION 2026-10-06.45', "const PAGE_VERSION='2026-10-06.45';" in code)
+    g('A117: box 2\'s Suggest buttons on the "from it" line, then Set pin and place boat bigger and bold on its own line, its message under it',
+      "'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+" in bx
+      and "'<div class=\"meta\"><button type=\"button\" class=\"estAct finBig\" data-act=\"finPinBoat\" data-b=\"2\">Set pin and place boat</button></div>'+msgSlot('finPinBoat')+" in bx
+      and "(inline?'<span class=\"finSugIn\">':'<div class=\"meta estBox\">')" in sq and "(inline?'</span>':'</div>')" in sq
+      and '.finBig{font-weight:700;font-size:1.05rem;padding:10px 20px;margin-top:4px}' in page
+      and "finSqRow(1,d)+note" in fn_body(code, 'function finPinPlaceBox(') and "msgSlot('finCbPin')+finSqRow(3,d)+s3.note+" in bx)
+    g('A118: box 3\'s list gives a recorded fix\'s accuracy, a typed position none',
+      "esc(fixWords2(m)+(m.acc>0?' ±'+Math.round(m.acc)+' m':''))" in bx)
+    fade, cb = fn_body(code, 'function sentFade('), fn_body(code, 'function sentFadeCb(')
+    g('A119: a green "…: sent." message clears after SENT_CLEAR_MS if it still says the same; nothing else clears this way',
+      'const SENT_CLEAR_MS=10000;' in code and "if(!x||x.ok!==true||!/sent\\.$/.test(x.t))return;" in fade
+      and "if(y&&y.ok===true&&y.t===t){delete actMsgs[key];paintMsgs();}" in fade
+      and "sentFade(key);});" in fn_body(code, 'function fixSays(') and "sentFade(key);paintMsgs();}" in fn_body(code, 'function readSays('))
+    g('A119: the line under Record committee boat clears the same way, only when all it says is what was sent',
+      "if(!/\\bok\\b/.test(el.className)||!/sent\\.$/.test(t))return;" in cb
+      and "if(el.textContent===t&&/\\bok\\b/.test(el.className)){el.textContent='';el.className='status';}" in cb
+      and "if(!stop&&!moved&&said.length&&said.every(x=>/sent\\.$/.test(x)))sentFadeCb();" in fn_body(code, 'async function sendOutbox('))
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1719,6 +1751,7 @@ def main():
         t27_fixes44_guards()
         t28_local_build(tmp)
         t29_pin_routes_guards()
+        t30_v45_guards()
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 

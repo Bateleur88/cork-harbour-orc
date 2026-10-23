@@ -222,6 +222,7 @@ body.dayHeld .wrap>.raceOnly,body.dayHeld #seriesBox,body.dayHeld #seriesAsk,bod
 .routeHead{font-weight:700;font-size:.88rem;margin-bottom:2px}
 .finHead{display:block;width:100%;min-height:40px;text-align:left;background:none;border:0;padding:4px 0;font:inherit;font-weight:700;font-size:.95rem;color:inherit;cursor:pointer}
 .finCaret{display:inline-block;width:1em}
+.finBig{font-weight:700;font-size:1.05rem;padding:10px 20px;margin-top:4px}
 .routeOr{text-align:center;font-size:.85rem;font-weight:700;color:var(--muted);margin:4px 0}
 /* .44: the Finish Pin side suggested from the approach, until the RO taps a side */
 .sideBtns .sugSide{border-style:dashed;font-style:italic}
@@ -487,7 +488,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.44';
+const PAGE_VERSION='2026-10-06.45';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -1744,8 +1745,16 @@ function msgFix(area,k,id){const x=actMsgs[msgKey(area,k)];if(x){x.fid=id;x.base
 function fixSays(f,kind,why){let hit=false;
   Object.keys(actMsgs).forEach(key=>{const x=actMsgs[key];if(!x.fid||x.fid!==f.id)return;hit=true;
     const now=kind==='sent'?'sent.':kind==='refused'?'refused by the server ('+why+'). Kept on this device in the Not sent list.':'not sent yet ('+why+'), trying again every 15 s.';
-    x.t=x.base.replace('sending…',now);x.ok=kind==='sent'?true:kind==='refused'?false:null;x.caut=kind==='wait';});
+    x.t=x.base.replace('sending…',now);x.ok=kind==='sent'?true:kind==='refused'?false:null;x.caut=kind==='wait';sentFade(key);});
   if(hit)paintMsgs();return hit;}
+/* .45, A119 (Pat, 23 October 2026): a green message saying a fix was sent ("…: sent.") clears by itself after
+   SENT_CLEAR_MS, if it still says the same; a red, amber or not-sent message never clears this way */
+const SENT_CLEAR_MS=10000;
+function sentFade(key){const x=actMsgs[key];if(!x||x.ok!==true||!/sent\.$/.test(x.t))return;const t=x.t;
+  setTimeout(()=>{const y=actMsgs[key];if(y&&y.ok===true&&y.t===t){delete actMsgs[key];paintMsgs();}},SENT_CLEAR_MS);}
+// the same for the line under Record committee boat, when all it says is what was sent
+function sentFadeCb(){const el=$('cbStatus'), t=el.textContent;if(!/\bok\b/.test(el.className)||!/sent\.$/.test(t))return;
+  setTimeout(()=>{if(el.textContent===t&&/\bok\b/.test(el.className)){el.textContent='';el.className='status';}},SENT_CLEAR_MS);}
 function msgSlot(area){return '<p class="status actMsg" data-msg="'+esc(area)+'" role="status" aria-live="polite" hidden></p>';}
 // an action in an area or row clears what that row said before
 function msgClear(area){const g=MSG_GROUP[area]||area, k=ckey(S.race,S.start)+'|';
@@ -2620,13 +2629,13 @@ function finBoxes(ce){const k=ckey(S.race,S.start), d=estDraftFor(k);
   const b1=endPicker('fcb')+(ce.m?finPinPlaceBox(ce.m):'<div class="meta muteTxt">No committee boat in use for this start: use 2 or 3.</div>');
   const s2=finSq(2,d), s3=finSq(3,d);
   const b2='<div class="meta estBox">Finish Pin at <select class="estIn" data-f="b2at"><option value="">choose a mark</option>'+finPinOpts(d.b2at)+'</select> on the water '+inp('b2when',startTime(),'4.5em')+
-    '; committee boat '+inp('b2dist','200','5.5em',1)+' m at '+inp('b2brg',s2.ph,'5em',1)+'°M from it '+
-    '<button type="button" class="estAct" data-act="finPinBoat" data-b="2">Set pin and place boat</button></div>'+msgSlot('finPinBoat')+finSqRow(2,d)+s2.note+
+    '; committee boat '+inp('b2dist','200','5.5em',1)+' m at '+inp('b2brg',s2.ph,'5em',1)+'°M from it · '+finSqRow(2,d,true)+'</div>'+s2.note+   // .45, A117
+    '<div class="meta"><button type="button" class="estAct finBig" data-act="finPinBoat" data-b="2">Set pin and place boat</button></div>'+msgSlot('finPinBoat')+
     '<div class="meta sugTxt">The Finish Pin is saved at that mark\'s position as this start\'s Finish Pin, and the committee boat placed from it.</div>'+
     '<div class="meta finEmerg"><span class="muteTxt">Emergency only, no committee boat: </span><button type="button" class="ghost estAct chgBtn" data-act="finMidAt">Use the mark as the finish line\'s midpoint</button></div>'+msgSlot('finMidAt');
   const cbs=S.marks.filter(m=>!m.card&&m.race===S.race&&isCB(m.name)&&!helpOf(m)&&!goneOf(m)&&isFinite(m.lat)).sort((a,b)=>(fixMoment(a)||0)-(fixMoment(b)||0));
   const b3='<div class="meta estBox">New committee boat fix <select class="estIn" data-f="b3cb"><option value="">choose its fix</option>'+
-      cbs.map(m=>'<option value="'+esc(refFor(m))+'"'+(d.b3cb===refFor(m)?' selected':'')+'>'+esc(fixWords2(m))+'</option>').join('')+'</select>'+
+      cbs.map(m=>'<option value="'+esc(refFor(m))+'"'+(d.b3cb===refFor(m)?' selected':'')+'>'+esc(fixWords2(m)+(m.acc>0?' ±'+Math.round(m.acc)+' m':''))+'</option>').join('')+'</select>'+   // .45, A118
     ', then Finish Pin '+inp('b3pdist','200','5.5em',1)+' m at '+inp('b3pbrg',s3.ph,'5em',1)+'°M from it on the water '+inp('b3pwhen',startTime(),'4.5em')+' '+
     '<button type="button" class="estAct" data-act="finCbPin">Use the boat and place the pin</button></div>'+msgSlot('finCbPin')+finSqRow(3,d)+s3.note+
     '<div class="meta sugTxt">A new fix: tap Record committee boat at the top of the page on the boat, then choose it here.</div>';
@@ -2673,9 +2682,9 @@ function finSqPaint(n){const box=document.querySelector('#finishRow .finBox[data
   const s=finSq(n,estDraftFor(ckey(S.race,S.start))), inp=box.querySelector('[data-f="'+FIN_SQ[n].brg+'"]'), note=box.querySelector('[data-sug]');
   if(inp)inp.placeholder=s.ph;if(note)note.outerHTML=s.note;}
 // the Suggest row of box n: Square to the last leg, and which end the placed end goes
-function finSqRow(n,d){const f=FIN_SQ[n];
-  return '<div class="meta estBox">Suggest: <button type="button" class="ghost estAct chgBtn" data-act="sqLeg" data-b="'+n+'" aria-pressed="'+(d[f.sq]==='leg')+'">Square to the last leg</button> '+
-    '<button type="button" class="ghost estAct chgBtn" data-act="fpSide" data-b="'+n+'">'+(n===2?'Committee boat':'Finish Pin')+': '+finSqEnd(n,d)+' end</button></div>';}
+function finSqRow(n,d,inline){const f=FIN_SQ[n];
+  return (inline?'<span class="finSugIn">':'<div class="meta estBox">')+'Suggest: <button type="button" class="ghost estAct chgBtn" data-act="sqLeg" data-b="'+n+'" aria-pressed="'+(d[f.sq]==='leg')+'">Square to the last leg</button> '+
+    '<button type="button" class="ghost estAct chgBtn" data-act="fpSide" data-b="'+n+'">'+(n===2?'Committee boat':'Finish Pin')+': '+finSqEnd(n,d)+' end</button>'+(inline?'</span>':'</div>');}
 /* .44 (Pat, 22 October 2026): the likely Finish Pin end, from the approach from the last mark: the side of the boat
    coming from that mark to the line's middle that the Finish Pin is on. Shown on the page only, as a suggestion, until
    the RO taps a side (not in the WhatsApp text or Copy for Sail Scoring); none when the approach runs along the line */
@@ -4269,7 +4278,7 @@ function outWait(f,k,e){const r=outReason(k,e);
    changed: one another action has written since is left as it is. */
 function readSays(f,msg,cls){if(f.acc!==0)return;
   const key=Object.keys(actMsgs).find(x=>/\|typed$/.test(x)&&actMsgs[x].t.indexOf(outName(f)+':')===0);if(!key)return;
-  actMsgs[key]={t:msg,ok:cls==='ok'?true:cls==='err'?false:null};paintMsgs();}
+  actMsgs[key]={t:msg,ok:cls==='ok'?true:cls==='err'?false:null};sentFade(key);paintMsgs();}
 function outRefused(f,why){return outName(f)+': refused by the server ('+why+'). Not saved on the server; kept on this device in the "Not sent" list.'+outFar(f);}
 // a typed position far from the harbour keeps its flag in every message about it (farNm)
 function outFar(f){const d=f.acc===0&&isFinite(f.lat)&&isFinite(f.lon)?geo(HARBOUR_CENTRE,f).nm:0;return d>FAR_NM?' ⚠ It is '+farText(d)+'.':'';}
@@ -4300,7 +4309,8 @@ async function sendOutbox(){
       if(stop){const own=s0.outbox.filter(q=>{readSays(q,outWait(q,stop.k,stop.e),'');return fixSays(q,'wait',outReason(stop.k,stop.e));}), rest=s0.outbox.filter(q=>!own.includes(q));
         if(rest.length)said.push(outWait(rest[0],stop.k,stop.e)+(rest.length>1?' '+(rest.length-1)+' more waiting behind it, in order.':''));}
       // a typed position far from the harbour keeps its warning in red, as its chip does (STATUS A55)
-      if(said.length||!sent){$('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved||said.some(x=>x.indexOf(' ⚠ It is ')>=0)?' err':stop?'':' ok');cbWaitSaid=!!stop&&said.length>0;}
+      if(said.length||!sent){$('cbStatus').textContent=said.join(' '); $('cbStatus').className='status'+(moved||said.some(x=>x.indexOf(' ⚠ It is ')>=0)?' err':stop?'':' ok');cbWaitSaid=!!stop&&said.length>0;
+        if(!stop&&!moved&&said.length&&said.every(x=>/sent\.$/.test(x)))sentFadeCb();}
       else if(cbWaitSaid&&!stop){$('cbStatus').textContent='';$('cbStatus').className='status';cbWaitSaid=false;}
       if(moved)commit();
       if(sent&&!stop)await pull(true);}
