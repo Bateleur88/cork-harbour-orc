@@ -2506,7 +2506,7 @@ function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by p
   const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};
   const fz=finOf(m);   // A63: a Finish Pin set at a mark, or a Finish boat placed from the Finish Pin
   // .44 (Pat, 22 October 2026): a pin set at a mark says where it is, then the race and time it was set for
-  const setFor=(lab,at)=>isMarkEnd(at)?at+rp:lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;   // A123: a mark by its name alone
+  const setFor=(lab,at)=>isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;   // A123: a mark by its name alone
   if(fz)return fz.w==='fpin'?(+fz.m>0?placed('Finish Pin',fz):setFor('Finish Pin',fz.at)):placed('Finish boat',fz);
   const p=setOf(m);if(p)return setFor('Start Pin',p.at);const e=estOf(m);if(!e)return '';
   return placed(e.w==='cb'?'Committee boat':(e.nm||'Start Pin'),e);}
@@ -2524,8 +2524,8 @@ function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null),
 // one line end in the "Line ends:" line (fix 5)
 function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,''), rp=goneOf(m)?', replaced':'', w=m.notSent?' (not sent)':m.pending?' (sending)':'';
   const fz=finOf(m), sp=setOf(m), e=estOf(m);
-  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.) '+t:isMarkEnd(fz.at)?fz.at+' ('+t+')':'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est.) '+t)+rp+w;
-  if(sp)return (isMarkEnd(sp.at)?sp.at:'Start Pin: '+shortAt(sp.at))+' ('+t+')'+rp+w;
+  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.) '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est.) '+t)+rp+w;
+  if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;
   if(e)return (e.w==='cb'?'Committee boat':'Start Pin')+' (est.) '+t+rp+w;
   return m.name+' '+t+(isPasted(m)?' (pasted)':isTypedPos(m)?' (typed)':'')+w;}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
