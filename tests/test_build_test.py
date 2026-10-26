@@ -1787,8 +1787,13 @@ def t32_v46(tmp):
       and "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl)
     g('A124: hm is kept when a committee boat record is read (estRec), never for a Start Pin',
       "le.w==='cb'&&le.hm?{hm:String(le.hm)}:{}" in fn_body(code, 'function estRec('))
-    g('A124: with hm, "<nm to one decimal> nm at <°M> from <mark>"; without, "<m> m at <°M> from <from>"',
-      "function estAt(e){return e.hm?(e.m/1852).toFixed(1)+' nm at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+    g('A124: with hm, "<nm to one decimal> nm at <°M> from <mark>", below 0.1 nm "<m> m …"; without, "<m> m at <°M> from <from>"',
+      "function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+    # the switch, worked here as the page works it: 185 m and less in metres, 186 m and more in nm, never "0.0 nm"
+    dist = lambda m: f'{m} m' if m * 10 < 1852 else f'{m / 1852:.1f} nm'
+    g('A124: the switch: 80 m, 185 m in metres; 186 m is 0.1 nm, 277 m 0.1 nm, 278 m 0.2 nm; 1 to 5000 m never "0.0 nm"',
+      [dist(m) for m in (80, 185, 186, 277, 278, 1000)] == ['80 m', '185 m', '0.1 nm', '0.1 nm', '0.2 nm', '0.5 nm']
+      and not any(dist(m) == '0.0 nm' for m in range(1, 5001)), str([dist(m) for m in (80, 185, 186, 277, 278, 1000)]))
     hl = fn_body(code, 'function helpLong(')
     g('A124: helpLong (Start line section, fixes list) and estWords (section 4, the message) use it; no bracketed time with hm',
       "const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};" in hl

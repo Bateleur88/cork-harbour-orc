@@ -2327,8 +2327,10 @@ function lineUsers(m,skip,placed){const out=[];if(!m)return out;
 /* .46, A124 (Pat, 26 October 2026): a committee boat placed from a harbour mark (the route that sets the Start Pin there
    too) saves the mark's name as hm and is described "0.5 nm at 090°M from No.13": nautical miles to one decimal, the
    mark named plainly. Every other placed end, and a record saved before (no hm), keeps "1000 m at 090°M from <from>";
-   from itself is saved as before, so Copy for Sail Scoring (helpX) and an older page read it unchanged */
-function estAt(e){return e.hm?(e.m/1852).toFixed(1)+' nm at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+   from itself is saved as before, so Copy for Sail Scoring (helpX) and an older page read it unchanged. Below 0.1 nm
+   (Pat, 26 October 2026) in metres instead, "80 m at 090°M from No.13": the saved whole metres, 185 m and less in
+   metres, 186 m and more in nm (0.1 nm is 185.2 m), so "0.0 nm" never appears */
+function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
 function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
