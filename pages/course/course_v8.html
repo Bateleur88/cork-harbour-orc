@@ -2072,7 +2072,7 @@ function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in
    (estSaved), so every course saved before reads and saves exactly as before. Only a start with both ends placed is saved
    as {cb, pin}, which a page before this build cannot read. */
 function estRec(le){return le&&typeof le==='object'&&(le.w==='cb'||le.w==='pin')&&typeof le.ref==='string'&&/^s:/.test(le.ref)?
-  Object.assign({w:le.w,ref:le.ref,from:String(le.from||''),m:+le.m||0,brgM:+le.brgM||0},le.fromWhen?{fromWhen:String(le.fromWhen)}:{}):null;}
+  Object.assign({w:le.w,ref:le.ref,from:String(le.from||''),m:+le.m||0,brgM:+le.brgM||0},le.fromWhen?{fromWhen:String(le.fromWhen)}:{},le.w==='cb'&&le.hm?{hm:String(le.hm)}:{}):null;}
 function estNorm(v){const one=estRec(v);if(one)return {[one.w]:one};if(!v||typeof v!=='object')return null;
   const o={};['cb','pin'].forEach(w=>{const r=estRec(v[w]);if(r&&r.w===w)o[w]=r;});return Object.keys(o).length?o:null;}
 function estsOf(k){const o=(S.lineEst||{})[k];return o?[o.cb,o.pin].filter(Boolean):[];}
@@ -2324,7 +2324,12 @@ function lineUsers(m,skip,placed){const out=[];if(!m)return out;
     const now=['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m);
     if(saved||rec||now)out.push('Race '+r+' Start '+(st+1));});
   return out;}
-function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+/* .46, A124 (Pat, 26 October 2026): a committee boat placed from a harbour mark (the route that sets the Start Pin there
+   too) saves the mark's name as hm and is described "0.5 nm at 090°M from No.13": nautical miles to one decimal, the
+   mark named plainly. Every other placed end, and a record saved before (no hm), keeps "1000 m at 090°M from <from>";
+   from itself is saved as before, so Copy for Sail Scoring (helpX) and an older page read it unchanged */
+function estAt(e){return e.hm?(e.m/1852).toFixed(1)+' nm at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
    way it is a line end set with the helper (helpOf): it carries forward only within its race (decision 2a), and wherever
@@ -2349,7 +2354,7 @@ function fromWhenOf(e,m){if(e.fromWhen)return String(e.fromWhen);const f=String(
 // the time to save as fromWhen when an end is placed from ref: '' when the reference's own name already says it, or it has none
 function fromWhenNew(ref,from){if(!ref||ref.card&&!ref.atFix||!ref.time)return '';const w=fixWhen(ref);return String(from).endsWith(' '+w)?'':w;}
 function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by placing again, not yet withdrawn
-  const placed=(lab,e)=>{const fw=fromWhenOf(e,m);return lab+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};
+  const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};
   const fz=finOf(m);   // A63: a Finish Pin set at a mark, or a Finish boat placed from the Finish Pin
   // .44 (Pat, 22 October 2026): a pin set at a mark says where it is, then the race and time it was set for
   const setFor=(lab,at)=>lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;
@@ -4462,7 +4467,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     // one placement gives both ends; a Start Pin already at that mark is used as the reference. A different Start Pin in
     // use is switched for it (Pat, 22 October 2026): a recorded one simply stops being chosen, one set or placed here is
     // withdrawn if nothing else uses it, and Undo puts it back (setPinAt keeps it as "was")
-    const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref);
+    const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref), hm=harbour?ref.card:'';   // A124: the mark chosen
     let prev=null;
     if(harbour&&have){const sp=setOf(have);if((sp&&sp.at===ref.card)||geo(have,ref).m<1)ref=have;else prev=have;}
     const t=onWater(estDraft.time);   // c: the start's own time, never earlier than a start that has gone
@@ -4476,7 +4481,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.estAct');
     push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(t),pending:true,pid:id});
     const rp=set?S.linePinAt[k]:setOf(ref);   // placed from a Start Pin set at a mark: named by the mark (T7)
     const rec={w,ref:'s:'+id,from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref),m:Math.round(dist),brgM:Math.round(brgM)%360};
-    {const fw=fromWhenNew(ref,rec.from);if(fw)rec.fromWhen=fw;}   // .43 fix 10
+    if(hm)rec.hm=hm; else {const fw=fromWhenNew(ref,rec.from);if(fw)rec.fromWhen=fw;}   // .43 fix 10; A124: from a harbour mark, the mark named
     const old=(S.lineEst[k]||{})[w]||null;   // A78: this start's own placed end, replaced
     S.lineEst[k]=Object.assign({},S.lineEst[k]||{},{[w]:rec});   // d: this end's record; the other end's is kept
     S.lineAuto[k]=Object.assign({},S.lineAuto[k]||{},{[w]:'s:'+id});

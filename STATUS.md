@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 23 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built and tested, not released: .46 (A123, A80 course page part). Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 26 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built and tested, not released: .46 (A123, A124, A80 course page part). Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -24,7 +24,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next race:** race-day precautions on .45: open the course page once with signal on each RO device before the race day, so it opens without signal (A65); once a start has gone, don't tap Undo on its start line (A77); check the day's series name reads "Autumn League" and tap Confirm if it shows as carried, before the first course (A8).
 
-**.46 (built and tested, not released):** A123, A80 (course page part), on top of live .45; tested in the harness; a round on the test copy next (the test copy installs as its own app, "TEST Course"). Never within 12 hours of a race.
+**.46 (built and tested, not released):** A123, A124, A80 (course page part), on top of live .45; tested in the harness; a round on the test copy next (the test copy installs as its own app, "TEST Course"). Never within 12 hours of a race.
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
@@ -196,6 +196,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A121 | Box 3's layout as box 2's (A117): the Suggest buttons on its line; "Use the boat and place the pin" bigger and bold on its own line | BUILT AND TESTED | Released in .45 (build .45b); passed on the test copy |
 | A122 | Section 4's square-to-wind line measured the mark named Windward from the course's first mark when there was no start line, giving figures such as "132° right of square · move 0 m" | BUILT AND TESTED | Released in .45 (build .45b): "First mark (name) …", from the start line's midpoint to the first mark after the start, whatever its name; with no start line, a note and no figure; the calculation unchanged; passed on the test copy |
 | A123 | Start line row: with no start line, a red critical warning "Line not set" beside the Start line heading; section 4's "First mark: set the start line to see how square it is to the wind" shows in orange | BUILT AND TESTED | In .46, not released: shown while a start that needs a committee boat and Start Pin lacks either (not for a Grassy start, a card start or a one-end midpoint line); tested in the harness |
+| A124 | A committee boat placed from a harbour mark (the route that also sets the Start Pin there) read "1000 m at 090°M from Start Pin No.13": it now reads "0.5 nm at 090°M from No.13", nautical miles to one decimal, the mark named plainly | BUILT AND TESTED | In .46, not released: new placements only, in the Start line section, the fixes list, section 4 and the message; the placement box stays in metres; the position, both ends set in one placement, Copy for Sail Scoring and every other placed end unchanged; a record saved before keeps its wording; tested in the harness |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 

@@ -1369,7 +1369,7 @@ def t26_fixes43_guards():
       'const w=helpX(md.end)||fixWords2(md.end);' in fn_body(code, 'function lineEstNow(') and 'const w=helpX(fl.end)||fixWords2(fl.end);' in fn_body(code, 'function finEstNow(')
       and 'helpLong(' not in fn_body(code, 'function lineEstNow(') and 'helpLong(' not in fn_body(code, 'function finEstNow('))
     g('10: a placed end says its reference with that end\'s time, then its own time on the water',
-      "return lab+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
+      "return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
       and "le.fromWhen?{fromWhen:String(le.fromWhen)}:{}" in fn_body(code, 'function estRec(')
       and "v.cb.fromWhen?{fromWhen:String(v.cb.fromWhen)}:{}" in fn_body(code, 'function finNorm('))
 
@@ -1608,7 +1608,7 @@ def t29_pin_routes_guards():
       and "if(act==='finPlace'){if(z0.mid)return;const have=endPick('fpin').m;if(!have)return;" in fa)
     # 5: the committee boat placed from a harbour mark
     g('5: from a harbour mark with no Start Pin in use, the Start Pin is set at that mark too (one placement, both ends)',
-      "const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref);" in pl_h
+      "const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref), hm=harbour?ref.card:'';" in pl_h
       and "set=harbour&&ref!==have?setPinAt(k,ref,t,prev):null;" in pl_h and "', and the Start Pin set at '+set.at+(prevW?' in place of '+prevW:'')+'; both saved as typed positions'" in pl_h
       and "if(w==='cb')h+=open?(e.m?helpTop('start','cb'):'')+placeBox('cb',oth,!e.m):changeBtn('start','cb','Change boat…');" in ss
       and 'From a harbour mark, the Start Pin is set at that mark too, so one placement gives both ends.' in pb)
@@ -1625,9 +1625,10 @@ def t29_pin_routes_guards():
       and "if(oldAt){delete S.linePinAt[k];goneAdd(k,{w:'pin',ref:oldAt.ref,at:oldAt.at});}" in pl_h
       and "if(oldAt)await withdrawReplaced(k,'pin',oldAt,'set at '+oldAt.at);" in pl_h)
     # 6: saved data read as before
-    g('6: saved data read as before: placements from a harbour mark keep their wording (from, estWords, helpLong)',
+    g('6: saved data read as before: placements from a harbour mark keep their from; a record with no hm keeps its wording (A124)',
       "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl_h
-      and "function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+      and "function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+estAt(e);}" in code
+      and "e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in fn_body(code, 'function estAt('))
     # layout (Pat, 22 October 2026): each pin route in its own box, its message inside it, "or" only between two
     rb = fn_body(code, 'function routeBox(')
     g('layout: "Option 1 – Pin at a mark" and "Option 2 – Pin by distance and bearing", each a bordered box',
@@ -1776,6 +1777,26 @@ def t32_v46(tmp):
       '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
     g('A123: section 4\'s first-mark note is amber (note caut)',
       "bits.push('<p class=\"note caut\">'+line+'</p>')" in fn_body(code, 'function analysis(') and '.note.caut{border-color:var(--caution);color:var(--caution)}' in page)
+    # A124
+    pl = code[code.index("if(act==='place'){"):]
+    pl = pl[:pl.index("msgFix('place',k,id);")]
+    g('A124: the committee boat placed from a harbour mark saves the mark chosen as hm, and no fromWhen; every other placement as before',
+      "const harbour=w==='cb'&&ref!==have&&isCourseCard(ref)&&isRealMark(ref), hm=harbour?ref.card:'';" in pl
+      and pl.index("hm=harbour?ref.card:''") < pl.index("ref=have;else prev=have;")
+      and "if(hm)rec.hm=hm; else {const fw=fromWhenNew(ref,rec.from);if(fw)rec.fromWhen=fw;}" in pl
+      and "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl)
+    g('A124: hm is kept when a committee boat record is read (estRec), never for a Start Pin',
+      "le.w==='cb'&&le.hm?{hm:String(le.hm)}:{}" in fn_body(code, 'function estRec('))
+    g('A124: with hm, "<nm to one decimal> nm at <°M> from <mark>"; without, "<m> m at <°M> from <from>"',
+      "function estAt(e){return e.hm?(e.m/1852).toFixed(1)+' nm at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
+    hl = fn_body(code, 'function helpLong(')
+    g('A124: helpLong (Start line section, fixes list) and estWords (section 4, the message) use it; no bracketed time with hm',
+      "const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};" in hl
+      and "+' placed '+estAt(e);}" in code)
+    g('A124: Copy for Sail Scoring (helpX) and the finish boat\'s and Finish Pin\'s words unchanged',
+      'estAt' not in fn_body(code, 'function helpX(') and 'hm' not in fn_body(code, 'function helpX(')
+      and "function finWords(e){return 'Finish boat placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code
+      and "function finPinWords(e){return 'Finish Pin placed '+e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
     # A80, the page and the live manifest
     g('A80: the page links the manifest (relative) and gives the theme colour, once each',
       page.count('<link rel="manifest" href="manifest.webmanifest">') == 1 and page.count('<meta name="theme-color" content="#2E8E47">') == 1)
