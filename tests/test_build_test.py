@@ -841,7 +841,7 @@ def t15_start_line_setup_guards():
       and "drawn:true},kind:'start',est:true}" in bl and '!g.a.drawn' in fn_body(code, 'function courseMarks('))
     g('the chart labels an estimated line', "ln.est?(ln.kind==='finish'?'Finish line: estimate':'Start line: estimate')" in code and "permanent:true,direction:'bottom',offset:[0,12],className:'estTip'" in code)
     g('T7: a helper end named by what the RO did, time last, in lists, notes and Check recorded marks; short on the drawings',
-      "const setFor=(lab,at)=>isMarkEnd(at)?at+rp:lab+': at '+at+', set for Race '+m.race+' at '" in code and "if(p)return setFor('Start Pin',p.at);" in code
+      "const setFor=(lab,at)=>isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:lab+': at '+at+', set for Race '+m.race+' at '" in code and "if(p)return setFor('Start Pin',p.at);" in code
       and "' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')" in code
       and "'Start Pin ('+shortAt(p.at)+')'" in code and "' (est.)'" in code and "function fixText(m,w){if(helpOf(m))return helpLong(m);" in code
       and "const lab1=m=>helpOf(m)?helpLong(m):" in code)
@@ -1685,7 +1685,7 @@ def t32_v46(tmp):
     page = read(PAGE)
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('32 .46: ' + name, ok, detail)
-    g('PAGE_VERSION 2026-10-06.46b', "const PAGE_VERSION='2026-10-06.46b';" in code)
+    g('PAGE_VERSION 2026-10-06.46c', "const PAGE_VERSION='2026-10-06.46c';" in code)
     # A123
     g('A123: it is red: the warning colour as its background',
       '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
@@ -1851,6 +1851,15 @@ def t34_line_rules_guards():
     g('C13: Copy for Sail Scoring keeps "Dosco used as midpoint"', "const w=md.end.markEnd?md.end.name:" in fn_body(code, 'function lineEstNow(')
       and "x:'finish line: '+w+' used as midpoint'" in fn_body(code, 'function finEstNow('))
     g('C15: with no finish line, Copy for Sail Scoring is INCOMPLETE, and Send is not held back', "if(noF)inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');" in code)
+    g('Finding 1: the first change to a start that is not an old start gives it two empty lines, filling nothing (rules 11, 14)',
+      "const o=S.lineLegacy[k]?{s:lnLegacyOwn(r,st,'s'),f:lnLegacyOwn(r,st,'f')}:{s:null,f:null};" in fn_body(code, 'function lnTouch('))
+    g('C10, decision (ii): an old start keeps only what it saved as its own; a live Auto pick or one carried from the start before is not kept',
+      "if(e.how==='chosen'||e.how==='placed'||helpOf(e.m))return lnEndOf(e.m);" in fn_body(code, 'function lnOwnEnd(')
+      and "if(e.how==='auto'&&e.saved)return lnEndOf(e.m);" in fn_body(code, 'function lnOwnEnd(') and "return null;}" in fn_body(code, 'function lnOwnEnd(')
+      and "if(f==='start')return gsOf(r,st)?{t:'grassy'}:{t:'start'};" in fn_body(code, 'function lnLegacyOwn('))
+    g('Finding 2: a pin set at a mark under the earlier rules is named as the pin record: "Start Pin at Dosco R2 13:10 · typed position", "Start Pin: Dosco (13:10)"',
+      "if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;" in fn_body(code, 'function lineEndWords(')
+      and "isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:" in fn_body(code, 'function helpLong('))
     g('the sketch label placer is unchanged in this build', "drawn.filter(l=>cross(b,l)).length*6+(!ofLine&&notOwn(b,x,y)?8:0);" in code)
 
 
