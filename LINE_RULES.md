@@ -26,7 +26,7 @@
      - Other end: a recorded or typed pin, a harbour mark (the mark itself is the end), or a pin placed by distance and bearing from the committee boat.
 14. Setting the finish line. The list starts empty. In order:
    - Use start line as finish line (this start's start line);
-   - Grassy Finish (always available), and existing finish lines as available (e.g. "R1 · S1 · finish line");
+   - Grassy Finish (always available), and existing finish lines as available (e.g. "Race 1 · Start 1 · finish line");
    - Create a finish line manually, by the same method as a start line.
 15. What is available in the manual lists:
    - Pins: pins recorded by a RIB, and typed pin positions.
@@ -42,3 +42,21 @@
 23. Wind is outside these rules: each start takes the day's wind until it is sent or the start time passes, as now.
 
 Saved races up to now are left as they are. Their saved line ends must keep reading the same (e.g. 18 Oct Race 1 Start 1 stays at 1.48 nm).
+
+## Clarifications (agreed 26 Oct 2026)
+
+C1. Lines are named in full: "Race 1 · Start 1 · start line", "Race 1 · Start 1 · finish line".
+C2. The finish list offers, after "Use start line as finish line" and Grassy Finish, the start lines and finish lines of earlier starts.
+C3. "Lines already set up that day" means lines of earlier starts only (earlier in the same race, or in earlier races).
+C4. If a line that a start is using is later cleared or left with one end, the start using it shows "Line not set".
+C5. A Dosco or No.8 start before the committee boat is known: the RO chooses Dosco (or No.8) as the other end; one end is then missing, and "Use Dosco as the line's midpoint (estimate)" is offered as the RO's tap under rule 7.
+C6. Placing the committee boat from a harbour mark does not make that mark the other end. The RO chooses the other end separately.
+C7. A Finish Pin can be chosen as a start line end, as a Start Pin can be chosen as a finish line end (rule 21).
+C8. "Finish boat" fixes appear in the committee boat lists, with their type, race and time.
+C9. The time on the water in a placing box does not follow a later change of start time.
+C10. A start saved before the rework keeps its saved ends as the RO's choices when it is edited; its lists do not reset.
+C11. Rolling back to .45b after new records are saved is accepted as it is: .45b may misread starts saved under the new rules.
+C12. Rule 10 is a fact about recording; the course page needs no change for it.
+C13. Copy for Sail Scoring keeps its current estimate wording (e.g. "Dosco used as midpoint").
+C14. A line with one end chosen and no midpoint tapped shows the red "Line not set".
+C15. With the finish "Line not set", Copy for Sail Scoring says INCOMPLETE and WhatsApp Send is not held back, as now.
