@@ -2132,9 +2132,34 @@ function lnLegacySpec(r,st,which){
   if(finUsesPin(r,st)){const cb=endPick('fcb',r,st).m, pin=endPick('fpin',r,st).m;if(cb||pin)return {t:'man',cb:lnEndOf(cb),pin:lnEndOf(pin),mid:null};}
   return null;}
 /* the first change to a start. A start that is not an old start gets two empty lines and nothing is filled (rules 11,
-   14). An old start takes what it shows as the RO's choices (C10) */
+   14). An old start keeps as the RO's choices only what it saved as its own (C10, Pat's decision (ii), 27 October 2026) */
 function lnTouch(k){if(S.lines[k])return S.lines[k];const[r,st]=k.split('|').map(Number);
-  const o=S.lineLegacy[k]?{s:lnLegacySpec(r,st,'s'),f:lnLegacySpec(r,st,'f')}:{s:null,f:null};S.lines[k]=o;delete S.lineLegacy[k];return o;}
+  const o=S.lineLegacy[k]?{s:lnLegacyOwn(r,st,'s'),f:lnLegacyOwn(r,st,'f')}:{s:null,f:null};S.lines[k]=o;delete S.lineLegacy[k];return o;}
+/* What an old start saved as its own (decision (ii)): an end chosen in its list, a pin set or an end placed, a midpoint,
+   the RO's Grassy start or Card mark, a finish line the RO chose (shared from another start, Laid line's own finish,
+   a Finish Pin as the midpoint). Not kept: a live Auto pick, a pick carried from the start before ("As Start N"), a card
+   course's own start or finish on Automatic. Open (Pat, 27 October 2026), kept as before until Pat decides: (a) an Auto
+   pick the old page saved with the course (lineAuto), and (b) a saved finish "Same as the start line" */
+function lnOwnEnd(w,r,st){const e=endPick(w,r,st);if(!e.m)return null;
+  if(e.how==='chosen'||e.how==='placed'||helpOf(e.m))return lnEndOf(e.m);
+  if(e.how==='auto'&&e.saved)return lnEndOf(e.m);   // open (a)
+  return null;}
+function lnOwnMan(cb,pin){return cb||pin?{t:'man',cb,pin,mid:null}:null;}
+function lnLegacyOwn(r,st,which){const c=cardCfgNow(r,st);
+  if(which==='s'){if(gsOf(r,st))return {t:'grassy'};
+    if(c&&cardEndMode('s',r,st)==='card')return c.s==='Grassy Mid'?{t:'grassy'}:isMarkEnd(c.s)?{t:'man',cb:null,pin:{mark:c.s},mid:'pin'}:null;
+    const md=midLine(r,st);if(md)return {t:'man',cb:md.w==='cb'?lnEndOf(md.end):null,pin:md.w==='pin'?lnEndOf(md.end):null,mid:md.w};
+    return lnOwnMan(lnOwnEnd('cb',r,st),lnOwnEnd('pin',r,st));}
+  const z=finRec(ckey(r,st))||{};if(z.src)return {t:'use',of:z.src+'|f'};
+  if(z.mid){const f=refFix(z.mid.ref,'fpin');return f?{t:'man',cb:null,pin:lnEndOf(f),mid:'pin'}:null;}
+  const ends=()=>lnOwnMan(lnOwnEnd('fcb',r,st),lnOwnEnd('fpin',r,st));
+  if(c){const m=cardEndMode('f',r,st);
+    if(m==='card')return c.f==='Grassy Mid'?{t:'grassy'}:isMarkEnd(c.f)?{t:'man',cb:null,pin:{mark:c.f},mid:null}:null;
+    if(m==='laid'){if(c.lfc==='last')return null;if(c.lfc==='start'||c.lfs==='start')return {t:'start'};return ends();}
+    return ends();}
+  const f=finishMode(r,st);if(f==='last')return null;
+  if(f==='start')return gsOf(r,st)?{t:'grassy'}:{t:'start'};   // open (b)
+  return ends();}
 // saving: a start with the RO's lines (or a new start) saves them; one saved before them saves exactly as before
 function lnSaves(k){return /^\d+\|\d+$/.test(k)&&!S.lineLegacy[k];}
 function lnRec(k){const L=S.lines[k]||{};return Object.assign({s:L.s||null,f:L.f||null},L.p&&L.p.length?{p:L.p.map(e=>Object.assign({},e))}:{});}
