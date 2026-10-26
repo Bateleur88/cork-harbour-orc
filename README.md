@@ -75,7 +75,7 @@ bathymetry only validates the resulting physical chords.
   showed "No matching Numbered Legs rows found" instead of hiding the defect.
   **Two stated exceptions**, both of position only, both keeping the card's route
   and labelling the measured hop "not depth-checked": a recorded start or finish
-  line stands where the card's start (or Grassy Mid finish) is (see The pages);
+  line stands where the card's Dosco or No.8 start or finish is (see The pages);
   and a club laid mark (Curlane, Dutchman, White Bay) takes
   its *position* from the day's RIB fix, because its stored coordinate is only a
   planning approximation. The mark is never substituted, only its position; only
@@ -244,7 +244,7 @@ by itself while its end is missing and otherwise behind **Change boat…** or
 - greyed suggestions (200 m, **Square to wind** or **Square to first mark**, which
   end the committee boat is at), worked from the end in use or from a harbour mark
   chosen under "from", used only if typed in;
-- the **Grassy start** (the Grassy Walk line, measured from Grassy Mid), and, with
+- the **Grassy start** (the Grassy Walk line, measured from Grassy, its midpoint), and, with
   one end found, that end **as the line midpoint**, drawn as a 200 m line square to
   the first leg.
 
@@ -302,9 +302,12 @@ reversed from the snapshot where the workbook authors it one way only. Otherwise
 the leg is straight, labelled "not depth-checked" where it touches a Course Card
 mark. A recorded start line keeps the card's route from the card's start point
 and measures only the first hop from the line, labelled; the finish likewise. For
-a card course the card's Finish decides: Grassy Mid stands for the Grassy Walk
-line; No.8 or Dosco is the mark itself. A No.8 or Dosco card start is a committee
-boat line near the mark, never the mark. Distances and bearings use Vincenty on
+a card course a Dosco or No.8 start or finish is a line from the committee boat (or the
+finish's own boat when the start is at another mark) to the mark, the mark its pin end, measured
+from or to the line's midpoint; a recorded Start Pin or Finish Pin replaces the mark, Card mark uses
+the mark itself as the midpoint, and with no boat the leg is measured from or to the mark until one
+is set. Grassy (Grassy Mid in the workbook) is the middle of the Grassy Walk line: a Grassy start on
+Automatic and a Grassy finish are always Grassy, never the recorded start line. Distances and bearings use Vincenty on
 WGS84, as the workbook does. Magnetic variation comes from the embedded World
 Magnetic Model at the course's first leg (noon UTC on the race date), as Sail
 Scoring computes it; with no measured leg, the map centre, said beside the wind
