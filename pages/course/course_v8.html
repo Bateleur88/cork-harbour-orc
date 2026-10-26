@@ -2137,12 +2137,12 @@ function lnTouch(k){if(S.lines[k])return S.lines[k];const[r,st]=k.split('|').map
   const o=S.lineLegacy[k]?{s:lnLegacyOwn(r,st,'s'),f:lnLegacyOwn(r,st,'f')}:{s:null,f:null};S.lines[k]=o;delete S.lineLegacy[k];return o;}
 /* What an old start saved as its own (decision (ii)): an end chosen in its list, a pin set or an end placed, a midpoint,
    the RO's Grassy start or Card mark, a finish line the RO chose (shared from another start, Laid line's own finish,
-   a Finish Pin as the midpoint). Not kept: a live Auto pick, a pick carried from the start before ("As Start N"), a card
-   course's own start or finish on Automatic. Open (Pat, 27 October 2026), kept as before until Pat decides: (a) an Auto
-   pick the old page saved with the course (lineAuto), and (b) a saved finish "Same as the start line" */
+   a Finish Pin as the midpoint). Not kept (Pat, 27 October 2026): a live Auto pick; an Auto pick the old page saved with
+   the course with no pin set or end placed behind it (a "Use it" tap on a newer fix among them: the data cannot tell);
+   a pick carried from the start before ("As Start N"); a card course's own start or finish on Automatic, its Grassy start
+   among them; a saved finish "Same as the start line" unless the record also has a finish line or a Card mark tap */
 function lnOwnEnd(w,r,st){const e=endPick(w,r,st);if(!e.m)return null;
   if(e.how==='chosen'||e.how==='placed'||helpOf(e.m))return lnEndOf(e.m);
-  if(e.how==='auto'&&e.saved)return lnEndOf(e.m);   // open (a)
   return null;}
 function lnOwnMan(cb,pin){return cb||pin?{t:'man',cb,pin,mid:null}:null;}
 function lnLegacyOwn(r,st,which){const c=cardCfgNow(r,st);
@@ -2158,7 +2158,7 @@ function lnLegacyOwn(r,st,which){const c=cardCfgNow(r,st);
     if(m==='laid'){if(c.lfc==='last')return null;if(c.lfc==='start'||c.lfs==='start')return {t:'start'};return ends();}
     return ends();}
   const f=finishMode(r,st);if(f==='last')return null;
-  if(f==='start')return gsOf(r,st)?{t:'grassy'}:{t:'start'};   // open (b)
+  if(f==='start')return finRec(ckey(r,st))?(gsOf(r,st)?{t:'grassy'}:{t:'start'}):null;   // decision 2: kept only with a finish line saved too
   return ends();}
 // saving: a start with the RO's lines (or a new start) saves them; one saved before them saves exactly as before
 function lnSaves(k){return /^\d+\|\d+$/.test(k)&&!S.lineLegacy[k];}
