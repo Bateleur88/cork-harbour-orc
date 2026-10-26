@@ -201,6 +201,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A126 | "Set Start Pin at" on a later start is not taken up when the previous start's Start Pin was chosen by hand and both starts have the same start time: the page keeps the previous start's choice | SUPERSEDED (LINE_RULES.md, 26 Oct) | Nothing carries between starts (rule 12) |
 | A127 | Line rules rework (LINE_RULES.md) | BUILT AND TESTED | In .46c, not released: every start and finish line end the RO's choice from a list that starts empty; starts saved before read exactly as saved; tested in the harness and on four copies of saved data |
 | A128 | Sketch labels on the wrong points: a name beside another mark's point, a point with no name, or a name with no point | NOT STARTED | Seen on the test copy, 23 Oct, Race 2 Start 3; the label placer's penalty for sitting nearer another mark is small. Agreed wording for a pin set at a mark: "Start Pin (Dosco)" / "Finish Pin (Dosco)" (now just "Dosco") |
+| A129 | The start line note says "pin end favoured by … m" when that end is a harbour mark (Dosco, No.8), not a pin | NOT STARTED | Seen on the test copy in the .46c round |
+| A130 | An old start's midpoint estimate reads "Estimate: Dosco used as the line's midpoint" when the midpoint is an old pin record set at Dosco ("Start Pin at Dosco R2 13:10"); the Legs box says it correctly | NOT STARTED | The label uses the sketch's short name for the pin (A128) |
+| A131 | After a start line is cleared and rebuilt, the amber placed-boat wording under the Committee boat list may not match the line ("Line not set") | NOT STARTED | Seen on the test copy in the .46c round; to be checked against the chosen entry |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 
