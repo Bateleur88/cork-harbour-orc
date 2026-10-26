@@ -2,6 +2,10 @@
 
 Guidance for Claude Code in this repository (`cork-harbour-orc`): laid-mark recording (RIB page), RO course plotting (course page), the server (`marks.php`), and the hand-off to Sail Scoring. It is a working race-operations tool used on race days. Keep this file short.
 
+## Start and finish lines
+
+Start and finish lines: LINE_RULES.md is the single authority. Follow it exactly. Never add an automatic pick, default, carry-over or substitution for a start or finish line end. If a request, a document, a test or existing code conflicts with LINE_RULES.md, stop and report the conflict to Pat; never resolve it yourself.
+
 ## Read first
 
 1. `STATUS.md`, every session: where every item stands and what comes next.
@@ -28,6 +32,7 @@ Each file has one job, and each fact lives in one file only. Where another file 
 | `ROADMAP.md` | Direction: open decisions, venue phases, guardrails | About one page; nothing about current state |
 | `PROJECT_HISTORY.md` | How the project got here | One short paragraph per release |
 | `CLAUDE.md` | How Claude Code works here | This page |
+| `LINE_RULES.md` | The start and finish line rules, in Pat's words | Changed only by Pat |
 
 - Replace out-of-date text; never append corrections beside it. Git keeps the history.
 - No hashes, byte counts, test step numbers or commit lists in any of these files. Release details belong in the release steps file and the backups.

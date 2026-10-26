@@ -133,6 +133,8 @@ Step 15 – In a normal window, open `https://orc-ireland.org/course/` and press
 
 You should see: "2 recorded fixes · 1 typed position for Sun 11 Oct 2026 · updated hh:mm". This proves the key reaches marks.php (point 4) and the data is in place. If it says the key was refused, check key.js (Step 10) and clear the cache again (Step 11).
 
+> **Out of date (26 Oct 2026):** Steps 16, 17 and 22 expect a committee boat placed from a Start Pin, which LINE_RULES.md no longer allows. They stand until the line rules rework is built.
+
 Step 16 – Tap **Race 1**, then **Start 1**.
 
 You should see:

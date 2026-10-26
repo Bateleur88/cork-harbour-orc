@@ -216,78 +216,21 @@ only, shown in red with **Save to the race record**. A card mark's own name is
 refused in the typing and pasting boxes. **Add to Race N chips** in Check recorded
 marks brings any RIB fix of the day into a race as a picked chip.
 
-**Line ends.** The Committee boat lists offer every recorded committee boat fix
-of the day; the Start Pin list offers this race's fixes only, with **Auto** and
-**None**. On Auto a start line end takes the latest fix of its race or an earlier
-one at or before the start time; a fix after the start is shown as a candidate,
-never used by default, and a Start Pin carried from an earlier race says so
-("carried from Race N"). When a course is saved, Auto's choice is saved with it, so
-the course rebuilds the same on every device. A start's saved Auto choices are
-picked again when its start time changes, until the start is used: its course has
-been sent, or, on the race day, its start time has passed. After a choice of the
-RO's own (a fix chosen, a pin set or an end placed) a recorded fix is offered only
-when it is newer ("Newer: … Use it"), never taken by itself. A start's line-end
-choices are saved only once its start time is complete.
-
-**Start line.** The Start line row has a **Committee boat** section, a **Start
-Pin** section, then the line. With a start time each section has its helper, open
-by itself while its end is missing and otherwise behind **Change boat…** or
-**Change pin…**:
-- the Start Pin **at a mark** (Option 1: a mark of the course, a harbour mark, or an
-  earlier race's Start Pin, set at its position), or **placed by distance and
-  bearing** (Option 2) from the committee boat in use or a mark laid in this race,
-  never from a harbour mark;
-- the committee boat placed by distance and bearing (°M) from the Start Pin or
-  another mark. Placed from a harbour mark, that mark becomes the Start Pin, set at
-  it, in the same placement; a different pin in use is switched out, and Undo puts
-  it back;
-- greyed suggestions (200 m, **Square to wind** or **Square to first mark**, which
-  end the committee boat is at), worked from the end in use or from a harbour mark
-  chosen under "from", used only if typed in;
-- the **Grassy start** (the Grassy Walk line, measured from Grassy, its midpoint), and, with
-  one end found, that end **as the line midpoint**, drawn as a 200 m line square to
-  the first leg.
-
-A placed end is saved as a typed position timed at the start time and flagged as
-an estimate on the page, the leg table, the sketch, the chart and Copy for Sail
-Scoring (`"x-estimate"`), never in the WhatsApp text. An estimate carries forward
-within its own race only; a later race is offered it. **Undo** withdraws what the
-helper placed, and is refused while another start uses it. Placing an end again
-withdraws the one it replaces; a replaced end not yet withdrawn (another start uses
-it, or there was no signal) is labelled ", replaced" and never offered by "Use it?"
-or Auto. A placed or typed line end that is no longer an estimate, or that was
-replaced by placing again, can be withdrawn from **Check recorded marks**.
-**Remove Start** moves
-every later start's records down with it, withdraws the removed start's own placed
-ends, and is refused while another start uses them.
-
-**Finish line.** The **Finish type** list offers **Same as the start line**,
-**Committee boat & Finish Pin**, and the finish line of another start ("Shared from
-another start", which follows that start's changes). A start saved with "At the
-last mark" keeps it, shown as "(saved before .44)" only on that start. With
-Committee boat & Finish Pin and no finish set, the row says **No finish set** in
-amber, as does the leg table's last leg, and Copy for Sail Scoring is INCOMPLETE;
-Send is not held back. A Finish Pin a RIB recorded for the race is offered ("Use
-it"), never chosen by itself, and no other race's Finish Pin is ever used. The
-finish is set in one of three boxes, closed to their titles, one open at a time:
-1. **Committee boat remains, place new Finish Pin**: the pin by distance and
-   bearing from the committee boat in use;
-2. **Choose Finish mark and position Committee boat**: the Finish Pin at a mark
-   (any mark; the last mark finishes at the last mark), and the committee boat
-   placed from it; below it, for emergencies only, the mark as the finish line's
-   midpoint with no committee boat;
-3. **Move Committee boat and Finish Pin**: a new recorded committee boat fix, then
-   the Finish Pin placed from it.
-
-Each box suggests a bearing **square to the last leg** (from the last mark to the
-line's midpoint, for the length typed or 200 m) and which end the placed end goes,
-used only if typed in; the likely Finish Pin end is marked as a suggestion until
-the RO taps a side. A finish line more than 30° off square to the last leg is said
-in amber. Placed finish ends are estimates, as start line ends are; **Undo**
-withdraws them and puts back the committee boat end they replaced. A course saved
-before the Finish Pin stopped using Auto keeps the pin Auto chose then, in amber:
-"Finish Pin chosen by Auto in an earlier version: … – check it". **Change
-finish…** reopens the boxes.
+**Start and finish lines.** `LINE_RULES.md` is the single authority for start and
+finish lines; this section only describes how the RO works with them. For each
+start the RO sets the start line and the finish line, each from a list that starts
+empty: an existing line (Grassy Start or Grassy Finish, or a line already set up
+that day), or a line made by hand from a committee boat and a pin, a harbour mark,
+or an end placed by distance and bearing. Until a line is chosen the row says
+**Line not set** in red; non-critical flags are orange. The page never picks,
+defaults, carries forward or substitutes a line end. Using the known end as the
+line's midpoint is the RO's tap, and is shown as an estimate. A placed end is saved
+as a typed position, flagged as an estimate on the page, the leg table, the sketch,
+the chart and Copy for Sail Scoring (`"x-estimate"`), never in the WhatsApp text;
+**Undo** withdraws it. **Remove Start** moves every later start's records down with
+it, withdraws the removed start's own placed ends, and is refused while another
+start uses them. The page is being changed to these rules: until that is done it
+still fills some line ends by itself.
 
 **Laid marks** (Curlane, Dutchman, White Bay) take their position from the latest
 RIB fix, saved typed position or pasted position of the race or an earlier one
@@ -300,14 +243,9 @@ permanently moored and always use the workbook position.
 **Legs.** Between two card marks the card's own route is used, passages included,
 reversed from the snapshot where the workbook authors it one way only. Otherwise
 the leg is straight, labelled "not depth-checked" where it touches a Course Card
-mark. A recorded start line keeps the card's route from the card's start point
-and measures only the first hop from the line, labelled; the finish likewise. For
-a card course a Dosco or No.8 start or finish is a line from the committee boat (or the
-finish's own boat when the start is at another mark) to the mark, the mark its pin end, measured
-from or to the line's midpoint; a recorded Start Pin or Finish Pin replaces the mark, Card mark uses
-the mark itself as the midpoint, and with no boat the leg is measured from or to the mark until one
-is set. Grassy (Grassy Mid in the workbook) is the middle of the Grassy Walk line: a Grassy start on
-Automatic and a Grassy finish are always Grassy, never the recorded start line. Distances and bearings use Vincenty on
+mark. A start or finish line on a card course keeps the card's route from the card's start
+point and measures only the first hop from the line, labelled; the finish likewise.
+Legs to and from a line are measured from its midpoint. Distances and bearings use Vincenty on
 WGS84, as the workbook does. Magnetic variation comes from the embedded World
 Magnetic Model at the course's first leg (noon UTC on the race date), as Sail
 Scoring computes it; with no measured leg, the map centre, said beside the wind
@@ -323,8 +261,8 @@ is off square and which end is favoured. Without wind the line's length and
 bearing still show.
 
 **Check recorded marks** (closed by default, in both views): a sketch or map of
-every fix of the race (or all races), with the recorded lines, the as-sailed
-course of the selected start drawn over them, and advisory flags that never block
+every fix of the race (or all races), with the as-sailed course of the selected
+start drawn over them, and advisory flags that never block
 (old position, pin near a mark, line far off square, mark far from the same mark
 in another race, pin order, no committee boat). Tapping a fix shows its detail;
 typed positions there can be withdrawn or corrected. Typed or pasted positions more

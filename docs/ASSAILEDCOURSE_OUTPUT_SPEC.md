@@ -12,8 +12,8 @@ These are Pat's decisions about how the page builds and keeps the course. They d
 
 1. **Rule 1.** The page never creates a leg that was not sailed, and never presents an estimated position or leg as measured. A leg it cannot create is flagged.
 2. **Measuring.** WGS84 geodesics. Legs to and from a start or finish line are measured from the line's geodesic midpoint.
-3. **Finish.** With no finish line defined, the finish is the start line. A finish always has a previous mark. A shortened course ends at the as-sailed finish.
-4. **Lines.** Both ends known: measure from the midpoint. One end recorded: use that end as a temporary midpoint, and flag the legs "estimate - one end missing". Neither end recorded: the legs touching the line cannot be created.
+3. **Finish.** The finish is never applied by default. Finishing on the start line is the first option for the RO; until the RO chooses, the finish is "Line not set". A finish always has a previous mark. A shortened course ends at the as-sailed finish. (Changed 26 Oct 2026, see LINE_RULES.md.)
+4. **Lines.** Both ends known: measure from the midpoint. One end recorded: using that end as the midpoint estimate is the RO's tap, never automatic; the legs are then flagged "estimate - one end missing". Neither end recorded: the legs touching the line cannot be created. (Changed 26 Oct 2026, see LINE_RULES.md.)
 5. **Line sides.** Port and starboard are calculated once, when the AsSailedCourse is established, stored with it, and not shown or exported. Start: look from the midpoint towards the first mark. Finish: look from the previous mark towards the midpoint. A flip between start and finish is possible if the approach direction is reversed. A near-parallel line is an anomaly.
 6. **Start time.** Each start holds an actual start time. A start without one is not exported, and the page says so, with a visible "start time missing" warning, because it may be a valid race. Starts skipped for other reasons are listed with their reason.
 7. **Race date.** The date of the actual start time, in Irish local time. It is used to convert between true and magnetic.
