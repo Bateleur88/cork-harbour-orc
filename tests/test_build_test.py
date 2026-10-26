@@ -1853,10 +1853,10 @@ def t34_line_rules_guards():
     g('C15: with no finish line, Copy for Sail Scoring is INCOMPLETE, and Send is not held back', "if(noF)inc.push('finish line not recorded, last leg ('+last+' - Finish) missing');" in code)
     g('Finding 1: the first change to a start that is not an old start gives it two empty lines, filling nothing (rules 11, 14)',
       "const o=S.lineLegacy[k]?{s:lnLegacyOwn(r,st,'s'),f:lnLegacyOwn(r,st,'f')}:{s:null,f:null};" in fn_body(code, 'function lnTouch('))
-    g('C10, decision (ii): an old start keeps only what it saved as its own; a live Auto pick or one carried from the start before is not kept',
+    g('C10, decision (ii) and decisions 1 to 3: an old start keeps only what it saved as its own; no Auto pick, live or saved, no carried pick, no card start or finish on Automatic, no default finish',
       "if(e.how==='chosen'||e.how==='placed'||helpOf(e.m))return lnEndOf(e.m);" in fn_body(code, 'function lnOwnEnd(')
-      and "if(e.how==='auto'&&e.saved)return lnEndOf(e.m);" in fn_body(code, 'function lnOwnEnd(') and "return null;}" in fn_body(code, 'function lnOwnEnd(')
-      and "if(f==='start')return gsOf(r,st)?{t:'grassy'}:{t:'start'};" in fn_body(code, 'function lnLegacyOwn('))
+      and 'e.saved' not in fn_body(code, 'function lnOwnEnd(') and "return null;}" in fn_body(code, 'function lnOwnEnd(')   # decision 1: a saved Auto pick is not kept
+      and "if(f==='start')return finRec(ckey(r,st))?(gsOf(r,st)?{t:'grassy'}:{t:'start'}):null;" in fn_body(code, 'function lnLegacyOwn('))   # decision 2
     g('Finding 2: a pin set at a mark under the earlier rules is named as the pin record: "Start Pin at Dosco R2 13:10 · typed position", "Start Pin: Dosco (13:10)"',
       "if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;" in fn_body(code, 'function lineEndWords(')
       and "isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:" in fn_body(code, 'function helpLong('))
