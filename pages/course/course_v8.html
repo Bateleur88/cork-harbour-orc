@@ -2109,9 +2109,9 @@ function lnLegacy(r,st,which){
 function newEndPick(w,r,st){const fin=w==='fcb'||w==='fpin', L=lnResolve(r,st,fin?'f':'s'), boat=w==='cb'||w==='fcb';
   const p=!L?null:L.est==='mid'?((L.w==='cb')===boat?L.end:null):boat?L.cb:L.pin;
   const m=p&&!p.markEnd&&!p.virtual?p:null;return m?{m,how:'chosen',reason:'Chosen by you'}:{m:null,how:'none',reason:'Not set'};}
-// the ends placed here, with their estimate records, for every label (estOf)
-function lnEstAll(){const o=[];Object.keys(S.lines).forEach(k=>{const L=S.lines[k]||{};['s','f'].forEach(x=>{const sp=L[x];
-  if(sp&&sp.t==='man')[sp.cb,sp.pin].forEach(e=>{if(e&&e.ln&&+e.m>0)o.push(e);});});});return o;}
+// the ends each start placed (lines.p), with their estimate records, kept whatever its lines use now: every label (estOf)
+function lnEstAll(){const o=[];Object.keys(S.lines).forEach(k=>{((S.lines[k]||{}).p||[]).forEach(e=>o.push(e));});return o;}
+function lnPlacedRec(m,k){return m?((S.lines[k]||{}).p||[]).find(refHit(m))||null:null;}
 // a line end in words: the mark's name, a helper end by what the RO did, otherwise the fix
 function lnWho(m,x){return m.markEnd?m.name:x?(helpX(m)||fixWords2(m)):helpOf(m)?helpShort(m):fixWords2(m);}
 // what the old rules give a start saved before them, as the RO's choices (C10)
@@ -2136,7 +2136,7 @@ function lnTouch(k){if(S.lines[k])return S.lines[k];const[r,st]=k.split('|').map
   const o={s:lnLegacySpec(r,st,'s'),f:lnLegacySpec(r,st,'f')};S.lines[k]=o;delete S.lineLegacy[k];return o;}
 // saving: a start with the RO's lines (or a new start) saves them; one saved before them saves exactly as before
 function lnSaves(k){return /^\d+\|\d+$/.test(k)&&!S.lineLegacy[k];}
-function lnRec(k){const L=S.lines[k]||{};return {s:L.s||null,f:L.f||null};}
+function lnRec(k){const L=S.lines[k]||{};return Object.assign({s:L.s||null,f:L.f||null},L.p&&L.p.length?{p:L.p.map(e=>Object.assign({},e))}:{});}
 /* the ends in lineSel too, so the server refuses to withdraw a fix a line uses (marks.php) and an older page reads the
    chosen ends: each fix in use that is not placed here; 'none' for every other end */
 function lnSel(k){const[r,st]=k.split('|').map(Number), o={};
@@ -2151,10 +2151,9 @@ function lnSpecNorm(v,which){if(!v||typeof v!=='object')return null;
   if(v.t==='use')return typeof v.of==='string'&&/^\d+\|\d+\|[sf]$/.test(v.of)?{t:'use',of:v.of}:null;
   if(v.t==='man')return {t:'man',cb:lnEndNorm(v.cb),pin:lnEndNorm(v.pin),mid:v.mid==='cb'||v.mid==='pin'?v.mid:null};
   return null;}
-function lnNorm(v){return {s:lnSpecNorm(v&&v.s,'s'),f:lnSpecNorm(v&&v.f,'f')};}
+function lnNorm(v){const p=Array.isArray(v&&v.p)?v.p.map(lnEndNorm).filter(e=>e&&e.ln):[];return Object.assign({s:lnSpecNorm(v&&v.s,'s'),f:lnSpecNorm(v&&v.f,'f')},p.length?{p}:{});}
 // Remove Start: the ends placed for the removed start's own lines, to withdraw with it
-function lnPlacedOf(k){const L=S.lines[k]||{}, out=[];['s','f'].forEach(x=>{const sp=L[x];if(!sp||sp.t!=='man')return;
-  [sp.cb,sp.pin].forEach(e=>{if(!e||!e.ln||!(+e.m>0))return;const m=lnFix(e.ref);if(m)out.push({e,w:isCB(m.name)?'cb':isFinishPin(m.name)?'fpin':'pin',m});});});return out;}
+function lnPlacedOf(k){return ((S.lines[k]||{}).p||[]).map(e=>{const m=lnFix(e.ref);return m?{e,w:isCB(m.name)?'cb':isFinishPin(m.name)?'fpin':'pin',m}:null;}).filter(Boolean);}
 function lnShiftUses(r,i){Object.values(S.lines).forEach(L=>['s','f'].forEach(x=>{const sp=L&&L[x];if(!sp||sp.t!=='use')return;
   const m=sp.of.match(/^(\d+)\|(\d+)\|([sf])$/);if(!m||+m[1]!==r)return;if(+m[2]===i)sp.of='';else if(+m[2]>i)sp.of=r+'|'+(+m[2]-1)+'|'+m[3];}));}
 // a start used as a midpoint: Grassy, a recorded end or the Start Pin's mark as the midpoint, or Card mark at Dosco or No.8
@@ -2793,7 +2792,7 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     lnFixOpts(n=>isCB(n)||isFinishBoat(n)).forEach(m=>{cbl+=opt(refFor(m),lnFixLabel(m),vOf(cbE));});
     cbl+=opt('place','Place the committee boat from a harbour mark…',d[P+'bo']?'place':vOf(cbE));
     h+='<div class="endSec"><div class="secHead">Committee boat</div><select class="lnEnd" data-l="'+which+'" data-e="cb" aria-label="Committee boat">'+cbl+'</select>'+
-      (cbE&&cbE.ln&&cbM?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'');
+      (cbM&&lnPlacedRec(cbM,k)?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'');
     if(d[P+'bo']){if(d[P+'bt']==='')d[P+'bt']=startTime();   // rule 22, C9: the start time, kept as typed
       h+='<div class="meta estBox">Place committee boat: <input class="estIn" data-f="'+P+'bd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'bd'])+'" style="width:5.5em"> m at '+
         '<input class="estIn" data-f="'+P+'bb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'bb'])+'" style="width:5em">°M from '+
@@ -2809,7 +2808,7 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     pl+='<optgroup label="Harbour marks">'+lnHarbour().map(nm=>opt('mark:'+nm,nm,vOf(pinE))).join('')+'</optgroup>';
     if(cbM)pl+=opt('place','Place a pin from the committee boat…',d[P+'po']?'place':vOf(pinE));
     h+='<div class="endSec"><div class="secHead">Other end</div><select class="lnEnd" data-l="'+which+'" data-e="pin" aria-label="Other end">'+pl+'</select>'+
-      (pinE&&pinE.ln&&pinM?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
+      (pinM&&!pinM.markEnd&&lnPlacedRec(pinM,k)?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
     if(d[P+'po']&&cbM){if(d[P+'pt']==='')d[P+'pt']=startTime();
       h+='<div class="meta estBox">Place pin: <input class="estIn" data-f="'+P+'pd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'pd'])+'" style="width:5.5em"> m at '+
         '<input class="estIn" data-f="'+P+'pb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'pb'])+'" style="width:5em">°M from the committee boat on the water '+
@@ -4674,18 +4673,18 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');i
     const p=geoDest(from,((brgM-varW())%360+360)%360,dist), nm=cbP?'Committee boat':which==='f'?'Finish Pin':'Start Pin', id=lnAddFix(nm,p,t);
     const rec={ref:'s:'+id,ln:true,w:cbP?'cb':'pin',from:cbP?from.name:fixWords2(from),m:Math.round(dist),brgM:Math.round(brgM)%360};
     if(cbP)rec.hm=from.name;else{rec.nm=nm;const fw=fromWhenNew(from,rec.from);if(fw)rec.fromWhen=fw;}
-    lnSet(which,()=>{const sp=man();sp[cbP?'cb':'pin']=rec;if(sp.cb&&sp.pin)sp.mid=null;});
+    lnSet(which,L=>{const sp=man();sp[cbP?'cb':'pin']=rec;if(sp.cb&&sp.pin)sp.mid=null;(L.p=L.p||[]).push(Object.assign({},rec));});
     [P+x+'d',P+x+'b',P+x+'t',P+x+'o'].concat(cbP?[P+'br']:[]).forEach(f=>{d[f]='';});commit();sendOutbox();
     say(nm+' placed as an estimate: '+estWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix('ln'+which+(cbP?'cb':'pin'),k,id);
     return;}
-  if(act==='lnUndo'){const end=b.dataset.e==='cb'?'cb':'pin', sp=lnSpec(S.race,S.start,which), en=sp&&sp[end], m=en&&lnFix(en.ref);if(!m)return;
+  if(act==='lnUndo'){const end=b.dataset.e==='cb'?'cb':'pin', sp=lnSpec(S.race,S.start,which), m=sp&&sp[end]&&lnFix(sp[end].ref), en=lnPlacedRec(m,k);if(!m||!en)return;
     const others=lineUsers(m,k);if(others.length){say('Not undone: the '+m.name+' is also used by '+others.join(', ')+'.',false);return;}
     if(m.pending||!m.sid){say('The '+m.name+' is still being sent: try again in a moment.',false);return;}
     if(!verReady(say))return;
     if(!confirm('Undo? The '+m.name+' '+endDid(en)+' is withdrawn from the race record (kept, marked withdrawn).'))return;
     try{await postFix({action:'withdraw',date:S.pulledDay,id:m.sid,reason:'estimate undone by the RO'},OUTBOX_TIMEOUT_MS);}
     catch(err){say('Not undone: '+((err&&err.text)||(err&&err.message)||'no reply')+'.',false);return;}
-    lnSet(which,()=>{const s2=man();s2[end]=null;if(s2.mid===end)s2.mid=null;});await pull(true);commit();say('Undone: the '+m.name+' is withdrawn.',true);}});
+    lnSet(which,L=>{const s2=man();s2[end]=null;if(s2.mid===end)s2.mid=null;L.p=(L.p||[]).filter(x=>!refHit(m)(x));});await pull(true);commit();say('Undone: the '+m.name+' is withdrawn.',true);}});
 document.addEventListener('click',e=>{const b=e.target.closest('.lineSw,.lineAct');if(!b)return;
   const k=ckey(S.race,S.start), c=(S.cardCfg||{})[k];
   if(b.classList.contains('lineSw')){if(!c)return;c[b.dataset.end==='s'?'ls':'lf']=b.dataset.v;stamp(k);commit();return;}
