@@ -493,7 +493,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.46';
+const PAGE_VERSION='2026-10-06.46b';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -1023,7 +1023,8 @@ function freezeLaid(r){let ch=false;
   S.marks.filter(m=>m.card&&m.race===r&&!m.virtual&&CARD.marks[m.card]&&CARD.marks[m.card].laid).forEach(cm=>{const st=laidState(cm);
     if(st.sel==='auto'&&!S.laidFrz[st.key]&&st.latest&&st.latest.sid){S.laidFrz[st.key]=fkey(st.latest);ch=true;}});
   return ch;}
-function freezeLines(k,r,st){const v=S.lineSel[k]||{}, fz=Object.assign({},S.lineAuto[k]||{});
+function freezeLines(k,r,st){if(isNewLines(r,st))return;   // .46b: nothing automatic to save
+  const v=S.lineSel[k]||{}, fz=Object.assign({},S.lineAuto[k]||{});
   // fix 1 (Pat, 15 October 2026): while the open start's time is being typed or picked, its value may be half-typed
   // (12:04 on the way to 12:40), so nothing is saved until the RO leaves the box (startTime blur, below)
   if(k===ckey(S.race,S.start)&&document.activeElement===$('startTime'))return;
@@ -1528,36 +1529,9 @@ function render(){
   // .43 fix 4: the finish choice goes home before the rows are redrawn, then back into the new Finish line row
   $('finishHome').appendChild($('finishCard'));$('finishHome').appendChild($('finishFields'));
   const ol=$('course');ol.innerHTML='';const cs=course();
-  const sl0=legStartLine(), sm=cardEndMode('s'), slRec=startLine(), gs0=gsOf();
-  const nPins=endChoices('pin').length, nCbs=endChoices('cb').length;
-  // with no line recorded, an imported card course measures from the card's own start (same test as buildLegs)
-  const ccfg0=(S.cardCfg||{})[ckey(S.race,S.start)];
-  const cardS=!sl0&&startStandIn()&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
-  const cardF=cardS&&!finishIsCardMark()&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
-  const sw=sm?lineSwitch('s'):'';
-  const ends=sm==='card'?'<div class="meta">Card mark: '+(isMarkEnd(ccfg0.s)?esc(ccfg0.s)+' is used as the start line midpoint.':'the card\'s '+esc(shownName(ccfg0.s))+' start point is used.')+
-      (slRec?' Recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+') shown, not used.':'')+'</div>':
-    // the Grassy start on a hand-built start (A58 part 2): said here, with Undo; a recorded line is offered, never taken
-    // T14 (Pat, 15 October 2026): the Grassy start is a proper start line, the Grassy Walk line, measured from its calculated
-    // midpoint, Grassy Mid; it is not a stand-in. A recorded line not used is said plainly, in orange
-    gs0?'<div class="meta">Start: <b>Grassy start</b>: the start line is the Grassy Walk line, measured from Grassy. <button type="button" class="ghost estAct" data-act="ungrassy">Undo</button></div>'+
-      (slRec?'<div class="meta amberTxt">Grassy start chosen; the recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+(estOf(slRec.cb)||estOf(slRec.pin)?', estimate':'')+') is not used. '+
-        '<button type="button" class="ghost estAct" data-act="ungrassy">Use the recorded line instead</button></div>':''):
-    cardS&&!nPins&&!nCbs?'':startSec('cb',!!cardS||!!markStartOf())+startSec('pin',!!cardS||!!markStartOf());   // .44 layout
-  // a hand-built start may use the Grassy start instead: a small link once a line end is found, after the line
-  const gsLink=sm==='card'||gs0||ccfg0?'':endPick('cb').m||endPick('pin').m?'<div class="meta"><button type="button" class="linkBtn estAct" data-act="grassy">Use the Grassy start instead</button></div>':
-        '<div class="meta"><button type="button" class="ghost estAct chgBtn" data-act="grassy">Start from Grassy</button></div>';
-  const sMiss=sm==='laid'&&!slRec?'<div class="meta cautTxt">⚠ Start line missing (Laid line): the first leg is not measured. '+
-      '<button type="button" class="ghost lineAct chgBtn" data-act="useCard">Use Card mark</button></div>':'';
-  // .46, A123 (Pat, 23 and 26 October 2026): "Line not set" while a start that needs a committee boat and Start Pin lacks
-  // either; a line with a mark as its pin end and no committee boat says instead to place the boat or use the mark as the
-  // midpoint (startWarn); a Grassy start, a midpoint and Laid line (its own warning) say neither
-  const swn=startWarn();
-  const notSet=swn&&swn.kind==='notset'?' <span class="lineNotSet" role="status">Line not set</span>':'';
-  const noBoat=swn&&swn.kind==='noboat'?noBoatFlag('No committee boat: place the committee boat, or use '+swn.mark+' as the line\'s midpoint.',swn.mark,swn.act,'pin'):'';
-  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+notSet+noBoat+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
-    (cardS==='Grassy Mid'&&!sl0&&sm!=='card'?'<div class="meta">Start: <b>Grassy</b> (from the card).</div>':'')+
-    msgSlot('start')+'</div><div></div></li>';
+  // .46b, A127: the Start line row by LINE_RULES.md
+  {const R=lnRow('s');
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+R.badge+R.body+msgSlot('start')+'</div><div></div></li>';}
   if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
   const Lr=legPts();   // read only: which routing waypoints have nothing on one side (orphan)
   cs.forEach((e,i)=>{const m=markById(e.id);
@@ -1604,32 +1578,10 @@ function render(){
      finish line, the Finish Pin and Committee boat sections and the line (finRowHtml); messages under each. On a card
      course the card's Card mark / Laid line switch is folded into the list (finTypeOpts): it writes what the switch
      wrote, nothing new */
-  {const k=ckey(S.race,S.start), c=cardCfgNow();
-   const li=document.createElement('li');li.className='lineRow';li.id='finishRow';
-   li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="finChoice"></div>'+msgSlot('finishSel')+msgSlot('finFollow')+
-     (finUsesPin(S.race,S.start)?finRowHtml():markFinOf()?markFinRow():'')+msgSlot('finish')+'</div><div></div>';
-   li.querySelector('b').insertAdjacentHTML('afterend',finNoBoat());   // A123: beside the heading
-   ol.appendChild(li);
-   const box=li.querySelector('.finChoice');box.appendChild($('finishFields'));box.appendChild($('finishCard'));
-   $('finishFields').hidden=false;
-   // A63: the Finish type list, its first option the default (Auto); then the finish lines of earlier starts, offered only
-   {const sh=finShared(), z=finRec(k), o=finTypeOpts(c), v=z&&z.src&&sh.some(x=>x.k===z.src)?'from:'+z.src:finTypeOf(c);
-     const fh=o.map(x=>'<option value="'+esc(x[0])+'">'+esc(x[1])+'</option>').join('')+
-       (sh.length?'<optgroup label="Shared from another start">'+sh.map(x=>'<option value="from:'+esc(x.k)+'">'+esc(x.text)+'</option>').join('')+'</optgroup>':'');
-     // redrawn only when it changes, so an open list is not closed by the 30-second refresh
-     if($('finishSel').dataset.h!==fh){$('finishSel').innerHTML=fh;$('finishSel').dataset.h=fh;}
-     $('finishSel').value=v;}
-   // a card course: what its finish uses, in a line, and any warning, in amber
-   const fs=c?finishState():null, fm=cardEndMode('f');
-   // .46, A123 and A125 (Pat, 26 October 2026): a Grassy finish is Grassy; a Dosco or No.8 finish is the finish boat to the
-   // mark, or the mark as the midpoint (Card mark); with no finish boat, rule 2's warning
-   const mf=c&&fm==='auto'&&fs.kind==='markline'?finishLine():null;
-   const t=!c?'':fm==='laid'?'':c.f==='Grassy Mid'?'Finishes at Grassy.':isMarkEnd(c.f)?(fm==='card'?'Finishes at '+c.f+', used as the finish line midpoint.':mf?'Finishes between the finish boat and '+(mf.mk?c.f:'the Finish Pin')+'.':''):
-     fm==='card'?(finishIsCardMark()?'':'The card\'s '+shownName(c.f)+' point is used; a recorded line is not.'):
-     finishIsCardMark()?'Boats finish as they round or pass it; the committee boat positions itself to time them.':
-     fs.kind==='startline'?'Uses the recorded start line.':'Uses '+shownName(c.f)+'.';
-   $('finishCard').hidden=!(t||fs&&fs.warn);
-   $('finishCard').innerHTML=(t?'<span class="muteTxt">'+esc(t)+'</span>':'')+(fs&&fs.warn?'<span class="cautTxt"> ⚠ '+esc(fs.warn)+'.</span>':'');}
+  // .46b, A127: the Finish line row by LINE_RULES.md; the old Finish type list stays at home, hidden
+  {const R=lnRow('f'), li=document.createElement('li');li.className='lineRow';li.id='finishRow';
+   li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b>'+R.badge+R.body+msgSlot('finish')+'</div><div></div>';
+   ol.appendChild(li);$('finishFields').hidden=true;$('finishCard').hidden=true;}
   $('toRace').hidden=!cs.length;
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix(); renderNotSent(); paintMsgs();
@@ -1667,7 +1619,7 @@ function renderCardSum(){
    Every record kept per start moves with its start, so nothing of the removed start passes to another (Pat, 15 October
    2026): before .37 the saved auto choices (lineAuto), estimates (lineEst, either shape) and midpoints (lineMid) stayed at
    the old start number. Any new per-start record must be added here. */
-const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin','sent'];
+const START_KEYED=['courses','startTimes','finishes','lineSel','lineFlags','winds','cardCfg','courseDay','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin','sent','lines','lineLegacy'];
 /* fix 2 (Pat, 15 October 2026): the removed start's own helper fixes (a Start Pin set at a mark, an end placed by distance
    and bearing) are withdrawn with it (kept, marked withdrawn), as Undo does, so they never stay behind as unlabelled
    typed positions offered to other starts. Refused, naming the starts, while any other start uses one of them (lineUsers);
@@ -1684,6 +1636,7 @@ async function removeStartAsked(i){const r=S.race, k=ckey(r,i), say=sayIn('remov
       fOwn&&fz.cb?[{e:fz.cb,w:'fcb'}]:[],fg.filter(g=>g.w==='fcb').map(e=>({e,w:'fcb'}))))
     .sort((a,b)=>(a.w==='cb'?0:1)-(b.w==='cb'?0:1));
   const post=fix((fOwn&&finPinOwn(fz.pin)?[{e:fz.pin,w:'fpin'}]:[]).concat(fg.filter(g=>g.w==='fpin').map(e=>({e,w:'fpin'}))));
+  its.push(...lnPlacedOf(k));   // .46b: ends placed for this start's own lines
   const all=its.concat(post);
   {const shr=finSharers(k);   // .43 fix 8
    if(shr.length){say('Start '+(i+1)+' not removed: '+shr.join(', ')+(shr.length>1?' share':' shares')+' its finish line. Choose another finish there first.',false);return;}}
@@ -1713,6 +1666,7 @@ async function removeStartAsked(i){const r=S.race, k=ckey(r,i), say=sayIn('remov
   if(all.length){await pull(true);commit();say('Start '+(i+1)+' removed; its '+all.map(x=>x.m.name).join(' and ')+' withdrawn.',true);}}
 function removeStart(i){
   const r=S.race, own=k=>+k.split('|')[0]===r&&/^\d+\|\d+$/.test(k);
+  lnShiftUses(r,i);   // .46b: a line used by another start follows it down; one using the removed start's line is not set
   let last=classesOf().length-1;
   START_KEYED.forEach(f=>Object.keys(S[f]||{}).filter(own).forEach(k=>{last=Math.max(last,+k.split('|')[1]);}));
   editClasses().splice(i,1);
@@ -1835,6 +1789,7 @@ function renderRaceAlerts(){
   });
   const ends=(cardEndMode('s')==='card'?[]:['cb','pin']).concat(finUsesPin(S.race,S.start)?['fcb','fpin']:[]), kk=ckey(S.race,S.start);
   if(cardEndMode('s')==='laid'&&!startLine())a.push('<p class="note flag">⚠ Start line missing: the first leg is not measured.</p>');
+  if(isNewLines()&&!legStartLine())a.push('<p class="note flag">⚠ Start line not set: the first leg is not measured.</p>');
   {const fs=finishState();if(fs&&fs.warn)a.push('<p class="note flag">⚠ '+esc(fs.warn)+'.</p>');}
   ends.forEach(w=>{const e=endPick(w),n=e.m?phoneCount(e.m):0,lab=(w[0]==='f'?'Finish ':'Start ')+END_LABEL[w].toLowerCase(),
       fl=(S.lineFlags[kk]||{})[w];
@@ -1971,6 +1926,7 @@ function refFix(ref,w){if(typeof ref!=='string'||!/^[sl]:/.test(ref))return null
    when the RO should look. own=false gives what would apply without this start's own choice. sel (optional, for
    legPts): a lookup 'race|start' -> line-end choices used instead of S.lineSel, passed down the recursion; never written. */
 function endPick(w,r,st,own,sel){r=r||S.race;st=st==null?S.start:st;
+  if(isNewLines(r,st))return newEndPick(w,r,st);   // .46b, A127: the RO's own ends, never Auto
   // A63: the finish committee boat of a line set with the helper (lineFin): the Finish boat placed for it, or none, the
   // Finish Pin being the line's midpoint; lineSel.fcb is 'none' beside either, for pages before .42
   if(w==='fcb'&&own!==false){const z=finRec(ckey(r,st));
@@ -2029,7 +1985,8 @@ function autoEnd(w,r,st,sel){
 }
 /* startLine, finishMode, cardCfgNow, finishIsCardMark, cardEndMode, legStartLine, startStandIn, finishState and
    finishLine work on the selected race and start unless r and st are given (legPts); sel as in endPick. */
-function startLine(r,st,sel){return mkLine(endPick('cb',r,st,undefined,sel).m,endPick('pin',r,st,undefined,sel).m)||markStartLine(r,st,sel);}
+function startLine(r,st,sel){if(isNewLines(r,st)){const L=lnResolve(r,st,'s');return L&&L.cb&&L.pin?L:null;}
+  return mkLine(endPick('cb',r,st,undefined,sel).m,endPick('pin',r,st,undefined,sel).m)||markStartLine(r,st,sel);}
 if(!S.finishes||typeof S.finishes!=='object')S.finishes={};
 function finishMode(r,st){return S.finishes[ckey(r??S.race,st??S.start)]||'start';}
 /* Finishes and starts of a card course are deliberately NOT mirror images. Do not "fix" one into the other.
@@ -2056,12 +2013,12 @@ function lineSwitch(e){const m=cardEndMode(e);if(!m)return '';
   const b=(v,t)=>'<button type="button" class="ghost lineSw" data-end="'+e+'" data-v="'+v+'" aria-pressed="'+(m===v)+'">'+t+'</button>';
   return '<span class="meta" style="display:block">'+(e==='s'?'Start':'Finish')+' line: '+b('card','Card mark')+' '+b('laid','Laid line')+
     (m==='auto'?' <small>Automatic: '+esc(now)+'</small>':'')+'</span>';}
-function cardEndMode(e,r,st){const c=cardCfgNow(r,st);if(!c)return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';}
+function cardEndMode(e,r,st){const c=cardCfgNow(r,st);if(!c||isNewLines(r,st))return null;const v=e==='s'?c.ls:c.lf;return v==='card'||v==='laid'?v:'auto';}
 /* The Grassy start on a hand-built start (A58 part 2, Pat, 14 October 2026): the RO's choice, saved with the course
    (startPt). The first leg is measured from Grassy Mid, standing in for the Grassy Walk line, and with the Finish on the
    start line the last leg to it. An imported card course keeps its own start (section 2). lineOff: the recorded start
    line is not used, because Card mark or the Grassy start is chosen. */
-function gsOf(r,st){return !cardCfgNow(r,st)&&(S.startPt||{})[ckey(r??S.race,st??S.start)]==='Grassy Mid'?'Grassy Mid':'';}
+function gsOf(r,st){return !isNewLines(r,st)&&!cardCfgNow(r,st)&&(S.startPt||{})[ckey(r??S.race,st??S.start)]==='Grassy Mid'?'Grassy Mid':'';}
 function lineOff(r,st){return cardEndMode('s',r,st)==='card'||!!gsOf(r,st)||cardGrassyStart(r,st);}
 function lineOffWhy(){return cardEndMode('s')==='card'?'Card mark':gsOf()?'Grassy start':cardGrassyStart()?'Grassy':'';}
 /* .46, A123 and A125 (Pat, 26 October 2026): a mark as a line end. A card start or finish at Dosco or No.8 (a real mark,
@@ -2076,7 +2033,7 @@ function lineOffWhy(){return cardEndMode('s')==='card'?'Card mark':gsOf()?'Grass
 function shownName(nm){return nm==='Grassy Mid'?'Grassy':nm;}
 function isMarkEnd(nm){const m=nm&&CARD.marks[nm];return !!m&&m.type!=='Start/finish modelling point';}
 function markPt(nm,r){const m=CARD.marks[nm];return {id:'_m'+nm,name:nm,lat:m.lat,lon:m.lon,virtual:true,card:nm,race:r,time:'',markEnd:true};}
-function cardGrassyStart(r,st){const c=cardCfgNow(r,st);return !!c&&c.s==='Grassy Mid'&&cardEndMode('s',r,st)!=='laid';}
+function cardGrassyStart(r,st){const c=cardCfgNow(r,st);return !!c&&!isNewLines(r,st)&&c.s==='Grassy Mid'&&cardEndMode('s',r,st)!=='laid';}
 // the card's start mark while it can be the start line's pin end: a Dosco or No.8 card start on Automatic
 function markStartOf(r,st){const c=cardCfgNow(r,st);return c&&isMarkEnd(c.s)&&cardEndMode('s',r,st)==='auto'?c.s:'';}
 // the start line from the committee boat to that mark, while no Start Pin is in use
@@ -2101,8 +2058,107 @@ function startWarn(){if(gsOf()||cardGrassyStart()||midLine())return null;const c
   const pin=endPick('pin').m, sp=pin&&setOf(pin);
   if(sp&&isMarkEnd(sp.at)&&!endPick('cb').m)return {kind:'noboat',mark:sp.at,act:'mid'};
   return {kind:'notset'};}
+/* ---------- .46b, A127: start and finish lines by LINE_RULES.md (Pat, 26 October 2026) ----------
+   LINE_RULES.md is the single authority. Every start and finish line end is the RO's choice from a list that starts
+   empty; nothing is picked, defaulted, carried from another start or substituted (rules 8, 11, 12). Per start,
+   S.lines[start] = {s, f}, each null ("Line not set", red) or one of:
+     {t:'grassy'}                 Grassy Start / Grassy Finish: Grassy Mid, the Grassy Walk line's known midpoint (rule 1)
+     {t:'start'}                  the finish only: this start's own start line (rule 14)
+     {t:'use', of:'r|st|s|f'}     an earlier start's start or finish line, read as it is now, so it follows corrections
+                                  (rules 13, 14, 19, C2, C3, C4)
+     {t:'man', cb, pin, mid}      a line made by hand: cb the committee boat, pin the other end, each null, a fix
+                                  {ref} (recorded, typed or placed here) or a harbour mark {mark} (the mark itself, no pin
+                                  record, rule 4); mid 'cb' or 'pin' only when the RO taps it with one end missing (rule 7)
+   A placed end is a typed position with its estimate record in the end itself ({ref, ln, w, nm, from, m, brgM, …}).
+   A start saved before the line rules has no S.lines and reads exactly as it was saved (S.lineLegacy, the old rules
+   below, unchanged); its lists show its saved ends, and the first change makes them the RO's choices (C10). */
+if(!S.lines||typeof S.lines!=='object')S.lines={};
+if(!S.lineLegacy||typeof S.lineLegacy!=='object')S.lineLegacy={};
+function isNewLines(r,st){const k=ckey(r??S.race,st??S.start);return !!(S.lines||{})[k]||!(S.lineLegacy||{})[k];}
+function lnSpec(r,st,which){const L=(S.lines||{})[ckey(r??S.race,st??S.start)];return L&&L[which]||null;}
+// a fix by its saved reference, of any kind, never a card mark
+function lnFix(ref){if(typeof ref!=='string'||!/^[sl]:/.test(ref))return null;const id=ref.slice(2);
+  const m=ref[0]==='s'?(S.marks.find(x=>x.sid===sidNow(id))||S.marks.find(x=>x.pending&&x.pid===id)):S.marks.find(x=>x.id===id);return m&&!m.card?m:null;}
+// the harbour marks a line end or a placing may use: the course card's real marks, never a laid mark or Grassy Mid
+function lnHarbour(){return Object.keys(CARD.marks).filter(nm=>isCourseCard({card:nm})&&isRealMark({card:nm}));}
+function lnEndPt(e,r){if(!e)return null;if(e.mark)return lnHarbour().includes(e.mark)?markPt(e.mark,r):null;return lnFix(e.ref);}
+// an earlier start (C3): earlier in the same race, or any start of an earlier race
+function lnEarlier(r,st,r2,st2){return r2<r||(r2===r&&st2<st);}
+/* the line a start uses for which ('s' or 'f'): {cb, pin, mid} with both ends, {mid, est:'mid', end, w} for a midpoint the
+   RO tapped, {grassy:true, mid} for Grassy, or null (Line not set, C4, C14) */
+function lnResolve(r,st,which,d){r=r??S.race;st=st??S.start;d=d||0;if(d>40)return null;
+  if(!isNewLines(r,st))return lnLegacy(r,st,which);
+  const sp=lnSpec(r,st,which);if(!sp)return null;
+  if(sp.t==='grassy'){const g=CARD.marks['Grassy Mid'];return g?{grassy:true,mid:{lat:g.lat,lon:g.lon}}:null;}
+  if(sp.t==='start')return which==='f'?lnResolve(r,st,'s',d+1):null;
+  if(sp.t==='use'){const m=String(sp.of||'').match(/^(\d+)\|(\d+)\|([sf])$/);if(!m||!lnEarlier(r,st,+m[1],+m[2]))return null;
+    const L=lnResolve(+m[1],+m[2],m[3],d+1);return L?Object.assign({},L,{of:sp.of}):null;}
+  if(sp.t!=='man')return null;
+  const cb=lnEndPt(sp.cb,r), pin=lnEndPt(sp.pin,r);
+  if(cb&&pin)return Object.assign(mkLine(cb,pin),{man:true},which==='f'?{fin:true}:{});
+  const one=cb||pin, w=cb?'cb':'pin';
+  return one&&sp.mid===w?{mid:{lat:one.lat,lon:one.lon},est:'mid',end:one,w,man:true}:null;}
+// a start saved before the line rules, read by the old rules exactly as before
+function lnLegacy(r,st,which){
+  if(which==='s'){if(gsOf(r,st)||cardGrassyStart(r,st)){const g=CARD.marks['Grassy Mid'];return g?{grassy:true,mid:{lat:g.lat,lon:g.lon}}:null;}
+    return legStartLine(r,st);}
+  const fl=finishLine(r,st);if(fl)return fl;const c=cardCfgNow(r,st), fs=finishState(r,st);
+  if(c?c.f==='Grassy Mid'&&fs&&fs.kind==='cardpt':gsOf(r,st)&&finishMode(r,st)==='start'){const g=CARD.marks['Grassy Mid'];return g?{grassy:true,mid:{lat:g.lat,lon:g.lon}}:null;}
+  return null;}
+// endPick for a start set by the RO: the fix at that end of the line in use, or none; never Auto
+function newEndPick(w,r,st){const fin=w==='fcb'||w==='fpin', L=lnResolve(r,st,fin?'f':'s'), boat=w==='cb'||w==='fcb';
+  const p=!L?null:L.est==='mid'?((L.w==='cb')===boat?L.end:null):boat?L.cb:L.pin;
+  const m=p&&!p.markEnd&&!p.virtual?p:null;return m?{m,how:'chosen',reason:'Chosen by you'}:{m:null,how:'none',reason:'Not set'};}
+// the ends placed here, with their estimate records, for every label (estOf)
+function lnEstAll(){const o=[];Object.keys(S.lines).forEach(k=>{const L=S.lines[k]||{};['s','f'].forEach(x=>{const sp=L[x];
+  if(sp&&sp.t==='man')[sp.cb,sp.pin].forEach(e=>{if(e&&e.ln&&+e.m>0)o.push(e);});});});return o;}
+// a line end in words: the mark's name, a helper end by what the RO did, otherwise the fix
+function lnWho(m,x){return m.markEnd?m.name:x?(helpX(m)||fixWords2(m)):helpOf(m)?helpShort(m):fixWords2(m);}
+// what the old rules give a start saved before them, as the RO's choices (C10)
+function lnEndOf(m){return m?(m.markEnd?{mark:m.card}:{ref:refFor(m)}):null;}
+function lnLegacySpec(r,st,which){
+  if(which==='s'){if(gsOf(r,st)||cardGrassyStart(r,st))return {t:'grassy'};
+    const md=midLine(r,st);if(md)return {t:'man',cb:md.w==='cb'?lnEndOf(md.end):null,pin:md.w==='pin'?lnEndOf(md.end):null,mid:md.w};
+    const sl=legStartLine(r,st);if(sl&&sl.cb&&sl.pin)return {t:'man',cb:lnEndOf(sl.cb),pin:lnEndOf(sl.pin),mid:null};
+    if(cardEndMode('s',r,st)==='laid')return null;
+    const cb=endPick('cb',r,st).m, pin=endPick('pin',r,st).m;return cb||pin?{t:'man',cb:lnEndOf(cb),pin:lnEndOf(pin),mid:null}:null;}
+  const z=finRec(ckey(r,st))||{};if(z.src)return {t:'use',of:z.src+'|f'};
+  const fs=finishState(r,st), fl=finishLine(r,st);
+  if(fs&&fs.kind==='startline'||!cardCfgNow(r,st)&&finishMode(r,st)==='start')return gsOf(r,st)?{t:'grassy'}:{t:'start'};
+  if(lnLegacy(r,st,'f')&&lnLegacy(r,st,'f').grassy)return {t:'grassy'};
+  if(fl&&fl.est==='mid')return {t:'man',cb:null,pin:lnEndOf(fl.end),mid:'pin'};
+  if(fl&&fl.cb&&fl.pin)return {t:'man',cb:lnEndOf(fl.cb),pin:lnEndOf(fl.pin),mid:null};
+  if(fs&&fs.kind==='mark')return {t:'man',cb:null,pin:{mark:cardCfgNow(r,st).f},mid:null};
+  if(finUsesPin(r,st)){const cb=endPick('fcb',r,st).m, pin=endPick('fpin',r,st).m;if(cb||pin)return {t:'man',cb:lnEndOf(cb),pin:lnEndOf(pin),mid:null};}
+  return null;}
+// the first change to a start saved before the line rules makes what it shows the RO's choices (C10)
+function lnTouch(k){if(S.lines[k])return S.lines[k];const[r,st]=k.split('|').map(Number);
+  const o={s:lnLegacySpec(r,st,'s'),f:lnLegacySpec(r,st,'f')};S.lines[k]=o;delete S.lineLegacy[k];return o;}
+// saving: a start with the RO's lines (or a new start) saves them; one saved before them saves exactly as before
+function lnSaves(k){return /^\d+\|\d+$/.test(k)&&!S.lineLegacy[k];}
+function lnRec(k){const L=S.lines[k]||{};return {s:L.s||null,f:L.f||null};}
+/* the ends in lineSel too, so the server refuses to withdraw a fix a line uses (marks.php) and an older page reads the
+   chosen ends: each fix in use that is not placed here; 'none' for every other end */
+function lnSel(k){const[r,st]=k.split('|').map(Number), o={};
+  [['cb','s'],['pin','s'],['fcb','f'],['fpin','f']].forEach(([w])=>{const m=newEndPick(w,r,st).m;o[w]=m&&!lnEstAll().some(refHit(m))?refFor(m):'none';});return o;}
+function lnEndNorm(e){if(!e||typeof e!=='object')return null;if(typeof e.mark==='string'&&CARD.marks[e.mark])return {mark:e.mark};
+  if(typeof e.ref!=='string'||!/^[sl]:/.test(e.ref))return null;const o={ref:e.ref};
+  if(e.ln&&(e.w==='cb'||e.w==='pin')&&+e.m>0){Object.assign(o,{ln:true,w:e.w,from:String(e.from||''),m:+e.m,brgM:+e.brgM||0});
+    if(typeof e.nm==='string'&&/^(Start|Finish) Pin$/.test(e.nm))o.nm=e.nm;if(e.hm)o.hm=String(e.hm);if(e.fromWhen)o.fromWhen=String(e.fromWhen);}
+  return o;}
+function lnSpecNorm(v,which){if(!v||typeof v!=='object')return null;
+  if(v.t==='grassy')return {t:'grassy'};if(v.t==='start')return which==='f'?{t:'start'}:null;
+  if(v.t==='use')return typeof v.of==='string'&&/^\d+\|\d+\|[sf]$/.test(v.of)?{t:'use',of:v.of}:null;
+  if(v.t==='man')return {t:'man',cb:lnEndNorm(v.cb),pin:lnEndNorm(v.pin),mid:v.mid==='cb'||v.mid==='pin'?v.mid:null};
+  return null;}
+function lnNorm(v){return {s:lnSpecNorm(v&&v.s,'s'),f:lnSpecNorm(v&&v.f,'f')};}
+// Remove Start: the ends placed for the removed start's own lines, to withdraw with it
+function lnPlacedOf(k){const L=S.lines[k]||{}, out=[];['s','f'].forEach(x=>{const sp=L[x];if(!sp||sp.t!=='man')return;
+  [sp.cb,sp.pin].forEach(e=>{if(!e||!e.ln||!(+e.m>0))return;const m=lnFix(e.ref);if(m)out.push({e,w:isCB(m.name)?'cb':isFinishPin(m.name)?'fpin':'pin',m});});});return out;}
+function lnShiftUses(r,i){Object.values(S.lines).forEach(L=>['s','f'].forEach(x=>{const sp=L&&L[x];if(!sp||sp.t!=='use')return;
+  const m=sp.of.match(/^(\d+)\|(\d+)\|([sf])$/);if(!m||+m[1]!==r)return;if(+m[2]===i)sp.of='';else if(+m[2]>i)sp.of=r+'|'+(+m[2]-1)+'|'+m[3];}));}
 // a start used as a midpoint: Grassy, a recorded end or the Start Pin's mark as the midpoint, or Card mark at Dosco or No.8
-function midStart(){const c=cardCfgNow();return !!(gsOf()||cardGrassyStart()||midLine()||c&&isMarkEnd(c.s)&&cardEndMode('s')==='card');}
+function midStart(){const c=cardCfgNow();return !!(isNewLines()&&(legStartLine()||{}).grassy||gsOf()||cardGrassyStart()||midLine()||c&&isMarkEnd(c.s)&&cardEndMode('s')==='card');}
 /* A start line with only one end recorded (Pat, 14 October 2026, STATUS A58). When a start has a start time and auto or
    the RO finds only the committee boat or only the Start Pin, the Start line row offers two estimates, both the RO's
    choice, never automatic (the page invents nothing by itself):
@@ -2115,11 +2171,12 @@ function midStart(){const c=cardCfgNow();return !!(gsOf()||cardGrassyStart()||mi
    Both are saved with the course (recordFor), undone with one tap, and flagged as estimates everywhere but the WhatsApp
    text. A real end recorded later, at or before the start, is offered ("A recorded committee boat is now available – use
    it?"), never taken by itself. A separate finish line with one end missing is not covered. */
-function midLine(r,st){const z=(S.lineMid||{})[ckey(r??S.race,st??S.start)];if(!z)return null;const f=refFix(z.ref,z.w);
+function midLine(r,st){if(isNewLines(r,st)){const L=lnResolve(r,st,'s');return L&&L.est==='mid'?L:null;}
+  const z=(S.lineMid||{})[ckey(r??S.race,st??S.start)];if(!z)return null;const f=refFix(z.ref,z.w);
   return f?{mid:{lat:f.lat,lon:f.lon},est:'mid',end:f,w:z.w}:null;}
 // the estimate a fix is, if the RO placed it (Option 1): its lineEst record, from any start of the day
 const refHit=m=>e=>e&&typeof e.ref==='string'&&(m.sid===sidNow(e.ref.slice(2))||(m.pending&&m.pid===e.ref.slice(2)));
-function estOf(m){return m?estAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}
+function estOf(m){return m?estAll().find(refHit(m))||lnEstAll().find(refHit(m))||goneAll().find(g=>!('at' in g)&&refHit(m)(g))||null:null;}
 /* d (Pat, 15 October 2026): one placed estimate per end of a start, S.lineEst[start] = {cb: {w:'cb', …}, pin: {w:'pin', …}},
    so placing the second end never takes the first one's estimate label away. A course saved before holds one record
    {w, ref, from, m, brgM}: it is read as that end's (estNorm), and a start with one placed end is saved in that shape still
@@ -2227,7 +2284,7 @@ function finPinLine(r,st,sel){const z=finRec(ckey(r??S.race,st??S.start));
 // whether race r, start st uses its own finish line (finPinLine): "Committee boat & Finish Pin", or a card course's Laid line
 // .44: Committee boat & Finish Pin (or Laid line) chosen, and no finish set: "No finish set" in amber
 function finNotSet(r,st){return finUsesPin(r,st)&&!finishLine(r,st);}
-function finUsesPin(r,st){const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st)==='laid'&&c.lfc!=='start'&&c.lfc!=='last':finishMode(r,st)==='finishpin';}
+function finUsesPin(r,st){if(isNewLines(r,st))return false;const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st)==='laid'&&c.lfc!=='start'&&c.lfc!=='last':finishMode(r,st)==='finishpin';}
 /* .43 fix 7 (Pat, 21 October 2026): a card course on Laid line has the hand-built Finish list. Its choice is saved with
    the card set-up (lfc). With none (every Laid line course saved before .43, and Laid line just tapped), Laid line is as
    before: the finish line set for the start, otherwise the start line with its warning, or the start line kept
@@ -2246,9 +2303,12 @@ function finTypeOf(c){if(!c)return finishMode();const m=cardEndMode('f');return 
 function finChoiceOf(r,st){const c=cardCfgNow(r,st);if(!c)return finishMode(r,st);
   if(c.lfc)return c.lfc;return c.lfs==='start'&&!finPinLine(r,st)?'start':'finishpin';}
 // the finish is the last mark: chosen in the Finish list, on a hand-built course or on Laid line
-function finIsLast(r,st){const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st)==='laid'&&c.lfc==='last':finishMode(r,st)==='last';}
+function finIsLast(r,st){if(isNewLines(r,st))return false;const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st)==='laid'&&c.lfc==='last':finishMode(r,st)==='last';}
 // the finish line's estimate for start r|st: {kind:'mid'|'placed', text, x} or null; x goes into Copy for Sail Scoring
-function finEstNow(r,st){if(!finUsesPin(r,st)){const ml=markFinLine(r,st);if(!ml)return null;   // A123: the finish boat to the mark
+function finEstNow(r,st){if(isNewLines(r,st)){const fl=lnResolve(r,st,'f');if(!fl||fl.grassy||(lnSpec(r,st,'f')||{}).t==='start')return null;   // the start line's estimate is said once   // .46b: the RO's finish line
+    if(fl.est==='mid'){const w=lnWho(fl.end,true);return {kind:'mid',text:w+' used as the line midpoint',x:'finish line: '+w+' used as midpoint',who:lnWho(fl.end)};}
+    const t=[fl.pin,fl.cb].map(m=>m&&estOf(m)).filter(Boolean).map(estWords).join(' and ');return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
+  if(!finUsesPin(r,st)){const ml=markFinLine(r,st);if(!ml)return null;   // A123: the finish boat to the mark
     const f=finOf(ml.cb), sc=!f&&estOf(ml.cb), t=f&&f.w==='fcb'?finWords(f):sc?estWords(sc)+' (the start\'s estimate)':'';
     return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
   const fl=finPinLine(r,st);if(!fl)return null;
@@ -2267,6 +2327,9 @@ function xEst(r,st){const a=lineEstNow(r,st), b=finEstNow(r,st);return a&&b?a.x+
    (the last mark). Never says an end is an estimate. A card course on Card mark (or on auto with the card's mark or
    point) says nothing; on Laid line it follows the hand-built wording. L: legPts of the start */
 function finSay(L){const c=L.ccfg, r=L.r, st=L.st;let k;
+  if(isNewLines(r,st)){const fl=L.fl, sp=lnSpec(r,st,'f');if(!fl||fl.est==='mid')return '';if(fl.grassy)return 'Finish at Grassy.';   // .46b
+    if(sp&&sp.t==='start')return 'Finish on the start line.';const p=fl.pin;
+    return 'Finish between the committee boat and '+(p.markEnd?p.name:isFinishPin(p.name)?'the Finish Pin':isStartPin(p.name)?'the Start Pin':p.name)+'.';}
   if(c){const m=cardEndMode('f',r,st), fs=L.fsx||{};if(m==='card')return '';
     k=fs.kind==='startline'?'start':fs.kind==='last'?'last':fs.kind==='markline'?'markline':fs.kind==='finishpin'||m==='laid'?'pin':'';}
   else{const f=finishMode(r,st);k=f==='finishpin'?'pin':f==='last'?'last':gsOf(r,st)?'grassy':'start';}
@@ -2370,7 +2433,7 @@ function orphanNotes(w){return Object.keys(S.orphans||{}).filter(id=>{const o=S.
    a start that has gone must never lose its line through an action on another start. skip: a start left out. */
 const refIs=(v,m)=>typeof v==='string'&&/^s:/.test(v)&&((m.sid&&sidNow(v.slice(2))===m.sid)||(m.pending&&m.pid===v.slice(2)));
 function startKeys(){const ks=new Set();
-  ['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid','lineFin'].forEach(f=>Object.keys(S[f]||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k))ks.add(k);}));
+  ['courses','startTimes','lineSel','lineAuto','lineEst','linePinAt','lineMid','lineFin','lines'].forEach(f=>Object.keys(S[f]||{}).forEach(k=>{if(/^\d+\|\d+$/.test(k))ks.add(k);}));
   return [...ks].sort((a,b)=>a.split('|')[0]-b.split('|')[0]||a.split('|')[1]-b.split('|')[1]);}
 // placed (A78): leave out the estimate and set-pin records that placed m; a midpoint and every saved or live choice count
 function lineUsers(m,skip,placed){const out=[];if(!m)return out;
@@ -2390,7 +2453,7 @@ function lineUsers(m,skip,placed){const out=[];if(!m)return out;
    (Pat, 26 October 2026) in metres instead, "80 m at 090°M from No.13": the saved whole metres, 185 m and less in
    metres, 186 m and more in nm (0.1 nm is 185.2 m), so "0.0 nm" never appears */
 function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
-function estWords(e){return (e.w==='cb'?'committee boat':'Start Pin')+' placed '+estAt(e);}
+function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
    way it is a line end set with the helper (helpOf): it carries forward only within its race (decision 2a), and wherever
@@ -2421,7 +2484,7 @@ function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by p
   const setFor=(lab,at)=>isMarkEnd(at)?at+rp:lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;   // A123: a mark by its name alone
   if(fz)return fz.w==='fpin'?(+fz.m>0?placed('Finish Pin',fz):setFor('Finish Pin',fz.at)):placed('Finish boat',fz);
   const p=setOf(m);if(p)return setFor('Start Pin',p.at);const e=estOf(m);if(!e)return '';
-  return placed(e.w==='cb'?'Committee boat':'Start Pin',e);}
+  return placed(e.w==='cb'?'Committee boat':(e.nm||'Start Pin'),e);}
 // the wording helpLong had before .43, for what Copy for Sail Scoring says ("x-estimate"), so that never changes
 function helpX(m){const rp=goneOf(m)?', replaced':'';
   const fz=finOf(m);
@@ -2429,9 +2492,9 @@ function helpX(m){const rp=goneOf(m)?', replaced':'';
     const w=fixWhen(m), f=String(fz.from);return (fz.w==='fpin'?'Finish Pin':'Finish boat')+' – estimate: '+fz.m+' m at '+pad(fz.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
   const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')'+rp;const e=estOf(m);if(!e)return '';
   const w=fixWhen(m), f=String(e.from);
-  return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
+  return (e.w==='cb'?'Committee boat':(e.nm||'Start Pin'))+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
 function helpShort(m){const fz=finOf(m);if(fz)return fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.)':isMarkEnd(fz.at)?fz.at:'Finish Pin ('+shortAt(fz.at)+')'):'Finish boat (est.)';
-  const p=setOf(m);if(p)return isMarkEnd(p.at)?p.at:'Start Pin ('+shortAt(p.at)+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
+  const p=setOf(m);if(p)return isMarkEnd(p.at)?p.at:'Start Pin ('+shortAt(p.at)+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':(e.nm||'Start Pin'))+' (est.)':'';}
 function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 // one line end in the "Line ends:" line (fix 5)
 function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,''), rp=goneOf(m)?', replaced':'', w=m.notSent?' (not sent)':m.pending?' (sending)':'';
@@ -2443,18 +2506,19 @@ function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the start line's estimate for start r|st: {kind:'mid'|'placed', text} or null
 function lineEstNow(r,st){if(gsOf(r,st))return null;const md=midLine(r,st);
-  if(md){const w=helpX(md.end)||fixWords2(md.end);
+  if(md){const w=md.end.markEnd?md.end.name:helpX(md.end)||fixWords2(md.end);
     return {kind:'mid',text:'one end missing ('+w+' used as midpoint)',x:'start line: '+w+' used as midpoint'};}
   const sl=lineOff(r,st)?null:startLine(r,st);if(!sl)return null;
   // both ends may be estimates: a Start Pin set at a mark, then the committee boat placed from it
   const es=[estOf(sl.pin),estOf(sl.cb)].filter(Boolean);if(!es.length)return null;const t=es.map(estWords).join('; ');
   return {kind:'placed',text:t,x:'start line: '+t,e:es[0],es};}
 // the start line the legs are measured from: none when Card mark is chosen; the recorded end when the RO chose it as midpoint
-function legStartLine(r,st,sel){return lineOff(r,st)?null:(midLine(r,st)||startLine(r,st,sel));}
+function legStartLine(r,st,sel){if(isNewLines(r,st))return lnResolve(r,st,'s');return lineOff(r,st)?null:(midLine(r,st)||startLine(r,st,sel));}
 // whether the card's start point may stand in when there is no line: not when Laid line is chosen
 function startStandIn(r,st){const m=cardEndMode('s',r,st);return m==='auto'||m==='card';}
 // how a card course's finish is measured: kind 'finishpin' | 'startline' | 'mark' | 'cardpt' | 'missing', and any warning
-function finishState(r,st,sel){const c=cardCfgNow(r,st);if(!c)return null;const m=cardEndMode('f',r,st);
+function finishState(r,st,sel){if(isNewLines(r,st)){const fl=lnResolve(r,st,'f');return fl?{kind:fl.grassy?'grassy':'line'}:{kind:'missing',warn:'Finish line not set'};}
+  const c=cardCfgNow(r,st);if(!c)return null;const m=cardEndMode('f',r,st);
   if(m==='laid'){
     if(c.lfc==='last')return {kind:'last'};   // .43 fix 7
     if(c.lfc==='start')return startLine(r,st,sel)?{kind:'startline',kept:true}:{kind:'missing',warn:'Finish line missing: the start line is chosen and none is recorded'};
@@ -2468,6 +2532,7 @@ function finishState(r,st,sel){const c=cardCfgNow(r,st);if(!c)return null;const 
   if(m==='card')return {kind:'cardpt'};
   return startLine(r,st,sel)?{kind:'startline'}:{kind:'cardpt'};}
 function finishLine(r,st,sel){
+  if(isNewLines(r,st))return lnResolve(r,st,'f');
   if(cardCfgNow(r,st)){const fs=finishState(r,st,sel);
     return fs.kind==='finishpin'?finPinLine(r,st,sel):fs.kind==='startline'?startLine(r,st,sel):fs.kind==='markline'?markFinLine(r,st,sel):null;}
   const f=finishMode(r,st);if(f==='last')return null;if(f==='finishpin')return finPinLine(r,st,sel);if(gsOf(r,st))return null;return midLine(r,st)||startLine(r,st,sel);}
@@ -2557,7 +2622,8 @@ function startLineNote(twdT,vA){const sl=startLine();if(!sl)return null;
    typed position at its position, an estimate), then the committee boat is placed from it. Nothing is filled in or saved
    until the RO acts; estDraft keeps what the RO has typed across redraws (the 30-second refresh on the race day). */
 let estDraft={};
-function estDraftFor(k){if(estDraft.k!==k)estDraft={k,dist:'',brg:'',ref:'',time:'',sq:'',port:'',at:'',ptime:'',fat:'',fptime:'',fdist:'',fbrg:'',ftime:'',fpdist:'',fpbrg:'',fpwhen:'',fsq:'',fport:'',
+function estDraftFor(k){if(estDraft.k!==k)estDraft={k,dist:'',brg:'',ref:'',time:'',sq:'',port:'',at:'',ptime:'',fat:'',fptime:'',fdist:'',fbrg:'',ftime:'',fpdist:'',fpbrg:'',fpwhen:'',fsq:'',fport:'',fmdist:'',fmbrg:'',fmtime:'',
+  lnsbd:'',lnsbb:'',lnsbr:'',lnsbt:'',lnspd:'',lnspb:'',lnspt:'',lnfbd:'',lnfbb:'',lnfbr:'',lnfbt:'',lnfpd:'',lnfpb:'',lnfpt:'',lnsbo:'',lnspo:'',lnfbo:'',lnfpo:'',
   b2at:'',b2when:'',b2dist:'',b2brg:'',b3cb:'',b3pdist:'',b3pbrg:'',b3pwhen:''};return estDraft;}
 // the first mark of the open start's course, a routing waypoint before it skipped (rw)
 function firstMarkOf(r,st){let rw=false;
@@ -2697,6 +2763,79 @@ function finNoBoat(){const c=cardCfgNow();let mk='',act='';
   else if(finUsesPin(S.race,S.start)&&!finishLine()){const z=finRec(ckey(S.race,S.start))||{}, pin=z.mid?null:endPick('fpin').m, pa=pin&&finOf(pin);
     if(pa&&pa.w==='fpin'&&!(+pa.m>0)&&isMarkEnd(pa.at)&&!endPick('fcb').m){mk=pa.at;act='finMid';}}
   return mk?noBoatFlag('No finish boat: place the finish boat, or use '+mk+' as the line\'s midpoint.',mk,act,''):'';}
+/* .46b, A127: the Start line row and the Finish line row (LINE_RULES.md rules 13 to 15, 20, 22; C1 to C14). One list
+   per line, starting empty; "Line not set" in red until the line is complete; an estimate in orange */
+function lnOptsExisting(which){const r=S.race, st=S.start, o=[];
+  startKeys().forEach(k=>{const[r2,s2]=k.split('|').map(Number);if(!lnEarlier(r,st,r2,s2))return;
+    ['s','f'].forEach(x=>{if(lnResolve(r2,s2,x))o.push(['use:'+r2+'|'+s2+'|'+x,'Race '+r2+' · Start '+(s2+1)+' · '+(x==='s'?'start':'finish')+' line']);});});
+  return o;}
+function lnFixOpts(test){return S.marks.filter(m=>!m.card&&!m.virtual&&test(m.name)).sort((a,b)=>a.race-b.race||(fixMoment(a)||0)-(fixMoment(b)||0));}
+function lnFixLabel(m){return helpOf(m)?helpLong(m):m.name+' '+fixText(m,'cb');}
+function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(), sp=old?lnLegacySpec(r,st,which):lnSpec(r,st,which), L=lnResolve(r,st,which);
+  const fin=which==='f', d=estDraftFor(k), P='ln'+which, opt=(v,t,cur)=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(t)+'</option>';
+  const cur=!sp?'':sp.t==='use'?'use:'+sp.of:sp.t;
+  let list=opt('',fin?'Choose the finish line…':'Choose the start line…',cur);
+  if(fin)list+=opt('start','Use start line as finish line',cur)+opt('grassy','Grassy Finish',cur);
+  else list+=opt('grassy','Grassy Start',cur);
+  const ex=lnOptsExisting(which);
+  if(ex.length)list+='<optgroup label="Use existing line">'+ex.map(x=>opt(x[0],x[1],cur)).join('')+'</optgroup>';
+  list+=opt('man',fin?'Create a finish line manually…':'Create a line manually…',cur);
+  let h='<div class="meta"><select class="lnSel" data-l="'+which+'" aria-label="'+(fin?'Finish line':'Start line')+'">'+list+'</select></div>';
+  if(old)h+='<div class="meta muteTxt">Saved before the line rules: shown as it was saved. A change here makes these the start\'s own choices.</div>';
+  // what a start saved before the line rules said of its finish: Auto's Finish Pin of an earlier version, or the last mark
+  if(old&&fin){const pe=endPick('fpin',r,st), pn=pe.m;
+    if(pe.legacy&&pn)h+='<div class="meta cautTxt">⚠ Finish Pin chosen by Auto in an earlier version: '+esc(fixWords2(pn))+(pn.race<r?' (from Race '+pn.race+')':'')+' – check it</div>';
+    if(finIsLast(r,st))h+='<div class="meta">At the last mark (saved before .44): the course finishes at its last mark.</div>';}
+  if(sp&&sp.t==='man'){const cbE=sp.cb, pinE=sp.pin, cbM=lnEndPt(cbE,r), pinM=lnEndPt(pinE,r);
+    const vOf=e=>!e?'':e.mark?'mark:'+e.mark:e.ref;
+    // the committee boat: recorded and typed positions, Finish boat fixes too (rule 15, C8), or placed from a harbour mark
+    let cbl=opt('','Choose the committee boat…',vOf(cbE));
+    lnFixOpts(n=>isCB(n)||isFinishBoat(n)).forEach(m=>{cbl+=opt(refFor(m),lnFixLabel(m),vOf(cbE));});
+    cbl+=opt('place','Place the committee boat from a harbour mark…',d[P+'bo']?'place':vOf(cbE));
+    h+='<div class="endSec"><div class="secHead">Committee boat</div><select class="lnEnd" data-l="'+which+'" data-e="cb" aria-label="Committee boat">'+cbl+'</select>'+
+      (cbE&&cbE.ln&&cbM?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'');
+    if(d[P+'bo']){if(d[P+'bt']==='')d[P+'bt']=startTime();   // rule 22, C9: the start time, kept as typed
+      h+='<div class="meta estBox">Place committee boat: <input class="estIn" data-f="'+P+'bd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'bd'])+'" style="width:5.5em"> m at '+
+        '<input class="estIn" data-f="'+P+'bb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'bb'])+'" style="width:5em">°M from '+
+        '<select class="estIn" data-f="'+P+'br"><option value="">choose a harbour mark</option>'+lnHarbour().map(nm=>opt(nm,nm,d[P+'br'])).join('')+'</select> on the water '+
+        '<input class="estIn" data-f="'+P+'bt" type="text" inputmode="numeric" value="'+esc(d[P+'bt'])+'" style="width:4.5em"> '+
+        '<button type="button" class="lnAct estAct2" data-act="lnPlaceCb" data-l="'+which+'">Place</button></div>';}
+    h+=msgSlot('ln'+which+'cb')+'</div>';
+    // the other end: pins recorded or typed (a Start Pin or a Finish Pin, rule 21, C7), a harbour mark itself, or a pin
+    // placed from the committee boat (rule 4)
+    let pl=opt('','Choose the other end…',vOf(pinE));
+    const pins=lnFixOpts(n=>isStartPin(n)||isFinishPin(n));
+    if(pins.length)pl+='<optgroup label="Pins">'+pins.map(m=>opt(refFor(m),lnFixLabel(m),vOf(pinE))).join('')+'</optgroup>';
+    pl+='<optgroup label="Harbour marks">'+lnHarbour().map(nm=>opt('mark:'+nm,nm,vOf(pinE))).join('')+'</optgroup>';
+    if(cbM)pl+=opt('place','Place a pin from the committee boat…',d[P+'po']?'place':vOf(pinE));
+    h+='<div class="endSec"><div class="secHead">Other end</div><select class="lnEnd" data-l="'+which+'" data-e="pin" aria-label="Other end">'+pl+'</select>'+
+      (pinE&&pinE.ln&&pinM?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
+    if(d[P+'po']&&cbM){if(d[P+'pt']==='')d[P+'pt']=startTime();
+      h+='<div class="meta estBox">Place pin: <input class="estIn" data-f="'+P+'pd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'pd'])+'" style="width:5.5em"> m at '+
+        '<input class="estIn" data-f="'+P+'pb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'pb'])+'" style="width:5em">°M from the committee boat on the water '+
+        '<input class="estIn" data-f="'+P+'pt" type="text" inputmode="numeric" value="'+esc(d[P+'pt'])+'" style="width:4.5em"> '+
+        '<button type="button" class="lnAct estAct2" data-act="lnPlacePin" data-l="'+which+'">Place</button></div>';}
+    h+=msgSlot('ln'+which+'pin')+'</div>';
+    // one end only: the midpoint estimate is the RO's tap (rule 7, rule 20, C5)
+    const one=(cbM?1:0)+(pinM?1:0)===1?(cbM||pinM):null, w=cbM?'cb':'pin';
+    if(one&&sp.mid!==w)h+='<div class="meta"><button type="button" class="ghost lnAct chgBtn" data-act="lnMid" data-l="'+which+'" data-e="'+w+'">Use '+esc(cbM?'the committee boat':one.markEnd?one.name:isFinishPin(one.name)?'the Finish Pin':'the Start Pin')+' as the line\'s midpoint (estimate)</button></div>';
+    if(one&&sp.mid===w)h+='<div class="meta"><button type="button" class="ghost lnAct chgBtn" data-act="lnUnmid" data-l="'+which+'">Undo the midpoint</button></div>';}
+  // the line in use: its length and bias, or what it is
+  if(!fin)h+='<div id="lineInfo" class="endSec">'+lnInfo()+'</div>';
+  if(L&&L.of)h+='<div class="meta">Uses '+esc(ex.concat([]).find(x=>x[0]==='use:'+L.of)?ex.find(x=>x[0]==='use:'+L.of)[1]:'Race '+L.of.split('|')[0]+' · Start '+(+L.of.split('|')[1]+1)+' · '+(L.of.slice(-1)==='s'?'start':'finish')+' line')+
+    (L.grassy?' (Grassy)':L.cb&&L.pin?': '+esc(lnWho(L.cb)+' and '+lnWho(L.pin)):L.est==='mid'?': '+esc(lnWho(L.end))+' as the midpoint (estimate)':'')+'.</div>';
+  const c=cardCfgNow();if(c&&!L&&(fin?c.f:c.s))h+='<div class="meta">Card '+(fin?'finish':'start')+': '+esc(shownName(fin?c.f:c.s))+'. Set the '+(fin?'finish':'start')+' line here.</div>';
+  const badge=!L?(old&&fin&&finIsLast(r,st)?'':' <span class="lineNotSet" role="status">Line not set</span>'):L.est==='mid'?' <span class="lineNoBoat" role="status">Estimate: '+esc(lnWho(L.end))+' used as the line\'s midpoint</span>':'';
+  return {badge,body:h+msgSlot('ln'+which)};}
+// the start line's length and bearing, and with a wind how square it is and which end is favoured (A54): redrawn with the wind
+function lnInfo(){if(!startLine())return '';const vA=varW(), tw=S.twd===''?null:((+S.twd-vA)%360+360)%360, n=startLineNote(tw,vA);
+  return n?'<div class="meta'+(n.flag?' cautTxt':'')+'">'+esc(n.text)+'</div>':'';}
+// the RO's placed end: a typed position, sent with the outbox, and its estimate record kept in the end (rule 4)
+function lnAddFix(nm,p,t){const day=S.pulledDay||$('day').value||todayISO(), fix=1+S.marks.filter(m=>m.race===S.race&&m.name.toLowerCase()===nm.toLowerCase()).length, id=Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  S.outbox.push({action:'add',id,date:day,race:S.race,name:nm,lat:p.lat,lon:p.lon,acc:0,time:t});
+  push({race:S.race,name:nm,fix,lat:p.lat,lon:p.lon,acc:0,time:hhmm(t),pending:true,pid:id});return id;}
+function lnWhen(v){const day=S.pulledDay||$('day').value||todayISO(), hm=String(v||'').trim().match(/^(\d{1,2})[:.](\d{2})$/);
+  return !hm||+hm[1]>23||+hm[2]>59?null:new Date(+day.slice(0,4),+day.slice(5,7)-1,+day.slice(8,10),+hm[1],+hm[2]).getTime();}
 function finPinBox(){const d=estDraftFor(ckey(S.race,S.start));
   return routeBox(1,'<div class="meta estBox">Set Finish Pin at <select class="estIn" data-f="fat"><option value="">choose a mark</option>'+finPinOpts(d.fat)+'</select> on the water '+
     '<input class="estIn" data-f="fptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fptime)+'" style="width:4.5em"> '+
@@ -3000,8 +3139,8 @@ function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
   // on a card course a recorded line stands where the card's start (or Grassy Mid finish) is: keep the card's route
   // from that point and measure only the first hop from the line (and the last hop to it), as for a laid mark's fix
   const atLine=(ln,nm,dir)=>ccfg&&CARD.marks[nm]?{card:nm,atFix:true,moveNote:dir+(ln&&ln.mk?' the '+(dir==='from'?'start':'finish')+' line':' the recorded line')+', not depth-checked'}:{};   // A123: only the boat end recorded
-  const sPt=sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg&&startStandIn(r,st)?cardEnd(ccfg.s,'Start'):gsOf(r,st)?cardEnd('Grassy Mid','Start'):null);
-  const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg&&fsx.kind!=='missing'&&fsx.kind!=='last'?cardEnd(ccfg.f,'Finish'):gsOf(r,st)&&finishMode(r,st)==='start'?cardEnd('Grassy Mid','Finish'):null);
+  const sPt=sl&&sl.grassy?cardEnd('Grassy Mid','Start'):sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg&&startStandIn(r,st)?cardEnd(ccfg.s,'Start'):gsOf(r,st)?cardEnd('Grassy Mid','Start'):null);
+  const fPt=fl&&fl.grassy?cardEnd('Grassy Mid','Finish'):fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg&&fsx.kind!=='missing'&&fsx.kind!=='last'?cardEnd(ccfg.f,'Finish'):gsOf(r,st)&&finishMode(r,st)==='start'?cardEnd('Grassy Mid','Finish'):null);
   // the card's route from its start was validated for the water near that start point: say so if the line is far off
   const farLine=[];
   if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(geo(sl.mid,CARD.marks[ccfg.s]).m);
@@ -3039,7 +3178,7 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
   // A63: the finish line's own estimate: said in the leg table, section 4, the sketch, the chart and Copy for Sail Scoring, never in the WhatsApp text
   const finE=fl&&fl.fin?finEstNow():null;
   // section 3's start line note follows the wind box too, so it always matches section 4 (Pat, 13 October 2026, A54)
-  if($('lineInfo')){$('lineInfo').innerHTML=lineInfo();paintMsgs();}   // .43 fix 2: its slots are drawn afresh
+  if($('lineInfo')){$('lineInfo').innerHTML=lnInfo();paintMsgs();}   // .43 fix 2: its slots are drawn afresh
   const vr=varOf(L);
   const twdM=S.twd===''?null:+S.twd;
   const twdv=twdM===null?null:((twdM-(vr||0))%360+360)%360; // true wind direction
@@ -3089,7 +3228,9 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
     lines.push((isLine?'Line':'Leg '+(i+1))+': '+a.name+' → '+b.name+' · '+pad(brgM,3)+'°M · '+r.nm.toFixed(2)+' nm'+(ang===null?'':' · TWA '+ang+'° '+legType(ang)));
   }
   laidNotice(pts,total,L.legs); lastTotal=total;
-  const from=estL&&estL.kind==='mid'?'from '+fixWords2(sl.end)+', used as the start line midpoint (start line: estimate – one end missing)':
+  const from=estL&&estL.kind==='mid'?'from '+(sl.end.markEnd?sl.end.name:fixWords2(sl.end))+', used as the start line midpoint (start line: estimate – one end missing)':
+    sl&&sl.grassy?'from Grassy, the midpoint of the Grassy Walk line (Grassy Start)':
+    sl&&sl.man?'from the midpoint of the start line (committee boat and '+(sl.pin.markEnd?sl.pin.name:'pin')+')':
     estL?'from the midpoint of the start line (start line: estimate – '+estL.text+')':
     sl&&sl.mk?'from the midpoint of the start line (committee boat and '+sl.mk+')':
     sl?'from the midpoint of the recorded start line (committee boat and pin)':
@@ -3098,7 +3239,9 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
     sPt&&cardEndMode('s')==='card'?'from '+ccfg.s+', used as the start line midpoint (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
     sPt?'from the card\'s '+ccfg.s+' start, standing in because no committee boat is set':
     'from the first mark (no start point)';
-  const to=finE?(finE.kind==='mid'?'at the Finish Pin, used as the finish line midpoint':'at the midpoint of the finish line')+' (finish line: estimate – '+finE.text+')':
+  const to=finE?(finE.kind==='mid'?(finE.who?'at '+finE.who+', used as the finish line midpoint':'at the Finish Pin, used as the finish line midpoint'):'at the midpoint of the finish line')+' (finish line: estimate – '+finE.text+')':
+    fl&&fl.grassy?'at Grassy, the midpoint of the Grassy Walk line (Grassy Finish)':
+    isNewLines()&&fl?'at the midpoint of the finish line'+((lnSpec(S.race,S.start,'f')||{}).t==='start'?' (the start line, used as the finish)':''):
     fsx&&fsx.kind==='finishpin'?'at the midpoint of the recorded finish line (committee boat and Finish Pin)':
     fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+shownName(ccfg.f)+' finish (Card mark chosen)':
     fsx&&fsx.kind==='markline'?'at the midpoint of the finish line (finish boat and '+(fl&&fl.mk?fl.mk:'Finish Pin')+')':
@@ -3108,11 +3251,11 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
     fPt&&gsOf()?'at Grassy, the midpoint of the Grassy Walk line (Grassy start chosen)':
     fPt?'at the card\'s '+shownName(ccfg.f)+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
-  const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
+  const nl=isNewLines(), noStart=!sPt&&(nl||cardEndMode('s')==='laid'), noFinish=!!fsx&&fsx.kind==='missing';
   // Course Card marks in the course: their position is the card's (STATUS A40); said in the leg table and above the SailScoring lines
   const ccNames=[...new Set(cs.filter(isCourseCard).map(m=>m.name))], ccLine=ccNames.length?ccNames.join(', ')+': position from the course card, not a fix recorded today.':'';
-  setSS(ss,(ml?'INCOMPLETE: '+ml+', so they are not in these lines. ':'')+(ccLine?ccLine+' ':'')+(noStart?'First leg not measured: Laid line is chosen and no start line is usable':'First leg measured '+from)+'; '+
-    (noFinish?'last leg not measured: Laid line is chosen and no finish line is usable':'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
+  setSS(ss,(ml?'INCOMPLETE: '+ml+', so they are not in these lines. ':'')+(ccLine?ccLine+' ':'')+(noStart?(nl?'First leg not measured: start line not set':'First leg not measured: Laid line is chosen and no start line is usable'):'First leg measured '+from)+'; '+
+    (noFinish?(nl?'last leg not measured: finish line not set':'last leg not measured: Laid line is chosen and no finish line is usable'):'last leg ends '+to)+'. Bearings are magnetic (°M).',total,pts.length-1);
   setCC();
   const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(orphanText(L)?[orphanText(L)+'. Move it between two marks.']:[],farLine,checks(ents,cs));
   const warnC=farLine.concat(checks(ents,cs)), warnR=warn.filter(x=>!warnC.includes(x));   // .44: red only what holds Send back
@@ -3121,7 +3264,7 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>'+(ml?'Total of measured legs':'Total')+'</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
   // the sketch and the chart draw the same points, lines and legs (plot, drawChartInner): the chart never works them out again
-  const plotLines=[slRec&&{a:slRec.cb,b:slRec.pin,kind:'start'},fl&&fl!==slRec&&fl.cb&&{a:fl.cb,b:fl.pin,kind:'finish'}].filter(Boolean);
+  const plotLines=[slRec&&{a:slRec.cb,b:slRec.pin,kind:'start'},fl&&fl!==slRec&&fl.cb&&!(slRec&&fl.cb===slRec.cb&&fl.pin===slRec.pin)&&{a:fl.cb,b:fl.pin,kind:'finish'}].filter(Boolean);
   // an estimated line is labelled on the sketch and the chart; the midpoint option is drawn as a 200 m line through the
   // recorded end, square to the first leg (to the first mark, a routing waypoint skipped): drawing only (A58 part 2)
   if(estL&&estL.kind==='mid'){const f=firstMarkOf().m;if(f){const b=geo(sl.end,f).brg, A=geoDest(sl.end,(b+90)%360,100), B=geoDest(sl.end,(b+270)%360,100);
@@ -3544,6 +3687,9 @@ function fxResolve(all,scope){
   const races=scope.races||[scope.race];
   races.forEach(r=>{const sts=scope.races?classesOf(r).map((_,i)=>i):[scope.start], ref0=scope.races?0:scope.start, candLines=[];
     sts.forEach(st=>{const t=startMoment(r,st), cfg=(S.cardCfg||{})[ckey(r,st)];
+      if(isNewLines(r,st)){const A=lnResolve(r,st,'s'), F=lnResolve(r,st,'f'), fx=L=>L&&L.cb&&L.pin&&!L.cb.virtual&&!L.pin.virtual;   // .46b: the RO's own lines
+        if(fx(A))line('start',r,st,A.cb,A.pin);else if(!A)flag(r,st,'start line not set.');
+        if(fx(F)&&!(fx(A)&&F.cb===A.cb&&F.pin===A.pin))line('finish',r,st,F.cb,F.pin);else if(!F)flag(r,st,'finish line not set.');return;}
       if(t===null){flag(r,st,'no start time set.');return;}
       const cb=autoEnd('cb',r,st).m, pin=autoEnd('pin',r,st).m, late={};
       [['cb',cb],['pin',pin]].forEach(([w,m])=>{const nm=ROLE[w].nm, own=ownOf(r,w);
@@ -3563,8 +3709,8 @@ function fxResolve(all,scope){
       const d=(m,w)=>'the '+ROLE[w].nm+' ('+at(m)+(cands.has(refFor(m))?', candidate':m.race<r?', carried from Race '+m.race:'')+')';
       flag(r,c.st,'A dotted candidate line joins '+d(c.a,'cb')+' and '+d(c.b,'pin')+'; not used by default.');});
     // the Finish Pin: no time limit, so one per race
-    const fp=autoEnd('fpin',r,ref0).m, fo=ownOf(r,'fpin').filter(m=>!finOf(m)), t1=startMoment(r,0);
-    if(!fp)flag(r,null,'no Finish Pin recorded.');
+    const fp=autoEnd('fpin',r,ref0).m, fo=ownOf(r,'fpin').filter(m=>!finOf(m)), t1=startMoment(r,0), anyOld=sts.some(st=>!isNewLines(r,st));
+    if(!anyOld){}else if(!fp)flag(r,null,'no Finish Pin recorded.');
     else if(fp.race<r)flag(r,null,'no Finish Pin of its own; the Race '+fp.race+' Finish Pin ('+at(fp)+') is carried forward by default.');
     else{if(fo.length>1){outline.add(refFor(fp));flag(r,null,fo.length+' Finish Pin fixes recorded; the line joins the latest ('+at(fp)+'); the others are shown but not joined.');}
       if(t1!==null&&tm(fp)<t1)flag(r,null,'the Finish Pin ('+at(fp)+') was recorded before Start 1 ('+hmOf(r,0)+'); it is joined by default.');}
@@ -3909,7 +4055,7 @@ async function pull(quiet){
       ['fxStatus','cardStatus'].concat(S.outbox.length?[]:['cbStatus']).forEach(id=>{$(id).textContent='';$(id).className='status';});
       // "All course changes saved" speaks only for the day loaded (STATUS A48); it comes back with this day's next save
       saveState.okAt=0; showSave();
-      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin','winds','cardCfg'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
+      ['courses','startTimes','finishes','lineSel','lineAuto','lineMid','lineEst','startPt','linePinAt','lineGone','lineFin','winds','cardCfg','lines','lineLegacy'].forEach(f=>{const o=S[f]||{};Object.keys(o).forEach(k=>{if(!mine(k))delete o[k];});S[f]=o;});
       S.courseDay={}; Object.keys(cd).forEach(k=>{if(mine(k))S.courseDay[k]=cd[k];});
       // A8: the day's series likewise: one set for this day before it could be loaded stays, unsent; nothing carries over
       if(!mine('_day')||!S.daySeries){delete S.daySeries;delete S.courseDay._day;}
@@ -4103,10 +4249,11 @@ function recordFor(k){
   // a race's start groups, and its picked chips as "picked" only when it has any, so a race without picks saves exactly as before
   if(k.indexOf('_starts|')===0){const pk=S.picked[k.slice(8)]||[], ld=laidRec(k.slice(8)), o={classes:S.raceClasses[k.slice(8)]||[]};
     if(pk.length)o.picked=pk.slice(); if(Object.keys(ld).length)o.laid=ld; return o;}
-  const ls=S.lineSel[k]||{}, lsr={};
-  Object.keys(ls).forEach(w=>{const v=ls[w];if(v==='auto'||v==='none'||/^[sl]:/.test(v))lsr[w]=v;});
+  const ls=S.lineSel[k]||{}, nw=lnSaves(k), lsr=nw?lnSel(k):{};
+  if(!nw)Object.keys(ls).forEach(w=>{const v=ls[w];if(v==='auto'||v==='none'||/^[sl]:/.test(v))lsr[w]=v;});
   return {entries:(S.courses[k]||[]).map(e=>typeof e==='string'?{ref:refOf(e),side:''}:{ref:refOf(e.id),side:e.side||''}),
-          startTime:S.startTimes[k]||'', finish:S.finishes[k]||'start', lineSel:lsr,
+          startTime:S.startTimes[k]||'', finish:nw?((lnSpec(+k.split('|')[0],+k.split('|')[1],'f')||{}).t==='start'?'start':'finishpin'):S.finishes[k]||'start', lineSel:lsr,
+          ...(nw?{lines:lnRec(k)}:{}),   // .46b, A127: the RO's start and finish lines (LINE_RULES.md)
           wind:(S.winds&&S.winds[k])||{twd:'',tws:''},
           ...(S.sent&&S.sent[k]?{sent:S.sent[k]}:{}),   // .44: when the course was first sent (it is then "used")
           card:(S.cardCfg&&S.cardCfg[k])?cardRec(S.cardCfg[k]):null,
@@ -4121,9 +4268,11 @@ function recordFor(k){
           // A63: the finish line set with the helper (only when there is one)
           ...(finRec(k)?{lineFin:finSaved(k)}:{})};
 }
-function isEmptyRec(k,r){if(k==='_day')return !r.series&&!r.wind;if(r.lineMid||r.lineEst||r.startPt||r.linePinAt||r.lineGone||r.lineFin)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
+function isEmptyRec(k,r){if(k==='_day')return !r.series&&!r.wind;if(r.lines&&(r.lines.s||r.lines.f))return false;
+  if(r.lines&&!r.entries.length&&!r.startTime&&!r.wind.twd&&!r.wind.tws&&!r.card)return true;   // .46b: a new start with nothing set yet
+  if(r.lineMid||r.lineEst||r.startPt||r.linePinAt||r.lineGone||r.lineFin)return false;return k.indexOf('_starts')===0?!r.classes.some(l=>l.length)&&r.classes.length<=3&&!(r.picked&&r.picked.length)&&!(r.laid&&Object.keys(r.laid).length):(!r.entries.length&&!r.startTime&&r.finish==='start'&&!Object.keys(r.lineSel).length&&!r.wind.twd&&!r.wind.tws&&!r.card);}
 // the day-wide _starts is never sent: only each race's own groups are; the day's series is _day (A8)
-function allKeys(){return [...new Set((typeof S.daySeries==='string'||(S.dayWind&&S.dayWind.day===workDay())?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}),Object.keys(S.lineFin||{}))))];}
+function allKeys(){return [...new Set((typeof S.daySeries==='string'||(S.dayWind&&S.dayWind.day===workDay())?['_day']:[]).concat(Object.keys(S.raceClasses||{}).concat(Object.keys(S.picked||{}),Object.keys(S.laidSel||{}).concat(Object.keys(S.laidFrz||{})).map(k=>k.split('|')[0])).map(r=>'_starts|'+r).concat(Object.keys(S.courses||{}),Object.keys(S.startTimes||{}),Object.keys(S.finishes||{}),Object.keys(S.lineSel||{}),Object.keys(S.winds||{}),Object.keys(S.lineFin||{}),Object.keys(S.lines||{}))))];}
 function isDirty(k){const r=recordFor(k);return S.synced[k]===undefined?!isEmptyRec(k,r):JSON.stringify(r)!==S.synced[k];}
 let savingC=false, saveTimer=null, savingP=null, saveStop=false, dayDrop=null;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveCourses,800);}
@@ -4311,6 +4460,8 @@ function applyServerCourses(obj){
     S.linePinAt[k]=Object.assign({ref:pa.ref,at:String(pa.at||'')},was?{was}:{});} else delete S.linePinAt[k];
       const lg=goneNorm(rec.lineGone); S.lineGone=S.lineGone||{}; if(lg)S.lineGone[k]=lg; else delete S.lineGone[k];   // A78
       finSet(k,finNorm(rec.lineFin));   // A63
+      // .46b, A127: a record with the RO's lines follows LINE_RULES.md; one saved before them reads exactly as it was saved
+      if(rec.lines&&typeof rec.lines==='object'){S.lines[k]=lnNorm(rec.lines);delete S.lineLegacy[k];}else{delete S.lines[k];S.lineLegacy[k]=true;}
       if(!S.winds)S.winds={}; S.winds[k]={twd:(rec.wind&&rec.wind.twd)||'',tws:(rec.wind&&rec.wind.tws)||''};
   // .44: where the start's wind came from (own, or kept when the start was used) and when it was first sent
   {const w=rec.wind||{};if(w.from==='own')S.winds[k].from='own';
@@ -4496,6 +4647,45 @@ $('dayAnyway').onclick=()=>{const db=saveState.dayBlock;if(!db||!db.drop)return;
 window.addEventListener('online',sendOutbox);
 
 /* ---------- events ---------- */
+/* .46b, A127: the RO's line choices. A start saved before the line rules takes what it shows as its own first (C10) */
+function lnSet(which,f){const k=ckey(S.race,S.start), L=lnTouch(k);f(L);stamp(k);commit();}
+document.addEventListener('change',e=>{const t=e.target.closest('.lnSel,.lnEnd');if(!t)return;const which=t.dataset.l==='f'?'f':'s', v=t.value, k=ckey(S.race,S.start), d=estDraftFor(k), P='ln'+which;
+  msgClear(which==='f'?'finish':'start');
+  if(t.classList.contains('lnSel')){lnSet(which,L=>{const was=L[which];
+      L[which]=v===''?null:v==='grassy'?{t:'grassy'}:v==='start'&&which==='f'?{t:'start'}:/^use:\d+\|\d+\|[sf]$/.test(v)?{t:'use',of:v.slice(4)}:
+        v==='man'?(was&&was.t==='man'?was:{t:'man',cb:null,pin:null,mid:null}):null;});return;}
+  const end=t.dataset.e==='cb'?'cb':'pin';
+  if(v==='place'){d[P+(end==='cb'?'bo':'po')]='1';render();return;}
+  d[P+(end==='cb'?'bo':'po')]='';
+  lnSet(which,L=>{const sp=L[which]&&L[which].t==='man'?L[which]:(L[which]={t:'man',cb:null,pin:null,mid:null});
+    sp[end]=v===''?null:/^mark:/.test(v)?{mark:v.slice(5)}:/^[sl]:/.test(v)?{ref:v}:null;if(sp.mid&&(sp.cb&&sp.pin||!sp[sp.mid]))sp.mid=null;});});
+document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');if(!b)return;
+  const which=b.dataset.l==='f'?'f':'s', act=b.dataset.act, k=ckey(S.race,S.start), d=estDraftFor(k), P='ln'+which, say=(t,ok)=>sayIn('ln'+which+(act==='lnPlacePin'||b.dataset.e==='pin'?'pin':act==='lnPlaceCb'||b.dataset.e==='cb'?'cb':''),k)(t,ok);
+  msgClear(which==='f'?'finish':'start');
+  const man=()=>{const L=lnTouch(k);if(!L[which]||L[which].t!=='man')L[which]={t:'man',cb:null,pin:null,mid:null};return L[which];};
+  if(act==='lnMid'){lnSet(which,()=>{man().mid=b.dataset.e==='cb'?'cb':'pin';});return;}
+  if(act==='lnUnmid'){lnSet(which,()=>{man().mid=null;});return;}
+  if(act==='lnPlaceCb'||act==='lnPlacePin'){const cbP=act==='lnPlaceCb', x=cbP?'b':'p', dist=+d[P+x+'d'], brgM=+d[P+x+'b'];
+    if(!(dist>0&&dist<=5000)||String(d[P+x+'b']).trim()===''||!(brgM>=0&&brgM<=360)){say('Type a distance in metres (1 to 5000) and a bearing from 0 to 360 °M: nothing placed.',false);return;}
+    const t=lnWhen(d[P+x+'t']);if(t===null){say('Give the time on the water as hh:mm, for example 11:09: nothing placed.',false);return;}
+    // rule 4: the committee boat from a harbour mark only; a pin from the committee boat only
+    const from=cbP?(lnHarbour().includes(d[P+'br'])?markPt(d[P+'br'],S.race):null):lnEndPt((lnSpec(S.race,S.start,which)||{}).cb,S.race);
+    if(!from){say(cbP?'Choose the harbour mark to place the committee boat from: nothing placed.':'Choose the committee boat first: a pin is placed from it only.',false);return;}
+    const p=geoDest(from,((brgM-varW())%360+360)%360,dist), nm=cbP?'Committee boat':which==='f'?'Finish Pin':'Start Pin', id=lnAddFix(nm,p,t);
+    const rec={ref:'s:'+id,ln:true,w:cbP?'cb':'pin',from:cbP?from.name:fixWords2(from),m:Math.round(dist),brgM:Math.round(brgM)%360};
+    if(cbP)rec.hm=from.name;else{rec.nm=nm;const fw=fromWhenNew(from,rec.from);if(fw)rec.fromWhen=fw;}
+    lnSet(which,()=>{const sp=man();sp[cbP?'cb':'pin']=rec;if(sp.cb&&sp.pin)sp.mid=null;});
+    [P+x+'d',P+x+'b',P+x+'t',P+x+'o'].concat(cbP?[P+'br']:[]).forEach(f=>{d[f]='';});commit();sendOutbox();
+    say(nm+' placed as an estimate: '+estWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix('ln'+which+(cbP?'cb':'pin'),k,id);
+    return;}
+  if(act==='lnUndo'){const end=b.dataset.e==='cb'?'cb':'pin', sp=lnSpec(S.race,S.start,which), en=sp&&sp[end], m=en&&lnFix(en.ref);if(!m)return;
+    const others=lineUsers(m,k);if(others.length){say('Not undone: the '+m.name+' is also used by '+others.join(', ')+'.',false);return;}
+    if(m.pending||!m.sid){say('The '+m.name+' is still being sent: try again in a moment.',false);return;}
+    if(!verReady(say))return;
+    if(!confirm('Undo? The '+m.name+' '+endDid(en)+' is withdrawn from the race record (kept, marked withdrawn).'))return;
+    try{await postFix({action:'withdraw',date:S.pulledDay,id:m.sid,reason:'estimate undone by the RO'},OUTBOX_TIMEOUT_MS);}
+    catch(err){say('Not undone: '+((err&&err.text)||(err&&err.message)||'no reply')+'.',false);return;}
+    lnSet(which,()=>{const s2=man();s2[end]=null;if(s2.mid===end)s2.mid=null;});await pull(true);commit();say('Undone: the '+m.name+' is withdrawn.',true);}});
 document.addEventListener('click',e=>{const b=e.target.closest('.lineSw,.lineAct');if(!b)return;
   const k=ckey(S.race,S.start), c=(S.cardCfg||{})[k];
   if(b.classList.contains('lineSw')){if(!c)return;c[b.dataset.end==='s'?'ls':'lf']=b.dataset.v;stamp(k);commit();return;}

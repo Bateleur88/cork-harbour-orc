@@ -229,8 +229,8 @@ as a typed position, flagged as an estimate on the page, the leg table, the sket
 the chart and Copy for Sail Scoring (`"x-estimate"`), never in the WhatsApp text;
 **Undo** withdraws it. **Remove Start** moves every later start's records down with
 it, withdraws the removed start's own placed ends, and is refused while another
-start uses them. The page is being changed to these rules: until that is done it
-still fills some line ends by itself.
+start uses them. A start saved before these rules reads exactly as it was saved;
+its lists show its saved ends, and the first change makes them the RO's own.
 
 **Laid marks** (Curlane, Dutchman, White Bay) take their position from the latest
 RIB fix, saved typed position or pasted position of the race or an earlier one

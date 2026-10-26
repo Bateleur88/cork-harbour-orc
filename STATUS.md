@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 26 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built, not to be released as it stands: .46 (A123, A124, A125, A80 course page part); the line rules rework (A127) comes first. Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
+Last updated: 26 October 2026. Live: course page PAGE_VERSION 2026-10-06.45b, the .45 release (released 23 October 2026), with its service worker and `marks.php`. Built and tested, not released: .46b (A127, the line rules rework; A80 course page part). Baseline: Phase 1 audit `docs/audit/PHASE1_AUDIT.md` (commit `f30882f`). History of every item is in git (`git log -p STATUS.md`).
 
 ## States
 
@@ -24,7 +24,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 
 **Next race:** race-day precautions on .45: open the course page once with signal on each RO device before the race day, so it opens without signal (A65); once a start has gone, don't tap Undo on its start line (A77); check the day's series name reads "Autumn League" and tap Confirm if it shows as carried, before the first course (A8).
 
-**.46:** not to be released as it stands. The line rules rework (A127, `LINE_RULES.md`) comes first.
+**.46b (built and tested, not released):** A127 (the line rules, `LINE_RULES.md`) and A80 (course page part), on top of live .45; tested in the harness; a round on the test copy next. Never within 12 hours of a race.
 
 **Next:** A25 (key by header only), A70 (remove Copy legs).
 
@@ -159,7 +159,7 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A77 | Undo's label; later starts' lines; duplicate list entries; Undo on a started start's estimate removes its line | DECIDED | Partly met by A58: Undo refused while another start uses the estimate. To do: label, duplicate list entries, Undo on a gone start's own estimate. Rule: starts that have gone keep their line; a new start gets its own |
 | A78 | A placed line end replaced by placing again can't be withdrawn on its own | BUILT AND TESTED | Withdraw in Check recorded marks for a typed or placed line end that is no start's estimate, or that no start uses; placing an end again withdraws the one it replaces, or says under the list why not (this device only); until it is withdrawn, a replaced end is saved with its start's course and treated as a placed estimate on every device; in .44 the same for finish line ends and a Start Pin a harbour mark replaces; released in .45 |
 | A79 | Workbook release items: Grassy Mid as a card start or finish, the workbook's Grassy Mid label, RW_Temblebreedy_Pier spelling | DECIDED | Ask Mark about an explicit stand-in field; check course-cards for the old spelling |
-| A80 | Web app manifest for both pages, so Chrome offers a real Install with no badge on the home-screen icon | IN PROGRESS | Course page in .46, not released: `manifest.webmanifest` and three icons (192, 512, maskable 512) beside the page; the test copy installs as its own app ("TEST Course", `/course-test/`); tested in the harness. RIB page: goes with A82's RIB icons in one release, after Sunday's race. On iPhone an installed icon keeps its own storage, separate from Safari's |
+| A80 | Web app manifest for both pages, so Chrome offers a real Install with no badge on the home-screen icon | IN PROGRESS | Course page in .46b, not released: `manifest.webmanifest` and three icons (192, 512, maskable 512) beside the page; the test copy installs as its own app ("TEST Course", `/course-test/`); tested in the harness. RIB page: goes with A82's RIB icons in one release, after Sunday's race. On iPhone an installed icon keeps its own storage, separate from Safari's |
 | A82 | Favicons for the RIB page and the course page | IN PROGRESS | Embedded as data URIs (16 and 32 px icons and an apple-touch-icon per page); partly covers A80 (an apple-touch-icon on the course page, no manifest; A80 stays open for the manifest). Course page: released in .45. RIB page: needs checking on the water before it is relied on, and carries the A81 weakness as before |
 | A85 | Withdrawn positions shown greyed in All fixes and marks | NOT STARTED | Later |
 | A86 | Restore a withdrawn position | NOT STARTED | Needs a `marks.php` action; later |
@@ -199,7 +199,8 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A124 | A committee boat placed from a harbour mark (the route that also sets the Start Pin there) read "1000 m at 090°M from Start Pin No.13": it now reads "0.5 nm at 090°M from No.13", nautical miles to one decimal, the mark named plainly; below 0.1 nm in metres ("80 m at 090°M from No.13") | SUPERSEDED (LINE_RULES.md, 26 Oct) | The harbour mark placement no longer sets a pin (rule 4); the wording is reconsidered in A127 |
 | A125 | A Grassy finish on a card course finished on the recorded start line when there was one | BUILT AND TESTED | In .46, not released: a Grassy finish always finishes at Grassy; on Laid line the Finish list stands and there is no fallback to the start line ("Same as the start line" still when the RO picks it); a Grassy card start on Automatic is Grassy, the recorded line not used; a hand-built Grassy start's WhatsApp line reads "Finish at Grassy."; tested in the harness |
 | A126 | "Set Start Pin at" on a later start is not taken up when the previous start's Start Pin was chosen by hand and both starts have the same start time: the page keeps the previous start's choice | SUPERSEDED (LINE_RULES.md, 26 Oct) | Nothing carries between starts (rule 12) |
-| A127 | Line rules rework (LINE_RULES.md) | DECIDED | Every start and finish line end set by the RO; the plan comes to Pat first |
+| A127 | Line rules rework (LINE_RULES.md) | BUILT AND TESTED | In .46b, not released: every start and finish line end the RO's choice from a list that starts empty; starts saved before read exactly as saved; tested in the harness and on four copies of saved data |
+| A128 | Sketch labels on the wrong points: a name beside another mark's point, a point with no name, or a name with no point | NOT STARTED | Seen on the test copy, 23 Oct, Race 2 Start 3; the label placer's penalty for sitting nearer another mark is small |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 
