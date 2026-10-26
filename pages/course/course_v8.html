@@ -226,6 +226,8 @@ body.dayHeld .wrap>.raceOnly,body.dayHeld #seriesBox,body.dayHeld #seriesAsk,bod
 .finCaret{display:inline-block;width:1em}
 .finBig{font-weight:700;font-size:1.05rem;padding:10px 20px;margin-top:4px}
 .lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}
+/* .46, A123 (Pat, 27 October 2026): the place-the-boat flag beside the row heading, as "Line not set" is, in orange: not critical */
+.lineNoBoat{display:inline-block;margin:0 6px 0 8px;padding:1px 8px;border-radius:6px;background:var(--caution);color:var(--paper);font-weight:700;font-size:.9rem}
 .routeOr{text-align:center;font-size:.85rem;font-weight:700;color:var(--muted);margin:4px 0}
 /* .44: the Finish Pin side suggested from the approach, until the RO taps a side */
 .sideBtns .sugSide{border-style:dashed;font-style:italic}
@@ -1552,8 +1554,7 @@ function render(){
   // midpoint (startWarn); a Grassy start, a midpoint and Laid line (its own warning) say neither
   const swn=startWarn();
   const notSet=swn&&swn.kind==='notset'?' <span class="lineNotSet" role="status">Line not set</span>':'';
-  const noBoat=swn&&swn.kind==='noboat'?'<div class="meta warnTxt lineNoBoat" role="status">⚠ No committee boat: place the committee boat, or use '+esc(swn.mark)+' as the line\'s midpoint. '+
-    '<button type="button" class="ghost '+(swn.act==='useCard'?'lineAct':'estAct')+' chgBtn" data-act="'+swn.act+'" data-w="pin">Use '+esc(swn.mark)+' as the midpoint</button></div>':'';
+  const noBoat=swn&&swn.kind==='noboat'?noBoatFlag('No committee boat: place the committee boat, or use '+swn.mark+' as the line\'s midpoint.',swn.mark,swn.act,'pin'):'';
   ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+notSet+noBoat+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
     (cardS==='Grassy Mid'&&!sl0&&sm!=='card'?'<div class="meta">Start: <b>Grassy</b> (from the card).</div>':'')+
     msgSlot('start')+'</div><div></div></li>';
@@ -1607,6 +1608,7 @@ function render(){
    const li=document.createElement('li');li.className='lineRow';li.id='finishRow';
    li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="finChoice"></div>'+msgSlot('finishSel')+msgSlot('finFollow')+
      (finUsesPin(S.race,S.start)?finRowHtml():markFinOf()?markFinRow():'')+msgSlot('finish')+'</div><div></div>';
+   li.querySelector('b').insertAdjacentHTML('afterend',finNoBoat());   // A123: beside the heading
    ol.appendChild(li);
    const box=li.querySelector('.finChoice');box.appendChild($('finishFields'));box.appendChild($('finishCard'));
    $('finishFields').hidden=false;
@@ -1626,10 +1628,8 @@ function render(){
      fm==='card'?(finishIsCardMark()?'':'The card\'s '+shownName(c.f)+' point is used; a recorded line is not.'):
      finishIsCardMark()?'Boats finish as they round or pass it; the committee boat positions itself to time them.':
      fs.kind==='startline'?'Uses the recorded start line.':'Uses '+shownName(c.f)+'.';
-   const nb=fs&&fs.noBoat?'<span class="warnTxt lineNoBoat" role="status">⚠ No finish boat: place the finish boat, or use '+esc(c.f)+' as the line\'s midpoint. '+
-     '<button type="button" class="ghost lineAct chgBtn" data-act="useCardF">Use '+esc(c.f)+' as the midpoint</button></span>':'';
-   $('finishCard').hidden=!(t||nb||fs&&fs.warn);
-   $('finishCard').innerHTML=nb+(t?'<span class="muteTxt">'+esc(t)+'</span>':'')+(fs&&fs.warn?'<span class="cautTxt"> ⚠ '+esc(fs.warn)+'.</span>':'');}
+   $('finishCard').hidden=!(t||fs&&fs.warn);
+   $('finishCard').innerHTML=(t?'<span class="muteTxt">'+esc(t)+'</span>':'')+(fs&&fs.warn?'<span class="cautTxt"> ⚠ '+esc(fs.warn)+'.</span>':'');}
   $('toRace').hidden=!cs.length;
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix(); renderNotSent(); paintMsgs();
@@ -2676,8 +2676,7 @@ function finRowHtml(){const k=ckey(S.race,S.start), z=finRec(k)||{}, ce=endPick(
     l+=changeBtn('fin','all',open?'Close':'Change finish…')+'</div>';
     h=p+c+l;}
   else{const pa=pin&&finOf(pin), mk=pa&&pa.w==='fpin'&&!(+pa.m>0)&&isMarkEnd(pa.at)&&!ce.m?pa.at:'';   // A123: the Finish Pin at a mark, no boat
-    h='<div class="endSec">'+(mk?'<div class="meta warnTxt lineNoBoat" role="status">⚠ No finish boat: place the finish boat, or use '+esc(mk)+' as the line\'s midpoint. '+
-      '<button type="button" class="ghost estAct chgBtn" data-act="finMid">Use '+esc(mk)+' as the midpoint</button></div>':'<div class="meta cautTxt finNone">No finish set</div>')+recOffer+flag('fpin')+flag('fcb')+orphanNotes('fpin')+orphanNotes('fcb')+'</div>';}
+    h='<div class="endSec">'+(mk?'':'<div class="meta cautTxt finNone">No finish set</div>')+recOffer+flag('fpin')+flag('fcb')+orphanNotes('fpin')+orphanNotes('fcb')+'</div>';}
   return h+(open&&!z.mid?finBoxes(ce):'');}
 /* .46, A123: the Finish line row of a Dosco or No.8 card finish on Automatic: the finish boat (its list, or the one placed
    here with Undo), the pin end (the mark, or a Finish Pin recorded after the start), and Place finish boat from the mark */
@@ -2689,6 +2688,15 @@ function markFinRow(){const k=ckey(S.race,S.start), nm=markFinOf(), ce=endPick('
     '<input class="estIn" data-f="fmtime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fmtime)+'" style="width:4.5em"> '+
     '<button type="button" class="estAct" data-act="finMarkPlace">Place</button></div>'+msgSlot('finMarkPlace')+'</div>';
   return b+'<div class="endSec"><div class="secHead">Pin end</div><div class="meta">'+esc(fp?'Finish Pin '+fixText(fp,'fpin'):nm)+'</div></div>';}
+// the place-the-boat flag (A123): orange, beside the row heading, its button after it
+function noBoatFlag(t,mk,act,w){return ' <span class="lineNoBoat" role="status">⚠ '+esc(t)+'</span><button type="button" class="ghost '+(act==='useCard'||act==='useCardF'?'lineAct':'estAct')+' chgBtn" data-act="'+act+'"'+(w?' data-w="'+w+'"':'')+'>Use '+esc(mk)+' as the midpoint</button>';}
+// the Finish line row's flag: a Dosco or No.8 card finish with no finish boat, or a hand-built Finish Pin set at a mark
+// with no boat
+function finNoBoat(){const c=cardCfgNow();let mk='',act='';
+  if(c){const fs=finishState();if(fs&&fs.noBoat){mk=c.f;act='useCardF';}}
+  else if(finUsesPin(S.race,S.start)&&!finishLine()){const z=finRec(ckey(S.race,S.start))||{}, pin=z.mid?null:endPick('fpin').m, pa=pin&&finOf(pin);
+    if(pa&&pa.w==='fpin'&&!(+pa.m>0)&&isMarkEnd(pa.at)&&!endPick('fcb').m){mk=pa.at;act='finMid';}}
+  return mk?noBoatFlag('No finish boat: place the finish boat, or use '+mk+' as the line\'s midpoint.',mk,act,''):'';}
 function finPinBox(){const d=estDraftFor(ckey(S.race,S.start));
   return routeBox(1,'<div class="meta estBox">Set Finish Pin at <select class="estIn" data-f="fat"><option value="">choose a mark</option>'+finPinOpts(d.fat)+'</select> on the water '+
     '<input class="estIn" data-f="fptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fptime)+'" style="width:4.5em"> '+

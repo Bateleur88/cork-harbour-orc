@@ -1892,8 +1892,8 @@ def t33_lines_guards():
       "if(c&&markFinOf(r,st)&&c.f!==c.s){" in ae and "(isFinishBoat(m.name)||isCB(m.name)&&t!==null&&fixMoment(m)>t)" in ae and "!helpOf(m)&&!goneOf(m)" in ae)
     g('rule 2: no boat: "No committee boat: place the committee boat, or use … as the line\'s midpoint" with its button; not on a Grassy start, a midpoint, Card mark or Laid line',
       "if(gsOf()||cardGrassyStart()||midLine())return null;" in sw and "if(m!=='auto'||startLine())return null;" in sw
-      and "⚠ No committee boat: place the committee boat, or use '+esc(swn.mark)+' as the line\\'s midpoint. " in code
-      and "⚠ No finish boat: place the finish boat, or use '+esc(c.f)+' as the line\\'s midpoint. " in code
+      and "noBoatFlag('No committee boat: place the committee boat, or use '+swn.mark+' as the line\\'s midpoint.',swn.mark,swn.act,'pin')" in code
+      and "noBoatFlag('No finish boat: place the finish boat, or use '+mk+' as the line\\'s midpoint.',mk,act,'')" in code
       and "else if(act==='useCardF'&&c){c.lf='card';stamp(k);commit();}" in code)
     g('rule 2: while it shows, the leg is still measured from or to the mark, and the STAND-IN lines are kept for it only',
       "if(L.sPt&&!L.sl&&L.ccfg&&markStartOf(r,st))cardSti.push(" in code and "L.fsx.kind==='cardpt'&&L.fsx.noBoat)cardSti.push(" in code)
@@ -1905,7 +1905,11 @@ def t33_lines_guards():
     g('rule 4: Laid line keeps its own warning only', "if(m!=='auto'||startLine())return null;" in sw)
     g('rule 6: a pin set at a mark is named by the mark alone; with no boat, rule 2\'s warning',
       "isMarkEnd(at)?at+rp:" in fn_body(code, 'function helpLong(') and "if(sp&&isMarkEnd(sp.at)&&!endPick('cb').m)return {kind:'noboat',mark:sp.at,act:'mid'};" in sw
-      and "data-act=\"finMid\">Use '+esc(mk)+' as the midpoint</button>" in code)
+      and "if(pa&&pa.w==='fpin'&&!(+pa.m>0)&&isMarkEnd(pa.at)&&!endPick('fcb').m){mk=pa.at;act='finMid';}" in fn_body(code, 'function finNoBoat('))
+    g('Stage 3 (Pat, 27 October 2026): the place-the-boat flags beside the row heading, in orange; Line not set stays red',
+      '.lineNoBoat{display:inline-block;margin:0 6px 0 8px;padding:1px 8px;border-radius:6px;background:var(--caution);color:var(--paper);font-weight:700;font-size:.9rem}' in page
+      and "<div><b>Start line</b>'+notSet+noBoat+sw+ends+sMiss+" in code and "li.querySelector('b').insertAdjacentHTML('afterend',finNoBoat());" in code
+      and 'background:var(--warn)' in page[page.index('.lineNotSet{'):page.index('}', page.index('.lineNotSet{'))] and 'lineNoBoat' not in fn_body(code, 'function finRowHtml('))
     g('rule 6 (section 4): the orange note is not shown for a midpoint start', "if(!sl){if(!midStart()){" in fn_body(code, 'function analysis(')
       and "return !!(gsOf()||cardGrassyStart()||midLine()||c&&isMarkEnd(c.s)&&cardEndMode('s')==='card');" in fn_body(code, 'function midStart('))
     g('7: "Finish at Grassy.", "Finish between the committee boat and Dosco.", "from the start line, not depth-checked"',
