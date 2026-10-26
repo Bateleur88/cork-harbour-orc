@@ -493,7 +493,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.46b';
+const PAGE_VERSION='2026-10-06.46c';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -2131,9 +2131,10 @@ function lnLegacySpec(r,st,which){
   if(fs&&fs.kind==='mark')return {t:'man',cb:null,pin:{mark:cardCfgNow(r,st).f},mid:null};
   if(finUsesPin(r,st)){const cb=endPick('fcb',r,st).m, pin=endPick('fpin',r,st).m;if(cb||pin)return {t:'man',cb:lnEndOf(cb),pin:lnEndOf(pin),mid:null};}
   return null;}
-// the first change to a start saved before the line rules makes what it shows the RO's choices (C10)
+/* the first change to a start. A start that is not an old start gets two empty lines and nothing is filled (rules 11,
+   14). An old start takes what it shows as the RO's choices (C10) */
 function lnTouch(k){if(S.lines[k])return S.lines[k];const[r,st]=k.split('|').map(Number);
-  const o={s:lnLegacySpec(r,st,'s'),f:lnLegacySpec(r,st,'f')};S.lines[k]=o;delete S.lineLegacy[k];return o;}
+  const o=S.lineLegacy[k]?{s:lnLegacySpec(r,st,'s'),f:lnLegacySpec(r,st,'f')}:{s:null,f:null};S.lines[k]=o;delete S.lineLegacy[k];return o;}
 // saving: a start with the RO's lines (or a new start) saves them; one saved before them saves exactly as before
 function lnSaves(k){return /^\d+\|\d+$/.test(k)&&!S.lineLegacy[k];}
 function lnRec(k){const L=S.lines[k]||{};return Object.assign({s:L.s||null,f:L.f||null},L.p&&L.p.length?{p:L.p.map(e=>Object.assign({},e))}:{});}
