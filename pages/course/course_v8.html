@@ -1657,7 +1657,7 @@ function renderCardSum(){
   const flag=notes.some(t=>!/RIB fix/.test(t));
   $('cardSecSrc').textContent=src+' · Course '+cfg.c+' imported'+(flag?' ⚠':'');
   if(!show)return;
-  $('cardSumText').textContent=['Course '+cfg.c+' imported',cfg.s===cfg.f?cfg.s:cfg.s+' start, '+cfg.f+' finish',
+  $('cardSumText').textContent=['Course '+cfg.c+' imported',cfg.s===cfg.f?shownName(cfg.s):shownName(cfg.s)+' start, '+shownName(cfg.f)+' finish',
     nm?nm.toFixed(2)+' nm on the card route':''].filter(Boolean).concat(notes).join(' · ');
   $('cardSum').className='cardsum'+(flag?' flag':'');
 }
