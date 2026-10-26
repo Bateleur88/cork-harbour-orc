@@ -1329,8 +1329,8 @@ function cardInit(){
   $('cardSrc').textContent='Course card from '+CARD.meta.source+' ('+CARD.meta.generated+'), '+Object.keys(CARD.courses).length+' courses. Positions and distances are as held in the workbook; this page does not recalculate them.';
   const cc=$('cardCourse');
   cc.innerHTML=cardCourseIds().map(id=>'<option value="'+id+'">Course '+id+' — '+esc(CARD.courses[id].label||'')+'</option>').join('');
-  $('cardStart').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
-  $('cardFinish').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+  $('cardStart').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(shownName(s))+'</option>').join('');
+  $('cardFinish').innerHTML=CARD_STARTS.map(s=>'<option value="'+esc(s)+'">'+esc(shownName(s))+'</option>').join('');
   ['cardCourse','cardStart','cardFinish'].forEach(id=>$(id).onchange=cardPreview);
   cardPreview();
 }
@@ -1366,7 +1366,7 @@ function cardPreview(){
   const bits=[];
   (d.rounds||[]).forEach((r,i)=>bits.push('<p class="cardnote">Round '+(i+1)+': '+esc(r)+'</p>'));
   bits.push('<p class="cardnote">Rounding marks in order: '+esc(marks.join(' – '))+'</p>');
-  bits.push('<p class="cardnote">Workbook route '+total.toFixed(2)+' nm, measured from the card\'s '+cardSel().s+' start to its '+cardSel().f+' finish'+(d.printed?'. The card prints '+d.printed+' nm, an estimate that is not recalculated when a course changes':'')+'. The legs below will measure from your own recorded lines instead, so the total will differ.</p>');
+  bits.push('<p class="cardnote">Workbook route '+total.toFixed(2)+' nm, measured from the card\'s '+shownName(cardSel().s)+' start to its '+shownName(cardSel().f)+' finish'+(d.printed?'. The card prints '+d.printed+' nm, an estimate that is not recalculated when a course changes':'')+'. The legs below will measure from your own recorded lines instead, so the total will differ.</p>');
   if(d.cond)bits.push('<p class="cardnote flag">Card condition: '+esc(d.cond)+'</p>');
   if(d.flag==='**')bits.push('<p class="cardnote">Card marks this course **: Dosco is inserted as Mark 1 when the Grassy Walk Line is in use. The workbook sequence above already does that.</p>');
   if(gaps.length)bits.push('<p class="cardnote flag">No workbook geometry for: '+esc(gaps.join(', '))+'</p>');
@@ -1533,28 +1533,29 @@ function render(){
   const cardS=!sl0&&startStandIn()&&ccfg0&&CARD.marks[ccfg0.s]?ccfg0.s:'';
   const cardF=cardS&&!finishIsCardMark()&&!finishLine()&&ccfg0.f&&CARD.marks[ccfg0.f]?ccfg0.f:'';
   const sw=sm?lineSwitch('s'):'';
-  const ends=sm==='card'?'<div class="meta">Card mark: the card\'s '+esc(ccfg0.s)+' start point is used.'+
+  const ends=sm==='card'?'<div class="meta">Card mark: '+(isMarkEnd(ccfg0.s)?esc(ccfg0.s)+' is used as the start line midpoint.':'the card\'s '+esc(shownName(ccfg0.s))+' start point is used.')+
       (slRec?' Recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+') shown, not used.':'')+'</div>':
     // the Grassy start on a hand-built start (A58 part 2): said here, with Undo; a recorded line is offered, never taken
     // T14 (Pat, 15 October 2026): the Grassy start is a proper start line, the Grassy Walk line, measured from its calculated
     // midpoint, Grassy Mid; it is not a stand-in. A recorded line not used is said plainly, in orange
-    gs0?'<div class="meta">Start: <b>Grassy start</b>: the start line is the Grassy Walk line, measured from Grassy Mid. <button type="button" class="ghost estAct" data-act="ungrassy">Undo</button></div>'+
+    gs0?'<div class="meta">Start: <b>Grassy start</b>: the start line is the Grassy Walk line, measured from Grassy. <button type="button" class="ghost estAct" data-act="ungrassy">Undo</button></div>'+
       (slRec?'<div class="meta amberTxt">Grassy start chosen; the recorded line (committee boat '+esc(slRec.cb.time||'?')+' ↔ pin '+esc(slRec.pin.time||'?')+(estOf(slRec.cb)||estOf(slRec.pin)?', estimate':'')+') is not used. '+
         '<button type="button" class="ghost estAct" data-act="ungrassy">Use the recorded line instead</button></div>':''):
-    cardS&&!nPins&&!nCbs?'':startSec('cb',!!cardS)+startSec('pin',!!cardS);   // .44 layout
+    cardS&&!nPins&&!nCbs?'':startSec('cb',!!cardS||!!markStartOf())+startSec('pin',!!cardS||!!markStartOf());   // .44 layout
   // a hand-built start may use the Grassy start instead: a small link once a line end is found, after the line
   const gsLink=sm==='card'||gs0||ccfg0?'':endPick('cb').m||endPick('pin').m?'<div class="meta"><button type="button" class="linkBtn estAct" data-act="grassy">Use the Grassy start instead</button></div>':
-        '<div class="meta"><button type="button" class="ghost estAct chgBtn" data-act="grassy">Start from Grassy Mid (Grassy Walk line)</button></div>';
+        '<div class="meta"><button type="button" class="ghost estAct chgBtn" data-act="grassy">Start from Grassy</button></div>';
   const sMiss=sm==='laid'&&!slRec?'<div class="meta cautTxt">⚠ Start line missing (Laid line): the first leg is not measured. '+
       '<button type="button" class="ghost lineAct chgBtn" data-act="useCard">Use Card mark</button></div>':'';
-  // .46, A123 (Pat, 23 October 2026): a start that needs a committee boat and Start Pin and lacks either says so at once
-  const notSet=!slRec&&!lineOff()&&!midLine()?' <span class="lineNotSet" role="status">Line not set</span>':'';
-  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+notSet+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
-    (sl0||gs0||sm==='card'||sm==='laid'?'':cardS?'<div class="meta">The card\'s '+esc(cardS)+' start is standing in for the line'+
-        (cardF?(cardF===cardS?', and for the finish':', and its '+esc(cardF)+' finish for the finish line'):'')+
-        '. Record the committee boat and pin to measure the real line and its bias.'+
-        (CARD.marks[cardS].type!=='Start/finish modelling point'?' A '+esc(cardS)+' start is a committee boat line near the mark, not the mark itself.':'')+'</div>'
-      :'')+
+  // .46, A123 (Pat, 23 and 26 October 2026): "Line not set" while a start that needs a committee boat and Start Pin lacks
+  // either; a line with a mark as its pin end and no committee boat says instead to place the boat or use the mark as the
+  // midpoint (startWarn); a Grassy start, a midpoint and Laid line (its own warning) say neither
+  const swn=startWarn();
+  const notSet=swn&&swn.kind==='notset'?' <span class="lineNotSet" role="status">Line not set</span>':'';
+  const noBoat=swn&&swn.kind==='noboat'?'<div class="meta warnTxt lineNoBoat" role="status">⚠ No committee boat: place the committee boat, or use '+esc(swn.mark)+' as the line\'s midpoint. '+
+    '<button type="button" class="ghost '+(swn.act==='useCard'?'lineAct':'estAct')+' chgBtn" data-act="'+swn.act+'" data-w="pin">Use '+esc(swn.mark)+' as the midpoint</button></div>':'';
+  ol.innerHTML='<li class="lineRow" id="startRow"><div class="disc line">S</div><div><b>Start line</b>'+notSet+noBoat+sw+ends+sMiss+'<div id="lineInfo" class="endSec">'+lineInfo()+'</div>'+gsLink+
+    (cardS==='Grassy Mid'&&!sl0&&sm!=='card'?'<div class="meta">Start: <b>Grassy</b> (from the card).</div>':'')+
     msgSlot('start')+'</div><div></div></li>';
   if(!cs.length)ol.innerHTML+='<li class="empty" style="display:block">Now tap the marks above in rounding order, starting with the first mark after the start.</li>';
   const Lr=legPts();   // read only: which routing waypoints have nothing on one side (orphan)
@@ -1605,7 +1606,7 @@ function render(){
   {const k=ckey(S.race,S.start), c=cardCfgNow();
    const li=document.createElement('li');li.className='lineRow';li.id='finishRow';
    li.innerHTML='<div class="disc line">F</div><div><b>Finish line</b><div class="finChoice"></div>'+msgSlot('finishSel')+msgSlot('finFollow')+
-     (finUsesPin(S.race,S.start)?finRowHtml():'')+msgSlot('finish')+'</div><div></div>';
+     (finUsesPin(S.race,S.start)?finRowHtml():markFinOf()?markFinRow():'')+msgSlot('finish')+'</div><div></div>';
    ol.appendChild(li);
    const box=li.querySelector('.finChoice');box.appendChild($('finishFields'));box.appendChild($('finishCard'));
    $('finishFields').hidden=false;
@@ -1618,11 +1619,17 @@ function render(){
      $('finishSel').value=v;}
    // a card course: what its finish uses, in a line, and any warning, in amber
    const fs=c?finishState():null, fm=cardEndMode('f');
-   const t=!c?'':fm==='laid'?'':fm==='card'?(finishIsCardMark()?'':'The card\'s '+c.f+' point is used; a recorded line is not.'):
+   // .46, A123 and A125 (Pat, 26 October 2026): a Grassy finish is Grassy; a Dosco or No.8 finish is the finish boat to the
+   // mark, or the mark as the midpoint (Card mark); with no finish boat, rule 2's warning
+   const mf=c&&fm==='auto'&&fs.kind==='markline'?finishLine():null;
+   const t=!c?'':fm==='laid'?'':c.f==='Grassy Mid'?'Finishes at Grassy.':isMarkEnd(c.f)?(fm==='card'?'Finishes at '+c.f+', used as the finish line midpoint.':mf?'Finishes between the finish boat and '+(mf.mk?c.f:'the Finish Pin')+'.':''):
+     fm==='card'?(finishIsCardMark()?'':'The card\'s '+shownName(c.f)+' point is used; a recorded line is not.'):
      finishIsCardMark()?'Boats finish as they round or pass it; the committee boat positions itself to time them.':
-     fs.kind==='startline'?'Uses the recorded start line.':'Uses Grassy Mid until the start line is recorded.';
-   $('finishCard').hidden=!(t||fs&&fs.warn);
-   $('finishCard').innerHTML=(t?'<span class="muteTxt">'+esc(t)+'</span>':'')+(fs&&fs.warn?'<span class="cautTxt"> ⚠ '+esc(fs.warn)+'.</span>':'');}
+     fs.kind==='startline'?'Uses the recorded start line.':'Uses '+shownName(c.f)+'.';
+   const nb=fs&&fs.noBoat?'<span class="warnTxt lineNoBoat" role="status">⚠ No finish boat: place the finish boat, or use '+esc(c.f)+' as the line\'s midpoint. '+
+     '<button type="button" class="ghost lineAct chgBtn" data-act="useCardF">Use '+esc(c.f)+' as the midpoint</button></span>':'';
+   $('finishCard').hidden=!(t||nb||fs&&fs.warn);
+   $('finishCard').innerHTML=nb+(t?'<span class="muteTxt">'+esc(t)+'</span>':'')+(fs&&fs.warn?'<span class="cautTxt"> ⚠ '+esc(fs.warn)+'.</span>':'');}
   $('toRace').hidden=!cs.length;
   buildLegs();
   applyMode(); renderRaceHead(); renderRaceAlerts(); renderCardSum(); renderFix(); renderNotSent(); paintMsgs();
@@ -1995,7 +2002,15 @@ function autoUse(w,r,st,sel){const a=autoEnd(w,r,st,sel), z=w==='fcb'?'':((S.lin
   if(!f)return Object.assign({},a,{warn:'Saved '+endLow(w)+' gone: Auto used, check it'});
   return {m:f,how:'auto',saved:true,reason:'Auto (saved)',live:a.m&&a.m!==f?a.m:null};}
 function autoEnd(w,r,st,sel){
-  if(w==='fcb'){const s=endPick('cb',r,st,undefined,sel);
+  if(w==='fcb'){const c=cardCfgNow(r,st);
+    /* .46, A123 (Pat, 26 October 2026): a Dosco or No.8 card finish at a mark other than the start's takes the finish's
+       own boat: a Finish boat fix, or a committee boat fix recorded after this start's start time, of this race; the latest
+       of them by its time on the water. Never the start's committee boat, never an estimate */
+    if(c&&markFinOf(r,st)&&c.f!==c.s){const t=startMoment(r,st);
+      const l=S.marks.filter(m=>!m.card&&m.race===r&&!helpOf(m)&&!goneOf(m)&&fixMoment(m)!==null&&(isFinishBoat(m.name)||isCB(m.name)&&t!==null&&fixMoment(m)>t)).sort((a,b)=>fixMoment(a)-fixMoment(b));
+      const m=l[l.length-1]||null;
+      return m?{m,how:'auto',reason:'Auto: the finish boat (latest after the start)'}:{m:null,how:'unset',reason:'Auto: no finish boat'};}
+    const s=endPick('cb',r,st,undefined,sel);
     // A63 (5c): only a recorded committee boat, never one placed for the start line as an estimate
     // .44 (Pat, 22 October 2026): the start's estimated committee boat is used, named as an estimate, and the finish line
     // is then an estimate too (finEstNow); another boat can still be chosen, or a Finish boat placed
@@ -2014,7 +2029,7 @@ function autoEnd(w,r,st,sel){
 }
 /* startLine, finishMode, cardCfgNow, finishIsCardMark, cardEndMode, legStartLine, startStandIn, finishState and
    finishLine work on the selected race and start unless r and st are given (legPts); sel as in endPick. */
-function startLine(r,st,sel){return mkLine(endPick('cb',r,st,undefined,sel).m,endPick('pin',r,st,undefined,sel).m);}
+function startLine(r,st,sel){return mkLine(endPick('cb',r,st,undefined,sel).m,endPick('pin',r,st,undefined,sel).m)||markStartLine(r,st,sel);}
 if(!S.finishes||typeof S.finishes!=='object')S.finishes={};
 function finishMode(r,st){return S.finishes[ckey(r??S.race,st??S.start)]||'start';}
 /* Finishes and starts of a card course are deliberately NOT mirror images. Do not "fix" one into the other.
@@ -2032,12 +2047,12 @@ function finishIsCardMark(r,st){const c=cardCfgNow(r,st),m=c&&CARD.marks[c.f];re
    either way) or 'laid' (the recorded line; a start with none is not measured; a finish with no Finish Pin uses the start
    line, flagged until the RO keeps it; with no line at all it is not measured). Hand-built courses have no switch. */
 function finishAutoText(c){return finishIsCardMark()
-  ?'Finish: '+c.f+', the mark itself (from the card). Boats finish as they round or pass it; the committee boat positions itself to time them. Starts are different: a No.8 or Dosco start is a committee boat line near the mark, so a recorded line is always used for the start.'
-  :'Finish: the Grassy Walk line (from the card): the recorded start line, or Grassy Mid standing in until the committee boat and pin are recorded. To finish elsewhere, choose another Card finish in section 2.';}
+  ?'Finish: the finish boat to '+c.f+' (from the card), measured to the line\'s midpoint; with no finish boat, '+c.f+' itself.'
+  :'Finish: Grassy (from the card). To finish elsewhere, choose another Card finish in section 2.';}
 // the two-way switch for one end of a card course; until tapped the end follows the automatic rule, and says what it uses
 function lineSwitch(e){const m=cardEndMode(e);if(!m)return '';
-  const now=e==='s'?(startLine()?'Laid line (recorded line in use)':'Card mark (no line recorded)')
-    :(()=>{const k=finishState().kind;return k==='mark'?'Card mark (the mark itself)':k==='startline'?'Laid line (the start line)':'Card mark';})();
+  const now=e==='s'?(cardGrassyStart()?'Grassy':startLine()?(startLine().mk?'Committee boat to '+startLine().mk:'Laid line (recorded line in use)'):'Card mark (no line recorded)')
+    :(()=>{const f=finishState(), k=f.kind;return cardCfgNow().f==='Grassy Mid'?'Grassy':k==='markline'?'Finish boat to '+(finishLine().mk||'the Finish Pin'):k==='mark'?'Card mark (the mark itself)':k==='startline'?'Laid line (the start line)':f.noBoat?'Card mark (no finish boat)':'Card mark';})();
   const b=(v,t)=>'<button type="button" class="ghost lineSw" data-end="'+e+'" data-v="'+v+'" aria-pressed="'+(m===v)+'">'+t+'</button>';
   return '<span class="meta" style="display:block">'+(e==='s'?'Start':'Finish')+' line: '+b('card','Card mark')+' '+b('laid','Laid line')+
     (m==='auto'?' <small>Automatic: '+esc(now)+'</small>':'')+'</span>';}
@@ -2047,8 +2062,47 @@ function cardEndMode(e,r,st){const c=cardCfgNow(r,st);if(!c)return null;const v=
    start line the last leg to it. An imported card course keeps its own start (section 2). lineOff: the recorded start
    line is not used, because Card mark or the Grassy start is chosen. */
 function gsOf(r,st){return !cardCfgNow(r,st)&&(S.startPt||{})[ckey(r??S.race,st??S.start)]==='Grassy Mid'?'Grassy Mid':'';}
-function lineOff(r,st){return cardEndMode('s',r,st)==='card'||!!gsOf(r,st);}
-function lineOffWhy(){return cardEndMode('s')==='card'?'Card mark':gsOf()?'Grassy start':'';}
+function lineOff(r,st){return cardEndMode('s',r,st)==='card'||!!gsOf(r,st)||cardGrassyStart(r,st);}
+function lineOffWhy(){return cardEndMode('s')==='card'?'Card mark':gsOf()?'Grassy start':cardGrassyStart()?'Grassy':'';}
+/* .46, A123 and A125 (Pat, 26 October 2026): a mark as a line end. A card start or finish at Dosco or No.8 (a real mark,
+   not the Grassy modelling point) on Automatic is a line from the boat to the mark: the mark is the pin end, named
+   plainly ("Dosco"), at its workbook position, and the legs are measured from and to the line's midpoint. A Start Pin or
+   Finish Pin recorded replaces the mark at once. Card mark uses the mark itself as the line's midpoint. Laid line means a
+   pin buoy was laid, so the mark is never its pin end. With no boat on Automatic the leg is measured from (or to) the mark
+   as before, and the row says to place the boat or use the mark as the midpoint (startWarn, finishState noBoat). Grassy
+   ("Grassy Mid" in the workbook and in saved data, "Grassy" wherever it is shown) is the middle of the Grassy Walk line: a
+   Grassy start on Automatic or Card mark, and a Grassy finish, is always Grassy; Laid line keeps the recorded start line
+   and the Finish list, without falling back to the start line for the finish. */
+function shownName(nm){return nm==='Grassy Mid'?'Grassy':nm;}
+function isMarkEnd(nm){const m=nm&&CARD.marks[nm];return !!m&&m.type!=='Start/finish modelling point';}
+function markPt(nm,r){const m=CARD.marks[nm];return {id:'_m'+nm,name:nm,lat:m.lat,lon:m.lon,virtual:true,card:nm,race:r,time:'',markEnd:true};}
+function cardGrassyStart(r,st){const c=cardCfgNow(r,st);return !!c&&c.s==='Grassy Mid'&&cardEndMode('s',r,st)!=='laid';}
+// the card's start mark while it can be the start line's pin end: a Dosco or No.8 card start on Automatic
+function markStartOf(r,st){const c=cardCfgNow(r,st);return c&&isMarkEnd(c.s)&&cardEndMode('s',r,st)==='auto'?c.s:'';}
+// the start line from the committee boat to that mark, while no Start Pin is in use
+function markStartLine(r,st,sel){const nm=markStartOf(r,st);if(!nm)return null;
+  const cb=endPick('cb',r,st,undefined,sel).m;if(!cb||endPick('pin',r,st,undefined,sel).m)return null;
+  return Object.assign(mkLine(cb,markPt(nm,r??S.race)),{mk:nm});}
+// the card's finish mark while it can be the finish line's pin end: a Dosco or No.8 card finish on Automatic
+function markFinOf(r,st){const c=cardCfgNow(r,st);return c&&isMarkEnd(c.f)&&cardEndMode('f',r,st)==='auto'?c.f:'';}
+// a Finish Pin recorded for this race after the start's start time replaces the mark (the latest such)
+function markFinPin(r,st){r=r??S.race;st=st??S.start;const t=startMoment(r,st);if(t===null)return null;
+  const l=S.marks.filter(m=>!m.card&&m.race===r&&isFinishPin(m.name)&&!helpOf(m)&&!goneOf(m)&&fixMoment(m)!==null&&fixMoment(m)>t).sort((a,b)=>fixMoment(a)-fixMoment(b));
+  return l[l.length-1]||null;}
+function markFinLine(r,st,sel){const nm=markFinOf(r,st);if(!nm)return null;const fb=endPick('fcb',r,st,undefined,sel).m;if(!fb)return null;
+  const p=markFinPin(r,st);return Object.assign(mkLine(fb,p||markPt(nm,r??S.race)),{fin:true,mk:p?'':nm});}
+/* the Start line row's warning: {kind:'notset'} ("Line not set"), {kind:'noboat', mark, act} (place the committee boat or
+   use the mark as the midpoint) or null. None for a Grassy start, a midpoint, Card mark, or Laid line (its own warning) */
+function startWarn(){if(gsOf()||cardGrassyStart()||midLine())return null;const c=cardCfgNow();
+  if(c){const m=cardEndMode('s');if(m!=='auto'||startLine())return null;
+    const pin=endPick('pin').m;if(!endPick('cb').m&&pin)return {kind:'noboat',mark:'the Start Pin',act:'mid'};
+    return isMarkEnd(c.s)?{kind:'noboat',mark:c.s,act:'useCard'}:{kind:'notset'};}
+  if(startLine())return null;
+  const pin=endPick('pin').m, sp=pin&&setOf(pin);
+  if(sp&&isMarkEnd(sp.at)&&!endPick('cb').m)return {kind:'noboat',mark:sp.at,act:'mid'};
+  return {kind:'notset'};}
+// a start used as a midpoint: Grassy, a recorded end or the Start Pin's mark as the midpoint, or Card mark at Dosco or No.8
+function midStart(){const c=cardCfgNow();return !!(gsOf()||cardGrassyStart()||midLine()||c&&isMarkEnd(c.s)&&cardEndMode('s')==='card');}
 /* A start line with only one end recorded (Pat, 14 October 2026, STATUS A58). When a start has a start time and auto or
    the RO finds only the committee boat or only the Start Pin, the Start line row offers two estimates, both the RO's
    choice, never automatic (the page invents nothing by itself):
@@ -2186,15 +2240,18 @@ function finUsesPin(r,st){const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st
 function finTypeOpts(c){const old=c?c.lf==='laid'&&c.lfc==='last':finishMode()==='last';
   const own=[['start','Same as the start line'],['finishpin','Committee boat & Finish Pin']].concat(old?[['last','At the last mark (saved before .44)']]:[]);
   if(!c)return own;const mark=finishIsCardMark();
-  return [['card:auto',mark?'From the card: '+c.f+', the mark itself':'From the card: the Grassy Walk line']]
-    .concat(!mark||c.lf==='card'?[['card:point',mark?'Card mark: '+c.f:'Card point: '+c.f+' only']]:[],own);}
+  return [['card:auto',mark?'From the card: the finish boat to '+c.f:'From the card: Grassy']]
+    .concat([['card:point',mark?'Card mark: '+c.f+' as the midpoint':'Card point: Grassy only']],own);}
 function finTypeOf(c){if(!c)return finishMode();const m=cardEndMode('f');return m==='laid'?finChoiceOf():m==='card'?'card:point':'card:auto';}
 function finChoiceOf(r,st){const c=cardCfgNow(r,st);if(!c)return finishMode(r,st);
   if(c.lfc)return c.lfc;return c.lfs==='start'&&!finPinLine(r,st)?'start':'finishpin';}
 // the finish is the last mark: chosen in the Finish list, on a hand-built course or on Laid line
 function finIsLast(r,st){const c=cardCfgNow(r,st);return c?cardEndMode('f',r,st)==='laid'&&c.lfc==='last':finishMode(r,st)==='last';}
 // the finish line's estimate for start r|st: {kind:'mid'|'placed', text, x} or null; x goes into Copy for Sail Scoring
-function finEstNow(r,st){if(!finUsesPin(r,st))return null;const fl=finPinLine(r,st);if(!fl)return null;
+function finEstNow(r,st){if(!finUsesPin(r,st)){const ml=markFinLine(r,st);if(!ml)return null;   // A123: the finish boat to the mark
+    const f=finOf(ml.cb), sc=!f&&estOf(ml.cb), t=f&&f.w==='fcb'?finWords(f):sc?estWords(sc)+' (the start\'s estimate)':'';
+    return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
+  const fl=finPinLine(r,st);if(!fl)return null;
   if(fl.est==='mid'){const w=helpX(fl.end)||fixWords2(fl.end);
     return {kind:'mid',text:w+' used as the line midpoint',x:'finish line: '+w+' used as midpoint'};}
   // a placed Finish boat, a placed Finish Pin (.44), or both; or the start's estimated committee boat (.44)
@@ -2211,8 +2268,10 @@ function xEst(r,st){const a=lineEstNow(r,st), b=finEstNow(r,st);return a&&b?a.x+
    point) says nothing; on Laid line it follows the hand-built wording. L: legPts of the start */
 function finSay(L){const c=L.ccfg, r=L.r, st=L.st;let k;
   if(c){const m=cardEndMode('f',r,st), fs=L.fsx||{};if(m==='card')return '';
-    k=fs.kind==='startline'?'start':fs.kind==='last'?'last':fs.kind==='finishpin'||m==='laid'?'pin':'';}
-  else{const f=finishMode(r,st);k=f==='finishpin'?'pin':f==='last'?'last':'start';}
+    k=fs.kind==='startline'?'start':fs.kind==='last'?'last':fs.kind==='markline'?'markline':fs.kind==='finishpin'||m==='laid'?'pin':'';}
+  else{const f=finishMode(r,st);k=f==='finishpin'?'pin':f==='last'?'last':gsOf(r,st)?'grassy':'start';}
+  if(k==='grassy')return 'Finish at Grassy.';   // A123 (Pat, 26 October 2026)
+  if(k==='markline'){const ml=markFinLine(r,st);return ml?'Finish between the committee boat and '+(ml.mk||'the Finish Pin')+'.':'';}
   if(k==='start')return 'Finish on the start line.';
   if(k==='last'){const e=[...L.rows].reverse().find(x=>!isRwCard(markById(x.id))), m=e&&markById(e.id);return m?'Finish at '+m.name+'.':'';}
   if(k!=='pin')return '';
@@ -2359,7 +2418,7 @@ function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by p
   const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};
   const fz=finOf(m);   // A63: a Finish Pin set at a mark, or a Finish boat placed from the Finish Pin
   // .44 (Pat, 22 October 2026): a pin set at a mark says where it is, then the race and time it was set for
-  const setFor=(lab,at)=>lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;
+  const setFor=(lab,at)=>isMarkEnd(at)?at+rp:lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;   // A123: a mark by its name alone
   if(fz)return fz.w==='fpin'?(+fz.m>0?placed('Finish Pin',fz):setFor('Finish Pin',fz.at)):placed('Finish boat',fz);
   const p=setOf(m);if(p)return setFor('Start Pin',p.at);const e=estOf(m);if(!e)return '';
   return placed(e.w==='cb'?'Committee boat':'Start Pin',e);}
@@ -2371,14 +2430,14 @@ function helpX(m){const rp=goneOf(m)?', replaced':'';
   const p=setOf(m);if(p)return 'Start Pin: '+p.at+' ('+fixWhen(m)+')'+rp;const e=estOf(m);if(!e)return '';
   const w=fixWhen(m), f=String(e.from);
   return (e.w==='cb'?'Committee boat':'Start Pin')+' – estimate: '+e.m+' m at '+pad(e.brgM,3)+'°M from '+f+(f.endsWith(' '+w)?'':' ('+w+')')+rp;}
-function helpShort(m){const fz=finOf(m);if(fz)return fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.)':'Finish Pin ('+shortAt(fz.at)+')'):'Finish boat (est.)';
-  const p=setOf(m);if(p)return 'Start Pin ('+shortAt(p.at)+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
+function helpShort(m){const fz=finOf(m);if(fz)return fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.)':isMarkEnd(fz.at)?fz.at:'Finish Pin ('+shortAt(fz.at)+')'):'Finish boat (est.)';
+  const p=setOf(m);if(p)return isMarkEnd(p.at)?p.at:'Start Pin ('+shortAt(p.at)+')';const e=estOf(m);return e?(e.w==='cb'?'Committee boat':'Start Pin')+' (est.)':'';}
 function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null), c=p&&CARD.marks[p.at];return !c?'':c.laid?p.at+': planning position until laid, not a fix recorded today':(c.flag||'');}
 // one line end in the "Line ends:" line (fix 5)
 function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,''), rp=goneOf(m)?', replaced':'', w=m.notSent?' (not sent)':m.pending?' (sending)':'';
   const fz=finOf(m), sp=setOf(m), e=estOf(m);
-  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.) '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est.) '+t)+rp+w;
-  if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;
+  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.) '+t:isMarkEnd(fz.at)?fz.at+' ('+t+')':'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est.) '+t)+rp+w;
+  if(sp)return (isMarkEnd(sp.at)?sp.at:'Start Pin: '+shortAt(sp.at))+' ('+t+')'+rp+w;
   if(e)return (e.w==='cb'?'Committee boat':'Start Pin')+' (est.) '+t+rp+w;
   return m.name+' '+t+(isPasted(m)?' (pasted)':isTypedPos(m)?' (typed)':'')+w;}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
@@ -2400,14 +2459,17 @@ function finishState(r,st,sel){const c=cardCfgNow(r,st);if(!c)return null;const 
     if(c.lfc==='last')return {kind:'last'};   // .43 fix 7
     if(c.lfc==='start')return startLine(r,st,sel)?{kind:'startline',kept:true}:{kind:'missing',warn:'Finish line missing: the start line is chosen and none is recorded'};
     if(finPinLine(r,st,sel))return {kind:'finishpin'};
+    if(c.f==='Grassy Mid')return {kind:'missing',warn:'Finish line missing'};   // A125: never the start line for a Grassy finish
     if(startLine(r,st,sel))return c.lfs==='start'?{kind:'startline',kept:true}:{kind:'startline',warn:'No finish line marked: the start line is used as the finish'};
     return {kind:'missing',warn:'Finish line missing'};}
+  if(c.f==='Grassy Mid')return {kind:'cardpt'};   // A125: a Grassy finish is always Grassy, never the recorded start line
+  if(markFinOf(r,st))return markFinLine(r,st,sel)?{kind:'markline'}:{kind:'cardpt',noBoat:true};   // A123: the finish boat to the mark
   if(finishIsCardMark(r,st))return {kind:'mark'};
   if(m==='card')return {kind:'cardpt'};
   return startLine(r,st,sel)?{kind:'startline'}:{kind:'cardpt'};}
 function finishLine(r,st,sel){
   if(cardCfgNow(r,st)){const fs=finishState(r,st,sel);
-    return fs.kind==='finishpin'?finPinLine(r,st,sel):fs.kind==='startline'?startLine(r,st,sel):null;}
+    return fs.kind==='finishpin'?finPinLine(r,st,sel):fs.kind==='startline'?startLine(r,st,sel):fs.kind==='markline'?markFinLine(r,st,sel):null;}
   const f=finishMode(r,st);if(f==='last')return null;if(f==='finishpin')return finPinLine(r,st,sel);if(gsOf(r,st))return null;return midLine(r,st)||startLine(r,st,sel);}
 // one fix as a dropdown entry: its race and time ("R2 13:09"), accuracy (and its warning), recorder, and "after this start"
 function fixText(m,w){if(helpOf(m))return helpLong(m);   // T7
@@ -2613,8 +2675,20 @@ function finRowHtml(){const k=ckey(S.race,S.start), z=finRec(k)||{}, ce=endPick(
     if(own.length)l+=line('<button type="button" class="ghost estAct chgBtn" data-act="finUndo">Undo the '+esc(own.map(i=>i.m.name).join(' and '))+'</button>')+msgSlot('finUndo');
     l+=changeBtn('fin','all',open?'Close':'Change finish…')+'</div>';
     h=p+c+l;}
-  else h='<div class="endSec"><div class="meta cautTxt finNone">No finish set</div>'+recOffer+flag('fpin')+flag('fcb')+orphanNotes('fpin')+orphanNotes('fcb')+'</div>';
+  else{const pa=pin&&finOf(pin), mk=pa&&pa.w==='fpin'&&!(+pa.m>0)&&isMarkEnd(pa.at)&&!ce.m?pa.at:'';   // A123: the Finish Pin at a mark, no boat
+    h='<div class="endSec">'+(mk?'<div class="meta warnTxt lineNoBoat" role="status">⚠ No finish boat: place the finish boat, or use '+esc(mk)+' as the line\'s midpoint. '+
+      '<button type="button" class="ghost estAct chgBtn" data-act="finMid">Use '+esc(mk)+' as the midpoint</button></div>':'<div class="meta cautTxt finNone">No finish set</div>')+recOffer+flag('fpin')+flag('fcb')+orphanNotes('fpin')+orphanNotes('fcb')+'</div>';}
   return h+(open&&!z.mid?finBoxes(ce):'');}
+/* .46, A123: the Finish line row of a Dosco or No.8 card finish on Automatic: the finish boat (its list, or the one placed
+   here with Undo), the pin end (the mark, or a Finish Pin recorded after the start), and Place finish boat from the mark */
+function markFinRow(){const k=ckey(S.race,S.start), nm=markFinOf(), ce=endPick('fcb'), d=estDraftFor(k), fp=markFinPin();
+  const b='<div class="endSec"><div class="secHead">Finish boat</div>'+(ce.how==='placed'&&ce.m?'<div class="meta cautTxt">'+esc(helpLong(ce.m))+'</div>'+
+    '<div class="meta"><button type="button" class="ghost estAct chgBtn" data-act="finUndo">Undo the Finish boat</button></div>'+msgSlot('finUndo'):endPicker('fcb'))+
+    '<div class="meta estBox">Place finish boat: <input class="estIn" data-f="fmdist" type="number" min="1" inputmode="numeric" placeholder="200" value="'+esc(d.fmdist)+'" style="width:5.5em"> m at '+
+    '<input class="estIn" data-f="fmbrg" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d.fmbrg)+'" style="width:5em">°M from '+esc(nm)+' on the water '+
+    '<input class="estIn" data-f="fmtime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fmtime)+'" style="width:4.5em"> '+
+    '<button type="button" class="estAct" data-act="finMarkPlace">Place</button></div>'+msgSlot('finMarkPlace')+'</div>';
+  return b+'<div class="endSec"><div class="secHead">Pin end</div><div class="meta">'+esc(fp?'Finish Pin '+fixText(fp,'fpin'):nm)+'</div></div>';}
 function finPinBox(){const d=estDraftFor(ckey(S.race,S.start));
   return routeBox(1,'<div class="meta estBox">Set Finish Pin at <select class="estIn" data-f="fat"><option value="">choose a mark</option>'+finPinOpts(d.fat)+'</select> on the water '+
     '<input class="estIn" data-f="fptime" type="text" inputmode="numeric" placeholder="'+esc(startTime())+'" value="'+esc(d.fptime)+'" style="width:4.5em"> '+
@@ -2719,9 +2793,9 @@ function finBoatBox(pin,placed){const d=estDraftFor(ckey(S.race,S.start)), f=fin
    that mark too. The Start Pin is set at a mark and, with a committee boat in use, can also be placed from it (.44, Pat,
    22 October 2026: both routes) */
 function startSec(w,cardS){const lab=w==='cb'?'Committee boat':'Start Pin', e=endPick(w), oth=endPick(w==='cb'?'pin':'cb').m;
-  const can=!!startTime()&&!lineOff()&&!midLine();
-  let h='<div class="endSec"><div class="secHead">'+lab+'</div>'+endPicker(w,cardS);
-  if(can){const open=!e.m||helpIs('start',w);
+  const can=!!startTime()&&!lineOff()&&!midLine(), mk=w==='pin'&&!e.m?markStartOf():'';   // A123: the mark is the pin end
+  let h='<div class="endSec"><div class="secHead">'+lab+'</div>'+endPicker(w,cardS)+(mk?'<div class="meta">Pin end: '+esc(mk)+'</div>':'');
+  if(can){const open=!e.m&&!mk||helpIs('start',w);
     if(w==='cb')h+=open?(e.m?helpTop('start','cb'):'')+placeBox('cb',oth,!e.m):changeBtn('start','cb','Change boat…');
     else h+=open?(e.m?helpTop('start','pin'):'')+pinAtBox(!!oth)+(oth?routeOr()+placeBox('pin',oth,!e.m):''):changeBtn('start','pin','Change pin…');}
   return h+'</div>';}
@@ -2838,7 +2912,7 @@ function analysis(cs,twdT){const vA=varW();
      note instead of a figure */
   const w=firstMarkOf().m;
   if(w&&twdT!==null){
-    if(!sl){const line='First mark: set the start line to see how square it is to the wind';bits.push('<p class="note caut">'+line+'</p>');txt.push(line);}   // .46, A123: amber
+    if(!sl){if(!midStart()){const line='First mark: set the start line to see how square it is to the wind';bits.push('<p class="note caut">'+line+'</p>');txt.push(line);}}   // .46, A123: amber; none for a midpoint start
     else{
     const r=geo(sl.mid,w);
     let d=((r.brg-twdT+540)%360)-180; // +ve: mark right of square
@@ -2914,18 +2988,18 @@ function legPts(r,st,ov){r=r??S.race;st=st??S.start;ov=ov||{};
   const sl=legStartLine(r,st,sel), fl=finishLine(r,st,sel), fsx=finishState(r,st,sel), slRec=startLine(r,st,sel);
   /* with no committee boat recorded, fall back to the card's own start and finish marks (unless Laid line is chosen) */
   const ccfg=(S.cardCfg||{})[k];
-  const cardEnd=(nm,label)=>{const m=nm&&CARD.marks[nm];return m?{id:'_c'+label,name:label+' ('+nm+')',lat:m.lat,lon:m.lon,virtual:true,card:nm}:null;};
+  const cardEnd=(nm,label)=>{const m=nm&&CARD.marks[nm];return m?{id:'_c'+label,name:label+' ('+shownName(nm)+')',lat:m.lat,lon:m.lon,virtual:true,card:nm}:null;};
   // on a card course a recorded line stands where the card's start (or Grassy Mid finish) is: keep the card's route
   // from that point and measure only the first hop from the line (and the last hop to it), as for a laid mark's fix
-  const atLine=(ln,nm,dir)=>ccfg&&CARD.marks[nm]?{card:nm,atFix:true,moveNote:dir+' the recorded line, not depth-checked'}:{};
+  const atLine=(ln,nm,dir)=>ccfg&&CARD.marks[nm]?{card:nm,atFix:true,moveNote:dir+(ln&&ln.mk?' the '+(dir==='from'?'start':'finish')+' line':' the recorded line')+', not depth-checked'}:{};   // A123: only the boat end recorded
   const sPt=sl?Object.assign({id:'_s',name:'Start',lat:sl.mid.lat,lon:sl.mid.lon,virtual:true},atLine(sl,ccfg&&ccfg.s,'from')):(ccfg&&startStandIn(r,st)?cardEnd(ccfg.s,'Start'):gsOf(r,st)?cardEnd('Grassy Mid','Start'):null);
   const fPt=fl?Object.assign({id:'_f',name:'Finish',lat:fl.mid.lat,lon:fl.mid.lon,virtual:true},atLine(fl,ccfg&&ccfg.f,'to')):(ccfg&&fsx.kind!=='missing'&&fsx.kind!=='last'?cardEnd(ccfg.f,'Finish'):gsOf(r,st)&&finishMode(r,st)==='start'?cardEnd('Grassy Mid','Finish'):null);
   // the card's route from its start was validated for the water near that start point: say so if the line is far off
   const farLine=[];
   if(sl&&ccfg&&CARD.marks[ccfg.s]){const d=Math.round(geo(sl.mid,CARD.marks[ccfg.s]).m);
-    if(d>500)farLine.push('The recorded start line is '+d+' m from the card\'s '+ccfg.s+' start point. The leg'+
+    if(d>500)farLine.push('The recorded start line is '+d+' m from the card\'s '+shownName(ccfg.s)+' start point. The leg'+
       (fPt&&fPt.moveNote?'s from it and to it follow the card\'s routes':' from it follows the card\'s route')+
-      ' from '+ccfg.s+', which assumes the line is close to it: check on the chart.');}
+      ' from '+shownName(ccfg.s)+', which assumes the line is close to it: check on the chart.');}
   const cardEnds=!sl&&!!sPt;
   // the points legs join, in order; ro[i]: the routing waypoints the RO placed between pts[i] and pts[i+1]. One with nothing
   // on one side (before the first point with no start line, or after the last with no finish point) belongs to no leg: it
@@ -3009,19 +3083,23 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
   laidNotice(pts,total,L.legs); lastTotal=total;
   const from=estL&&estL.kind==='mid'?'from '+fixWords2(sl.end)+', used as the start line midpoint (start line: estimate – one end missing)':
     estL?'from the midpoint of the start line (start line: estimate – '+estL.text+')':
+    sl&&sl.mk?'from the midpoint of the start line (committee boat and '+sl.mk+')':
     sl?'from the midpoint of the recorded start line (committee boat and pin)':
-    sPt&&gsOf()?'from Grassy Mid, the midpoint of the Grassy Walk line (Grassy start chosen'+(slRec?'; the recorded line is not used)':')'):
-    sPt&&cardEndMode('s')==='card'?'from the card\'s '+ccfg.s+' start (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
-    sPt?'from the card\'s '+ccfg.s+' start, standing in because no start line is recorded'+
-      (CARD.marks[ccfg.s]&&CARD.marks[ccfg.s].type!=='Start/finish modelling point'?' (a '+ccfg.s+' start is a committee boat line near the mark, not the mark itself)':''):
+    sPt&&gsOf()?'from Grassy, the midpoint of the Grassy Walk line (Grassy start chosen'+(slRec?'; the recorded line is not used)':')'):
+    sPt&&cardGrassyStart()?'from Grassy, the midpoint of the Grassy Walk line (from the card'+(slRec?'; the recorded line is not used)':')'):
+    sPt&&cardEndMode('s')==='card'?'from '+ccfg.s+', used as the start line midpoint (Card mark chosen'+(slRec?'; the recorded line is not used)':')'):
+    sPt?'from the card\'s '+ccfg.s+' start, standing in because no committee boat is set':
     'from the first mark (no start point)';
   const to=finE?(finE.kind==='mid'?'at the Finish Pin, used as the finish line midpoint':'at the midpoint of the finish line')+' (finish line: estimate – '+finE.text+')':
     fsx&&fsx.kind==='finishpin'?'at the midpoint of the recorded finish line (committee boat and Finish Pin)':
-    fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+ccfg.f+' finish (Card mark chosen)':
-    ccfg&&fsx.kind==='mark'?'at '+ccfg.f+', the finish mark itself (boats finish as they round or pass it)':
+    fsx&&fsx.kind==='cardpt'&&cardEndMode('f')==='card'?'at the card\'s '+shownName(ccfg.f)+' finish (Card mark chosen)':
+    fsx&&fsx.kind==='markline'?'at the midpoint of the finish line (finish boat and '+(fl&&fl.mk?fl.mk:'Finish Pin')+')':
+    fsx&&fsx.kind==='cardpt'&&ccfg.f==='Grassy Mid'?'at Grassy, the midpoint of the Grassy Walk line (from the card)':
+    fsx&&fsx.kind==='cardpt'&&fsx.noBoat?'at the card\'s '+ccfg.f+' finish, standing in because no finish boat is set':
+    ccfg&&fsx.kind==='mark'?'at '+ccfg.f+', used as the finish line midpoint (Card mark chosen)':
     fl?(!ccfg&&finishMode()==='finishpin'?'at the midpoint of the recorded finish line (committee boat and finish pin)':'at the midpoint of the recorded start line, used as the finish'):
-    fPt&&gsOf()?'at Grassy Mid, the midpoint of the Grassy Walk line (Grassy start chosen)':
-    fPt?'at the card\'s '+ccfg.f+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
+    fPt&&gsOf()?'at Grassy, the midpoint of the Grassy Walk line (Grassy start chosen)':
+    fPt?'at the card\'s '+shownName(ccfg.f)+' finish, standing in because no line is recorded':'at the last mark (no finish point)';
   const noStart=!sPt&&cardEndMode('s')==='laid', noFinish=!!fsx&&fsx.kind==='missing';
   // Course Card marks in the course: their position is the card's (STATUS A40); said in the leg table and above the SailScoring lines
   const ccNames=[...new Set(cs.filter(isCourseCard).map(m=>m.name))], ccLine=ccNames.length?ccNames.join(', ')+': position from the course card, not a fix recorded today.':'';
@@ -3030,7 +3108,7 @@ function buildLegs(){const noFinSet=finNotSet();   // .44: Committee boat & Fini
   setCC();
   const an=analysis(cs,twdv), warn=(ml?[ml+'. The legs to and from a missing mark are left out of every total and output.']:[]).concat(orphanText(L)?[orphanText(L)+'. Move it between two marks.']:[],farLine,checks(ents,cs));
   const warnC=farLine.concat(checks(ents,cs)), warnR=warn.filter(x=>!warnC.includes(x));   // .44: red only what holds Send back
-  host.innerHTML='<div class="info">'+(warnR.length?'<p class="note flag">⚠ '+warnR.map(esc).join('<br>⚠ ')+'</p>':'')+(warnC.length?'<p class="note caut">⚠ '+warnC.map(esc).join('<br>⚠ ')+'</p>':'')+pastedHtml(L)+an.html+(cardEnds&&!gsOf()?'<p class="note">Start and finish are the card\'s own marks. Record the committee boat and pin to measure your own line and its bias.</p>':'')+(gsOf()?'<p class="note">Grassy start: the start line is the Grassy Walk line; the first leg is measured from its midpoint, Grassy Mid'+(fPt&&!fl?', and the last leg to it':'')+'. No line length or bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
+  host.innerHTML='<div class="info">'+(warnR.length?'<p class="note flag">⚠ '+warnR.map(esc).join('<br>⚠ ')+'</p>':'')+(warnC.length?'<p class="note caut">⚠ '+warnC.map(esc).join('<br>⚠ ')+'</p>':'')+pastedHtml(L)+an.html+(gsOf()?'<p class="note">Grassy start: the start line is the Grassy Walk line; the first leg is measured from its midpoint, Grassy'+(fPt&&!fl?', and the last leg to it':'')+'. No line length or bias.</p>':'')+(ccLine?'<p class="note">'+esc(ccLine)+'</p>':'')+'<p class="note">Course: <b>'+esc(card(L.rows))+'</b></p></div>'+
     '<table><caption class="legsCap">'+(pts.length-1)+' leg'+(pts.length>2?'s':'')+' between marks</caption>'+
     '<thead><tr><th>Leg</th><th style="text-align:right">Bearing</th><th style="text-align:right">nm</th><th style="text-align:right">TWA</th></tr></thead><tbody>'+rows+
     '</tbody><tfoot><tr><td>'+(ml?'Total of measured legs':'Total')+'</td><td></td><td class="n">'+total.toFixed(2)+'</td><td></td></tr></tfoot></table>';
@@ -3124,16 +3202,15 @@ function ccDoc(r,st){r=r??S.race;st=st??S.start;
      (noS||noF)&&(noS&&noF?'start line and finish line':noS?'start line':'finish line')+' not recorded'].filter(Boolean);
    if(n)incS.push(nOf(n,'leg','legs')+' not measured ('+why.join('; ')+')');}
   if(orphanText(L)){inc.push(orphanText(L));incS.push('routing waypoint '+orphanNames(L).join(', ')+' not between two marks');}   // L.orphan
-  if(L.sPt&&!L.sl&&L.ccfg)cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point'+
-    (cardEndMode('s',r,st)==='card'?' (Card mark chosen)':''));
+  // A123 (Pat, 26 October 2026): only while the row says to place the committee boat; not for Grassy or a midpoint
+  if(L.sPt&&!L.sl&&L.ccfg&&markStartOf(r,st))cardSti.push('start line not recorded, first leg ('+L.sPt.name+' - '+first+') measured from the card\'s '+L.ccfg.s+' start point');
   const seen=new Set();
   cs.forEach(m=>{if(m.laidSt&&!m.atFix&&!seen.has(m.laidSt.key)){seen.add(m.laidSt.key);sti.push(m.card+' not laid, legs to and from it measured from its planning position');}});
   if(L.fsx&&L.fsx.kind==='startline'&&L.fsx.warn)sti.push('finish line not recorded, last leg ('+last+' - Finish) measured to the start line');
-  if(L.fPt&&!L.fl&&L.fsx&&L.fsx.kind==='cardpt')cardSti.push('finish line not recorded, last leg ('+last+' - '+L.fPt.name+') measured to the card\'s '+L.ccfg.f+' finish point'+
-    (cardEndMode('f',r,st)==='card'?' (Card mark chosen)':''));
+  if(L.fPt&&!L.fl&&L.fsx&&L.fsx.kind==='cardpt'&&L.fsx.noBoat)cardSti.push('finish line not recorded, last leg ('+last+' - '+L.fPt.name+') measured to the card\'s '+L.ccfg.f+' finish point');
   const gsN=[], gsA=L.slRec&&!L.ccfg&&gsOf(r,st)?'Grassy start chosen; the recorded line (committee boat '+(L.slRec.cb.time||'?')+' ↔ pin '+(L.slRec.pin.time||'?')+(estOf(L.slRec.cb)||estOf(L.slRec.pin)?', estimate':'')+') is not used.':'';
-  if(L.sPt&&!L.sl&&!L.ccfg&&gsOf(r,st))gsN.push('first leg ('+L.sPt.name+' - '+first+') measured from Grassy Mid, the midpoint of the Grassy Walk line');
-  if(L.fPt&&!L.fl&&!L.ccfg&&gsOf(r,st))gsN.push('last leg ('+last+' - '+L.fPt.name+') measured to Grassy Mid');   // T14: the Grassy start is the Grassy Walk line, measured from Grassy Mid, said beside the button as a plain note (a recorded line not used in orange), never STAND-IN; nothing copied changes
+  if(L.sPt&&!L.sl&&!L.ccfg&&gsOf(r,st))gsN.push('first leg ('+L.sPt.name+' - '+first+') measured from Grassy, the midpoint of the Grassy Walk line');
+  if(L.fPt&&!L.fl&&!L.ccfg&&gsOf(r,st))gsN.push('last leg ('+last+' - '+L.fPt.name+') measured to Grassy');   // T14: the Grassy start is the Grassy Walk line, measured from Grassy Mid, said beside the button as a plain note (a recorded line not used in orange), never STAND-IN; nothing copied changes
   const w=windOf(k), num=v=>v!==''&&v!=null&&isFinite(+v)?+v:null, twd=num(w.twd), tws=num(w.tws);
   if(tws!==null&&twd===null)side.push('Wind speed not copied: no wind direction entered.');
   const ser=daySeries();   // A8: the day's own series, never one carried and not yet confirmed
@@ -4416,6 +4493,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('.lineSw,.lineAct
   if(b.classList.contains('lineSw')){if(!c)return;c[b.dataset.end==='s'?'ls':'lf']=b.dataset.v;stamp(k);commit();return;}
   const act=b.dataset.act;
   if(act==='useCard'&&c){c.ls='card';stamp(k);commit();}
+  else if(act==='useCardF'&&c){c.lf='card';stamp(k);commit();}   // A123: the finish mark as the line's midpoint
   else if(act==='keepStart'&&c){c.lfs='start';c.lfc='start';stamp(k);commit();}
   else if(act==='chooseStart'){const r=$('startRow'),sel=r&&r.querySelector('select');if(r)r.scrollIntoView({block:'center'});if(sel)sel.focus();else if($('recCB'))$('recCB').focus();}
   else if(act==='markFinish'){const r=$('finishRow'),sel=r&&r.querySelector('select[data-w="fpin"]');if(r)r.scrollIntoView({block:'center'});if(sel)sel.focus();}});
@@ -4590,6 +4668,24 @@ async function finAct(act,b,k,say){const z0=finRec(k)||{}, ls=()=>(S.lineSel[k]=
     say('Finish Pin placed as an estimate: '+finPinWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix(b.dataset.area||'finPinPlace',k,rec.ref.slice(2));
     finFollowAll();commit();   // .43 fix 8: the starts sharing this line move first
     if(old)await withdrawReplaced(k,'fpin',old,endDid(old));
+    return;}
+  /* .46, A123 (Pat, 26 October 2026): a Dosco or No.8 card finish on Automatic: the Finish boat placed by distance and
+     bearing from the mark (its workbook position), so the line can be set up in the clubhouse; an estimate, as a Finish
+     boat placed from the Finish Pin is */
+  if(act==='finMarkPlace'){const nm=markFinOf();if(!nm)return;const have=markPt(nm,S.race);
+    const dist=+d.fmdist, brgM=+d.fmbrg;
+    if(!(dist>0&&dist<=5000)||String(d.fmbrg).trim()===''||!(brgM>=0&&brgM<=360)){say('Type a distance in metres (1 to 5000) and a bearing from 0 to 360 °M: nothing placed.',false);return;}
+    const t=when(d.fmtime);if(t===null){say('Give the time on the water as hh:mm, for example 11:09: nothing placed.',false);return;}
+    const p=geoDest(have,((brgM-varW())%360+360)%360,dist);
+    const rec={ref:add('Finish boat',p,t),from:nm,m:Math.round(dist),brgM:Math.round(brgM)%360};
+    {const was=z0.cb?z0.cb.fcb:ls().fcb;if(was)rec.fcb=was;}
+    const z=Object.assign({},z0), old=z.cb?Object.assign({},z.cb):null;z.cb=rec;finSet(k,z);
+    if(old)finGoneAdd(k,Object.assign({w:'fcb'},old));   // A78
+    ls().fcb='none';if(S.lineFlags[k])delete S.lineFlags[k].fcb;
+    estDraft={};stamp(k);commit();sendOutbox();
+    say('Finish boat placed as an estimate: '+finWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix('finMarkPlace',k,rec.ref.slice(2));
+    finFollowAll();commit();
+    if(old)await withdrawReplaced(k,'fcb',old,'placed '+old.m+' m at '+pad(old.brgM,3)+'°M');
     return;}
   if(act==='finPlace'){if(z0.mid)return;const have=endPick('fpin').m;if(!have)return;
     const dist=+d.fdist, brgM=+d.fbrg;
