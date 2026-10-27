@@ -2333,7 +2333,8 @@ function finIsLast(r,st){if(isNewLines(r,st))return false;const c=cardCfgNow(r,s
 // the finish line's estimate for start r|st: {kind:'mid'|'placed', text, x} or null; x goes into Copy for Sail Scoring
 function finEstNow(r,st){if(isNewLines(r,st)){const fl=lnResolve(r,st,'f');if(!fl||fl.grassy||(lnSpec(r,st,'f')||{}).t==='start')return null;   // the start line's estimate is said once   // .46b: the RO's finish line
     if(fl.est==='mid'){const w=lnWho(fl.end,true);return {kind:'mid',text:w+' used as the line midpoint',x:'finish line: '+w+' used as midpoint',who:lnWho(fl.end)};}
-    const t=[fl.pin,fl.cb].map(m=>m&&estOf(m)).filter(Boolean).map(estWords).join(' and ');return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
+    const off=pinOff(fl), bo=boatOff(fl), t=[fl.pin,fl.cb].map(m=>m&&estOf(m)).filter(Boolean).map(e=>estWordsIn(e,fl,off,bo)).join(' and ');   // .46e
+    return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
   if(!finUsesPin(r,st)){const ml=markFinLine(r,st);if(!ml)return null;   // A123: the finish boat to the mark
     const f=finOf(ml.cb), sc=!f&&estOf(ml.cb), t=f&&f.w==='fcb'?finWords(f):sc?estWords(sc)+' (the start\'s estimate)':'';
     return t?{kind:'placed',text:t,x:'finish line: '+t}:null;}
@@ -2512,6 +2513,22 @@ function placedFrom(e,p){if(!e)return null;if(e.fromRef){const f=lnFix(e.fromRef
   return c.find(x=>placedFit(e,p,x))||(c.length===1?c[0]:null);}
 // a pin names the boat it was placed from when that boat was itself placed: ", placed 926 m from No.13"
 function fromBoatWords(e,p){const b=placedFrom(e,p), f=b&&b!==p&&finOf(b), be=b&&b!==p&&(estOf(b)||(f&&+f.m>0?f:null));return be?', placed '+estFrom(be):'';}
+/* .46e (Pat, 27 October 2026; the .46d round): a placed end in a start's line (not one read as saved before the line
+   rules) that does not lie where it was placed from the line's other end. A pin placed from another committee boat
+   (pinOff), or a boat placed from another pin under the earlier rules (boatOff, never from a harbour mark): its placed
+   numbers are not given for the line; the line as it is instead (lnAsIs). For a pin the RO is asked whether to reset
+   the Pin end: Yes opens the Place pin box with its distance and bearing and the start time (rule 22), No changes
+   nothing (lnResetNo, this page only, until the line changes) */
+function placedRecOf(p){const e=estOf(p);if(e)return e;const f=finOf(p);return f&&+f.m>0?f:null;}
+function pinOff(L){if(!L||!L.cb||!L.pin||L.pin.markEnd)return null;const e=placedRecOf(L.pin);
+  return e&&(e.w==='pin'||e.w==='fpin')&&!lnHarbour().includes(String(e.from))&&!placedFit(e,L.pin,L.cb)?e:null;}
+function boatOff(L){if(!L||!L.cb||!L.pin||L.cb.markEnd)return null;const e=placedRecOf(L.cb);
+  return e&&(e.w==='cb'||e.w==='fcb')&&!e.hm&&/\bPin\b/.test(String(e.from))&&!placedFit(e,L.cb,L.pin)?e:null;}
+function lnAsIs(L){const g=geo(L.cb,L.pin);return Math.round(g.m)+' m at '+pad(Math.round(((g.brg+varW())%360+360)%360)%360,3)+'°M';}
+const lnResetNo=new Set();
+// a placed end's words in section 4 and Copy for Sail Scoring: as placed, or the line as it is when it no longer fits
+function estWordsIn(e,L,off,bo){return off&&e.ref===off.ref?(e.nm||(e.w==='fpin'?'Finish Pin':'Start Pin'))+' not placed from this committee boat: line '+lnAsIs(L)+' from it':
+  bo&&e.ref===bo.ref?(e.w==='fcb'?'Finish boat':'committee boat')+' not placed from this pin: line '+lnAsIs(L)+' from the committee boat':estWords(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
    way it is a line end set with the helper (helpOf): it carries forward only within its race (decision 2a), and wherever
@@ -2568,7 +2585,8 @@ function lineEstNow(r,st){if(gsOf(r,st))return null;const md=midLine(r,st);
     return {kind:'mid',text:'one end missing ('+w+' used as midpoint)',x:'start line: '+w+' used as midpoint'};}
   const sl=lineOff(r,st)?null:startLine(r,st);if(!sl)return null;
   // both ends may be estimates: a Start Pin set at a mark, then the committee boat placed from it
-  const es=[estOf(sl.pin),estOf(sl.cb)].filter(Boolean);if(!es.length)return null;const t=es.map(estWords).join('; ');
+  const es=[estOf(sl.pin),estOf(sl.cb)].filter(Boolean);if(!es.length)return null;
+  const nw=isNewLines(r,st), off=nw&&pinOff(sl), bo=nw&&boatOff(sl), t=es.map(e=>estWordsIn(e,sl,off,bo)).join('; ');   // .46e
   return {kind:'placed',text:t,x:'start line: '+t,e:es[0],es};}
 // the start line the legs are measured from: none when Card mark is chosen; the recorded end when the RO chose it as midpoint
 function legStartLine(r,st,sel){if(isNewLines(r,st))return lnResolve(r,st,'s');return lineOff(r,st)?null:(midLine(r,st)||startLine(r,st,sel));}
@@ -2851,7 +2869,10 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     lnFixOpts(n=>isCB(n)||isFinishBoat(n)).forEach(m=>{cbl+=opt(refFor(m),lnFixLabel(m),vOf(cbE));});
     cbl+=opt('place','Place the committee boat from a harbour mark…',d[P+'bo']?'place':vOf(cbE));
     h+='<div class="endSec"><div class="secHead">Committee boat</div><select class="lnEnd" data-l="'+which+'" data-e="cb" aria-label="Committee boat">'+cbl+'</select>'+
-      (cbM&&lnPlacedRec(cbM,k)?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'');
+      (cbM&&lnPlacedRec(cbM,k)?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'')+
+      // .46e: a boat placed from another pin (the earlier rules): the line as it is; never placed again from a pin (rule 4)
+      (!old&&boatOff(L)?'<div class="meta cautTxt">'+esc('⚠ '+(boatOff(L).w==='fcb'?'Finish boat':'Committee boat')+' – estimate (on the water '+fixWhen(cbM)+
+        '): not placed from the pin now in this line. The line as it is: '+lnAsIs(L)+' from the committee boat.')+'</div>':'');
     if(d[P+'bo']){if(d[P+'bt']==='')d[P+'bt']=startTime();   // rule 22, C9: the start time, kept as typed
       h+='<div class="meta estBox">Place committee boat: <input class="estIn" data-f="'+P+'bd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'bd'])+'" style="width:5.5em"> metres at '+
         '<input class="estIn" data-f="'+P+'bb" type="number" min="0" max="359" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'bb'])+'" style="width:5em">°M from '+
@@ -2868,7 +2889,13 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     if(cbM)pl+=opt('place','Place a pin from the committee boat…',d[P+'po']?'place':vOf(pinE));
     pl+='<optgroup label="Harbour marks">'+lnHarbour().map(nm=>opt('mark:'+nm,nm,vOf(pinE))).join('')+'</optgroup>';
     h+='<div class="endSec"><div class="secHead">Other end</div><select class="lnEnd" data-l="'+which+'" data-e="pin" aria-label="Other end">'+pl+'</select>'+
-      (pinM&&!pinM.markEnd&&lnPlacedRec(pinM,k)?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
+      // .46e: a pin placed from another committee boat: the line as it is, and the question (orange); No leaves it
+      (()=>{const own=pinM&&!pinM.markEnd&&lnPlacedRec(pinM,k), off=!old&&pinOff(L);if(!own&&!off)return '';
+        const no=off&&lnResetNo.has(k+'|'+which+'|'+refFor(L.pin)+'|'+refFor(L.cb)), lab=off&&(off.nm||(off.w==='fpin'?'Finish Pin':'Start Pin'));
+        return '<div class="meta cautTxt">'+(off?esc('⚠ '+lab+' – estimate (on the water '+fixWhen(pinM)+'): not placed from the committee boat now in this line. The line as it is: '+
+            lnAsIs(L)+' from the committee boat.')+(no?'':' Do you want to reset the Pin end? <button type="button" class="lnAct chgBtn" data-act="lnReset" data-l="'+which+'">Yes</button> '+
+            '<button type="button" class="ghost lnAct chgBtn" data-act="lnResetNo" data-l="'+which+'">No</button>'):esc(helpLong(pinM)))+
+          (own?' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button>':'')+'</div>';})();
     if(d[P+'po']&&cbM){if(d[P+'pt']==='')d[P+'pt']=startTime();
       h+='<div class="meta estBox">Place pin: <input class="estIn" data-f="'+P+'pd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'pd'])+'" style="width:5.5em"> metres at '+
         '<input class="estIn" data-f="'+P+'pb" type="number" min="0" max="359" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'pb'])+'" style="width:5em">°M from the committee boat on the water '+
@@ -4728,6 +4755,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');i
   const man=()=>{const L=lnTouch(k);if(!L[which]||L[which].t!=='man')L[which]={t:'man',cb:null,pin:null,mid:null};return L[which];};
   if(act==='lnMid'){lnSet(which,()=>{man().mid=b.dataset.e==='cb'?'cb':'pin';});return;}
   if(act==='lnUnmid'){lnSet(which,()=>{man().mid=null;});return;}
+  // .46e: reset the Pin end: the Place pin box with the pin's distance and bearing and the start time; the RO taps Place
+  if(act==='lnReset'){const e=pinOff(lnResolve(S.race,S.start,which));if(!e)return;
+    Object.assign(d,{[P+'po']:'1',[P+'pd']:String(e.m),[P+'pb']:String(e.brgM),[P+'pt']:startTime()});render();return;}
+  if(act==='lnResetNo'){const L=lnResolve(S.race,S.start,which);if(L&&L.cb&&L.pin)lnResetNo.add(k+'|'+which+'|'+refFor(L.pin)+'|'+refFor(L.cb));render();return;}
   if(act==='lnPlaceCb'||act==='lnPlacePin'){const cbP=act==='lnPlaceCb', x=cbP?'b':'p', why=[lnDistWhy(d[P+x+'d']),lnBrgWhy(d[P+x+'b'])].filter(Boolean);
     if(why.length){say(why.join(' ')+' Nothing placed.',false);return;}
     const dist=+String(d[P+x+'d']).trim(), brgM=+String(d[P+x+'b']).trim();   // whole numbers: placed and saved exactly as typed

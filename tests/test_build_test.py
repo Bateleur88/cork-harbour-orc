@@ -1894,6 +1894,20 @@ def t34_line_rules_guards():
       and "const fr=((lnSpec(S.race,S.start,which)||{}).cb||{}).ref;if(fr)rec.fromRef=fr;" in code
       and "o.fromRef=e.fromRef;" in fn_body(code, 'function lnEndNorm(')
       and 'fromBoatWords' not in fn_body(code, 'function helpX(') and 'fromBoatWords' not in fn_body(code, 'function estWords('))
+    hd = code[code.index("if(act==='lnReset'){"):code.index("if(act==='lnPlaceCb'||act==='lnPlacePin'){")]
+    g('.46e: a pin placed from another committee boat: no placed numbers for the line, the line as it is, in orange, and "Do you want to reset the Pin end?"',
+      "'): not placed from the committee boat now in this line. The line as it is: '+" in rows and "Do you want to reset the Pin end?" in rows
+      and "off=!old&&pinOff(L)" in rows and '<div class="meta cautTxt">' in rows
+      and "return e&&(e.w==='pin'||e.w==='fpin')&&!lnHarbour().includes(String(e.from))&&!placedFit(e,L.pin,L.cb)?e:null;}" in fn_body(code, 'function pinOff('))
+    g('.46e, rule 22: Yes opens the Place pin box with the saved distance and bearing and the start time; nothing is placed until Place; No saves nothing',
+      "Object.assign(d,{[P+'po']:'1',[P+'pd']:String(e.m),[P+'pb']:String(e.brgM),[P+'pt']:startTime()});render();return;}" in hd
+      and 'commit(' not in hd and 'lnSet(' not in hd and 'postFix(' not in hd and "lnResetNo.add(" in hd)
+    g('.46e: section 4 and Copy for Sail Scoring give the line as it is for such a pin, start and finish; the earlier rules\' starts as saved',
+      "const nw=isNewLines(r,st), off=nw&&pinOff(sl), bo=nw&&boatOff(sl), t=es.map(e=>estWordsIn(e,sl,off,bo)).join('; ');" in fn_body(code, 'function lineEstNow(')
+      and "map(e=>estWordsIn(e,fl,off,bo)).join(' and ')" in fn_body(code, 'function finEstNow(')
+      and "' not placed from this committee boat: line '+lnAsIs(L)+' from it'" in fn_body(code, 'function estWordsIn('))
+    g('.46e, rule 4: a boat placed from another pin (the earlier rules) is flagged with the line as it is, never placed again; never one from a harbour mark',
+      "!e.hm&&/\\bPin\\b/.test(String(e.from))" in fn_body(code, 'function boatOff(') and "(!old&&boatOff(L)?" in rows and 'lnReset' not in rows[rows.index("(!old&&boatOff(L)?"):rows.index("(!old&&boatOff(L)?") + 400])
     g('.46e: "Place a pin from the committee boat…" comes straight after the Pins, before the harbour marks',
       rows.index("'<optgroup label=\"Pins\">'") < rows.index("opt('place','Place a pin from the committee boat…'") < rows.index("'<optgroup label=\"Harbour marks\">'"))
 
