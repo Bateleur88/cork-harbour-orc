@@ -1354,7 +1354,7 @@ def t26_fixes43_guards():
       'const w=md.end.markEnd?md.end.name:helpX(md.end)||fixWords2(md.end);' in fn_body(code, 'function lineEstNow(') and 'const w=helpX(fl.end)||fixWords2(fl.end);' in fn_body(code, 'function finEstNow(')
       and 'helpLong(' not in fn_body(code, 'function lineEstNow(') and 'helpLong(' not in fn_body(code, 'function finEstNow('))
     g('10: a placed end says its reference with that end\'s time, then its own time on the water',
-      "return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
+      "return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+fromBoatWords(e,m)+'; on the water '+fixWhen(m)+rp;" in fn_body(code, 'function helpLong(')
       and "le.fromWhen?{fromWhen:String(le.fromWhen)}:{}" in fn_body(code, 'function estRec(')
       and "v.cb.fromWhen?{fromWhen:String(v.cb.fromWhen)}:{}" in fn_body(code, 'function finNorm('))
 
@@ -1706,7 +1706,7 @@ def t32_v46(tmp):
       "function estAt(e){return e.m+' m at '+pad(e.brgM,3)+'°M from '+(e.hm||e.from);}" in code and '/1852).toFixed(1)' not in code)
     hl = fn_body(code, 'function helpLong(')
     g('A124: helpLong (Start line section, fixes list) and estWords (section 4, the message) use it; no bracketed time with hm',
-      "const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};" in hl
+      "const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+fromBoatWords(e,m)+'; on the water '+fixWhen(m)+rp;};" in hl
       and "+' placed '+estAt(e);}" in code)
     g('A124: Copy for Sail Scoring (helpX) and the finish boat\'s and Finish Pin\'s words unchanged',
       'estAt' not in fn_body(code, 'function helpX(') and 'hm' not in fn_body(code, 'function helpX(')
@@ -1875,7 +1875,7 @@ def t34_line_rules_guards():
       and "return 'Not undone: '+says.join('; ')+'. Change '+change.join(' and ')+' first.';}" in fn_body(code, 'function lnUndoWhy(')
       and "const users=lineUsers(m,k);if(!users.length)return '';" in fn_body(code, 'function lnUndoWhy('))   # never refuses less than before
     g('Finding B: a placed end in the Line ends line says how far and from what: "Committee boat (est. 1 m from No.13) 15:00"',
-      "if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+') '+t+rp+w;" in fn_body(code, 'function lineEndWords(')
+      "if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+fromBoatWords(e,m)+') '+t+rp+w;" in fn_body(code, 'function lineEndWords(')
       and "return estAt(e).replace(/ at \\d{3}°M from /,' from ');}" in fn_body(code, 'function estFrom('))
     # .46e, A134: a start the server holds with no lines, and this device holds none for, is an old start before the
     # unsent-edits check, so a copy stored by a page before .46b is never sent back with empty lines
@@ -1887,6 +1887,13 @@ def t34_line_rules_guards():
     uw = fn_body(code, 'function lnUndoWhy(')
     g('.46e: a refused Undo names the race only for a start in another race, in both halves',
       "says.push(who(r,s0)+' uses this '" in uw and "says.push(who(r,s0)+' uses '+t)" in uw and 'says.push(u+' not in uw)
+    g('.46e: a pin names the boat it was placed from, when that boat was itself placed, in helpLong and the Line ends line',
+      "+fromBoatWords(e,m)+'; on the water '" in fn_body(code, 'function helpLong(')
+      and fn_body(code, 'function lineEndWords(').count('fromBoatWords(') == 2
+      and "if(e.fromRef){const f=lnFix(e.fromRef);if(f)return f;}" in fn_body(code, 'function placedFrom(')
+      and "const fr=((lnSpec(S.race,S.start,which)||{}).cb||{}).ref;if(fr)rec.fromRef=fr;" in code
+      and "o.fromRef=e.fromRef;" in fn_body(code, 'function lnEndNorm(')
+      and 'fromBoatWords' not in fn_body(code, 'function helpX(') and 'fromBoatWords' not in fn_body(code, 'function estWords('))
     g('.46e: "Place a pin from the committee boat…" comes straight after the Pins, before the harbour marks',
       rows.index("'<optgroup label=\"Pins\">'") < rows.index("opt('place','Place a pin from the committee boat…'") < rows.index("'<optgroup label=\"Harbour marks\">'"))
 

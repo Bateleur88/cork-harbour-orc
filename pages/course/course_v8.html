@@ -2170,7 +2170,8 @@ function lnSel(k){const[r,st]=k.split('|').map(Number), o={};
 function lnEndNorm(e){if(!e||typeof e!=='object')return null;if(typeof e.mark==='string'&&CARD.marks[e.mark])return {mark:e.mark};
   if(typeof e.ref!=='string'||!/^[sl]:/.test(e.ref))return null;const o={ref:e.ref};
   if(e.ln&&(e.w==='cb'||e.w==='pin')&&+e.m>0){Object.assign(o,{ln:true,w:e.w,from:String(e.from||''),m:+e.m,brgM:+e.brgM||0});
-    if(typeof e.nm==='string'&&/^(Start|Finish) Pin$/.test(e.nm))o.nm=e.nm;if(e.hm)o.hm=String(e.hm);if(e.fromWhen)o.fromWhen=String(e.fromWhen);}
+    if(typeof e.nm==='string'&&/^(Start|Finish) Pin$/.test(e.nm))o.nm=e.nm;if(e.hm)o.hm=String(e.hm);if(e.fromWhen)o.fromWhen=String(e.fromWhen);
+    if(typeof e.fromRef==='string'&&/^[sl]:/.test(e.fromRef))o.fromRef=e.fromRef;}   // .46e: the boat a pin was placed from
   return o;}
 function lnSpecNorm(v,which){if(!v||typeof v!=='object')return null;
   if(v.t==='grassy')return {t:'grassy'};if(v.t==='start')return which==='f'?{t:'start'}:null;
@@ -2500,6 +2501,17 @@ function lnBrgWhy(v){const t='Type the bearing in whole degrees from 0 to 359 °
 // .46d, Finding B: "1 m from No.13", "926 m from No.13": estAt without the bearing, to tell placed ends apart
 function estFrom(e){return estAt(e).replace(/ at \d{3}°M from /,' from ');}
 function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}
+/* .46e (Pat, 27 October 2026): whether end p lies where e places it from fix b, e.m metres at e.brgM °M: within 3 m or 1 %,
+   and 1.5° (a saved position's rounding, the variation at the map centre rather than the course's) */
+function placedFit(e,p,b){if(!e||!p||!b||!(+e.m>0))return false;const g=geo(b,p);if(Math.abs(g.m-e.m)>Math.max(3,e.m/100))return false;
+  if(e.m<30)return true;const bM=((g.brg+varAt(null).v)%360+360)%360;return Math.abs(((bM-e.brgM)%360+540)%360-180)<=1.5;}
+/* the fix end p (record e) was placed from: its saved reference (fromRef, saved since .46e), else the fix its "from" names
+   that p lies placed from, else the only fix of that name and time; null when it cannot be told */
+function placedFrom(e,p){if(!e)return null;if(e.fromRef){const f=lnFix(e.fromRef);if(f)return f;}
+  const c=S.marks.filter(x=>!x.card&&!x.virtual&&x!==p&&fixWords2(x)===String(e.from||''));
+  return c.find(x=>placedFit(e,p,x))||(c.length===1?c[0]:null);}
+// a pin names the boat it was placed from when that boat was itself placed: ", placed 926 m from No.13"
+function fromBoatWords(e,p){const b=placedFrom(e,p), f=b&&b!==p&&finOf(b), be=b&&b!==p&&(estOf(b)||(f&&+f.m>0?f:null));return be?', placed '+estFrom(be):'';}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
    way it is a line end set with the helper (helpOf): it carries forward only within its race (decision 2a), and wherever
@@ -2524,7 +2536,7 @@ function fromWhenOf(e,m){if(e.fromWhen)return String(e.fromWhen);const f=String(
 // the time to save as fromWhen when an end is placed from ref: '' when the reference's own name already says it, or it has none
 function fromWhenNew(ref,from){if(!ref||ref.card&&!ref.atFix||!ref.time)return '';const w=fixWhen(ref);return String(from).endsWith(' '+w)?'':w;}
 function helpLong(m){const rp=goneOf(m)?', replaced':'';   // A78: replaced by placing again, not yet withdrawn
-  const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};
+  const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+fromBoatWords(e,m)+'; on the water '+fixWhen(m)+rp;};
   const fz=finOf(m);   // A63: a Finish Pin set at a mark, or a Finish boat placed from the Finish Pin
   // .44 (Pat, 22 October 2026): a pin set at a mark says where it is, then the race and time it was set for
   const setFor=(lab,at)=>isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:lab+': at '+at+', set for Race '+m.race+' at '+String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,'')+rp;   // A123: a mark by its name alone
@@ -2545,9 +2557,9 @@ function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null),
 // one line end in the "Line ends:" line (fix 5)
 function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,''), rp=goneOf(m)?', replaced':'', w=m.notSent?' (not sent)':m.pending?' (sending)':'';
   const fz=finOf(m), sp=setOf(m), e=estOf(m);
-  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est. '+estFrom(fz)+') '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est. '+estFrom(fz)+') '+t)+rp+w;
+  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est. '+estFrom(fz)+fromBoatWords(fz,m)+') '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est. '+estFrom(fz)+') '+t)+rp+w;
   if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;
-  if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+') '+t+rp+w;   // .46d, Finding B
+  if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+fromBoatWords(e,m)+') '+t+rp+w;   // .46d, Finding B; .46e its boat
   return m.name+' '+t+(isPasted(m)?' (pasted)':isTypedPos(m)?' (typed)':'')+w;}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the start line's estimate for start r|st: {kind:'mid'|'placed', text} or null
@@ -4725,7 +4737,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');i
     if(!from){say(cbP?'Choose the harbour mark to place the committee boat from: nothing placed.':'Choose the committee boat first: a pin is placed from it only.',false);return;}
     const p=geoDest(from,((brgM-varW())%360+360)%360,dist), nm=cbP?'Committee boat':which==='f'?'Finish Pin':'Start Pin', id=lnAddFix(nm,p,t);
     const rec={ref:'s:'+id,ln:true,w:cbP?'cb':'pin',from:cbP?from.name:fixWords2(from),m:dist,brgM};
-    if(cbP)rec.hm=from.name;else{rec.nm=nm;const fw=fromWhenNew(from,rec.from);if(fw)rec.fromWhen=fw;}
+    if(cbP)rec.hm=from.name;else{rec.nm=nm;const fw=fromWhenNew(from,rec.from);if(fw)rec.fromWhen=fw;const fr=((lnSpec(S.race,S.start,which)||{}).cb||{}).ref;if(fr)rec.fromRef=fr;}   // .46e: the boat itself, as the line names it
     lnSet(which,L=>{const sp=man();sp[cbP?'cb':'pin']=rec;if(sp.cb&&sp.pin)sp.mid=null;(L.p=L.p||[]).push(Object.assign({},rec));});
     [P+x+'d',P+x+'b',P+x+'t',P+x+'o'].concat(cbP?[P+'br']:[]).forEach(f=>{d[f]='';});commit();sendOutbox();
     say(nm+' placed as an estimate: '+estWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix('ln'+which+(cbP?'cb':'pin'),k,id);
