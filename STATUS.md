@@ -215,6 +215,9 @@ References are never reused or renumbered. Commits name them with a trailer such
 | A140 | "Place a pin from the committee boat…" straight after the Pins in both Other end lists, before the harbour marks | BUILT AND TESTED | Released in .46e; tested in the harness; passed on the test copy (start and finish lists) |
 | A141 | The reset question's Yes button (A138) is plain grey, while No and Undo are blue outlined; make them match | NOT STARTED | Seen in the .46e test round |
 | A142 | After No to the reset question (A138), the question comes back whenever the start is drawn again (for example after switching starts), since No is not saved | NOT STARTED | Seen in the .46e test round; works as built; for Pat to decide whether No should be kept |
+| A143 | Sail Scoring connection, Stage 1, read-only, test copy only: a "Sail Scoring (test)" panel (Connect with PKCE, Disconnect with revoke) showing the workspace, a series list, its fleets and the races on the Race day; GET only, plus token and revoke | IN PROGRESS | In `pages/course/sailscoring-test.js`, added by the test build only; the live page never includes it; build tests pass; Sail Scoring's token and revoke CORS confirmed; not yet uploaded or signed in. Open: A144, A145 |
+| A144 | After a Sail Scoring sign-in (A143) the page's "Race day is back to today" note stays visible although the panel has restored the saved day; the note must not show when the day has been restored | NOT STARTED | For a later stage; not to be fixed in Stage 1 |
+| A145 | The Sail Scoring panel (A143) is absent offline, since the service worker does not keep `sailscoring-test.js` | NOT STARTED | For a later stage; not to be fixed in Stage 1 |
 
 Withdrawn: A1, A3, A4, A6 (decisions and review UI; see `docs/experimental/decisions-and-review/`), A14 (Cage position, issue #1), A36, A51, A52, A53, A59 (superseded by A58), A113 (did not recur on the test copy), A114 and A120 (page wording as intended).
 

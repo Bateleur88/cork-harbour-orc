@@ -3,11 +3,12 @@
 
     python scripts/build_test.py [--page pages/course/course_v8.html] [--sw pages/course/sw.js] [--marks pages/marks/marks.php]
                                  [--manifest pages/course/manifest.webmanifest] [--assets pages/course/assets]
-                                 [--out build/test] [--label LOCAL]
+                                 [--ss pages/course/sailscoring-test.js] [--out build/test] [--label LOCAL]
 
 Writes, and nothing else:
     OUT/course-test/index.html   the RO page, talking only to /marks-test/ and keeping its own browser data
     OUT/course-test/sw.js        the page's service worker (STATUS A65), keeping /marks-test/key.js instead of /marks/key.js
+    OUT/course-test/sailscoring-test.js   the Sail Scoring connection, Stage 1 (read-only), test copy only (see below)
     OUT/marks-test/marks.php     an unchanged copy of marks.php (it keeps its data next to itself, in /marks-test/data/)
     OUT/BUILD.txt                source commit, where each file came from (A28), PAGE_VERSION and SHA-256 of each file
 
@@ -41,6 +42,13 @@ from the live manifest with the test copy's name ("TEST – Course plot", "TEST 
 icon-192.png, icon-512.png and icon-maskable-512.png. It refuses a live manifest that does not name /course/ for all
 three, a test manifest that names /course/ anywhere, and a page whose manifest link is not the relative
 manifest.webmanifest.
+Sail Scoring, Stage 1 (Pat, 27 October 2026): the test page, and only the test page, loads sailscoring-test.js, copied
+unchanged beside it, by one <script src="sailscoring-test.js?v=<version>"> before </body>, and its PAGE_VERSION ends
+-test-ss1 (SS_LABEL). The live page must not name the file. Refused if the file's browser storage keys do not all start
+with STORE (the page's check, with the file's STORE exactly 'test-'), or it names /marks, or names PUT, PATCH or DELETE,
+or holds a request method other than its one POST (tokenPost: the token and revoke endpoints only) and its one GET
+(ssApi, which refuses any other method). A LOCAL build leaves the file out: its sign-in returns only to
+https://tradboats.ie/course-test/, which a LOCAL build may not name.
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
 
 --label LOCAL builds for the local test site on this PC (php -S), never for upload. It differs from the normal build only in:
@@ -81,6 +89,7 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 # --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
 # whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
+SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss1', "const STORE='test-';"
 LOCAL_URLS = ('https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://unpkg.com/leaflet@1.9.4/dist/',
               'https://tile.openstreetmap.de/', 'https://tiles.openseamap.org/seamark/', 'https://wa.me/')
 LIVE_HOSTS = re.compile(r'tradboats|orc-ireland', re.I)
@@ -261,6 +270,26 @@ def local_url_problems(text):
     return out
 
 
+def ss_problems(js):
+    """What is wrong with sailscoring-test.js (Sail Scoring, Stage 1), as readable lines: every browser storage key
+    starts with STORE and its STORE is 'test-'; it never names /marks; it makes no request but GET (ssApi) apart from its
+    one POST (tokenPost, to the token and revoke endpoints only)."""
+    code = strip_js(js)
+    out = storage_problems('<script>' + js + '</script>')
+    if code.count(SS_STORE) != 1:
+        out.append(f'it must contain {SS_STORE!r} exactly once (found {code.count(SS_STORE)})')
+    if '/marks' in js:
+        out.append('it names /marks: it must never reach race data')
+    for m in ('PUT', 'PATCH', 'DELETE'):
+        if re.search(r'\b' + m + r'\b', code):
+            out.append(f'it names the request method {m}: Stage 1 is read-only')
+    if len(re.findall(r'\bmethod\s*:', code)) != 2 or code.count("method:'POST'") != 1 or code.count("method:'GET'") != 1:
+        out.append("it must hold exactly two request methods: method:'POST' once (tokenPost) and method:'GET' once (ssApi)")
+    if code.count("if(url!==TOKEN&&url!==REVOKE)throw") != 1 or code.count("if(method!=='GET')throw") != 1:
+        out.append('tokenPost must refuse any address but the token and revoke endpoints, and ssApi any method but GET')
+    return out
+
+
 def build_page(src, label='', stamp=''):
     """The test page and its PAGE_VERSION. label 'LOCAL' (with stamp, the build time as HHMM) makes the local test site's
     page instead; without it the result is the normal test copy."""
@@ -282,7 +311,9 @@ def build_page(src, label='', stamp=''):
     m = re.findall(r"const PAGE_VERSION='([^']+)';", src)
     if len(m) != 1:
         raise Refused(f'expected exactly one PAGE_VERSION, found {len(m)}')
-    version = m[0] + '-test' + (f'-L{stamp}' if label else '')
+    if SS_FILE in src:
+        raise Refused(f'the live page names {SS_FILE}: only the test build may add it')
+    version = m[0] + '-test' + (f'-L{stamp}' if label else f'-{SS_LABEL}')
     title_pre, banner_pre = ('LOCAL TEST – ', 'LOCAL TEST – ') if label else ('TEST – ', 'TEST COPY – ')
     t = src
     t = replace_once(t, '<script src="/marks/key.js"></script>', f'<script src="{TEST_BASE}key.js"></script>', 'key.js tag')
@@ -299,6 +330,9 @@ def build_page(src, label='', stamp=''):
               f'font:700 14px/1.35 system-ui,sans-serif;text-align:center;padding:6px 10px">{banner_pre}not live data · '
               f'{TEST_BASE} · PAGE_VERSION {version}</div>')
     t = replace_once(t, '<body>', '<body>\n' + banner, 'body tag')
+    ss_tag = f'<script src="{SS_FILE}?v={version}"></script>'
+    if not label:
+        t = replace_once(t, '</body>', ss_tag + '\n</body>', 'closing body tag')
     # the result: no way back to live data, every storage key prefixed, the TEST markings present
     stray = [t[max(0, x.start() - 30):x.start() + 30] for x in re.finditer(r'/marks(?!-test/)', t)]
     if stray:
@@ -311,6 +345,8 @@ def build_page(src, label='', stamp=''):
                  '<meta name="robots" content="noindex,nofollow">'):
         if t.count(need) != 1:
             raise Refused(f'the test page must contain {need!r} exactly once (found {t.count(need)})')
+    if t.count(SS_FILE) != (0 if label else 1) or (not label and t.count(ss_tag) != 1):
+        raise Refused(f'the test page must load {SS_FILE} exactly once, and a LOCAL page never')
     if label:
         problems = local_url_problems(t)
         if problems:
@@ -347,6 +383,7 @@ def main():
     ap.add_argument('--marks', default=os.path.join(ROOT, 'pages', 'marks', 'marks.php'))
     ap.add_argument('--manifest', default=os.path.join(ROOT, 'pages', 'course', 'manifest.webmanifest'))
     ap.add_argument('--assets', default=os.path.join(ROOT, 'pages', 'course', 'assets'))
+    ap.add_argument('--ss', default=os.path.join(ROOT, 'pages', 'course', SS_FILE))
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'test'))
     ap.add_argument('--label', choices=['LOCAL'], default='', help='LOCAL: for the local test site only, never uploaded')
     a = ap.parse_args()
@@ -357,6 +394,13 @@ def main():
             worker = build_worker(f.read())
         with open(a.marks, 'rb') as f:
             marks = f.read()
+        ss = None
+        if not a.label:
+            with open(a.ss, 'rb') as f:
+                ss = f.read()
+            problems = ss_problems(ss.decode('utf-8'))
+            if problems:
+                raise Refused(f'{SS_FILE}:\n  ' + '\n  '.join(problems))
         man = None
         if os.path.exists(a.manifest):
             with open(a.manifest, encoding='utf-8', newline='') as f:
@@ -395,6 +439,9 @@ def main():
             for dst, data, _ in icons:
                 with open(os.path.join(tmp, 'course-test', dst), 'wb') as f:
                     f.write(data)
+        if ss is not None:
+            with open(os.path.join(tmp, 'course-test', SS_FILE), 'wb') as f:
+                f.write(ss)
         shutil.copyfile(a.marks, os.path.join(tmp, 'marks-test', 'marks.php'))
         with open(os.path.join(tmp, 'marks-test', 'marks.php'), 'rb') as f:
             if f.read() != marks:
@@ -409,6 +456,8 @@ def main():
                     f'course-test/index.html sha256 {sha(pb)}\n'
                     f'course-test/sw.js      sha256 {sha(wb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
+                    + (f'course-test/{SS_FILE} sha256 {sha(ss)} (copied from {source_of(a.ss, commit)})\n' if ss is not None
+                       else f'{SS_FILE} left out: a LOCAL build never includes it\n')
                     + (f'manifest built from {source_of(a.manifest, commit)}\n'
                        f'course-test/manifest.webmanifest sha256 {sha(man)}\n'
                        + ''.join(f'course-test/{dst} sha256 {sha(data)} (from {source_of(p, commit)})\n' for dst, data, p in icons)
@@ -433,6 +482,8 @@ def main():
     print(f'  course-test/index.html  {sha(pb)}')
     print(f'  course-test/sw.js       {sha(wb)}')
     print(f'  marks-test/marks.php    {sha(marks)}')
+    if ss is not None:
+        print(f'  course-test/{SS_FILE}  {sha(ss)}')
     return 0
 
 

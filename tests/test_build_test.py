@@ -148,6 +148,11 @@ altered in ways it must refuse and checks that it writes nothing:
                 sources and their sizes; the test build writes the test manifest (TEST names, /course-test/ only) and the
                 TEST icons byte for byte, and refuses a live manifest not naming /course/, a page whose manifest link is
                 not relative, and a missing test icon; the worker still handles only the page and key.js
+ 35  Sail       Sail Scoring, Stage 1 (Pat, 27 October 2026): the test build copies sailscoring-test.js byte for byte,
+     Scoring    loads it once with ?v=<version> just before </body> (after the page's own script) and names it in
+                BUILD.txt; the live page and the LOCAL build never name it. Refused, writing nothing: a storage key
+                without STORE, STORE other than 'test-', /marks named, PUT, PATCH or DELETE named, a second POST, a
+                tokenPost that no longer refuses other addresses, and a live page naming the file
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -177,9 +182,10 @@ def report(name, ok, detail=''):
         failed.append(name)
 
 
-def run(page, out, sw=SW, label=''):
+def run(page, out, sw=SW, label='', ss=None):
     return subprocess.run([sys.executable, SCRIPT, '--page', page, '--sw', sw, '--marks', MARKS, '--out', out]
-                          + (['--label', label] if label else []), capture_output=True, text=True, encoding='utf-8')
+                          + (['--label', label] if label else []) + (['--ss', ss] if ss else []),
+                          capture_output=True, text=True, encoding='utf-8')
 
 
 def read(p, mode='r'):
@@ -198,9 +204,9 @@ def t0_build(tmp):
     checks = {
         'key.js from /marks-test/': '<script src="/marks-test/key.js"></script>' in test,
         'MARKS_BASE and STORE': "const MARKS_BASE='/marks-test/', STORE='test-';" in test,
-        'PAGE_VERSION -test': f"const PAGE_VERSION='{v}-test';" in test,
+        'PAGE_VERSION -test-ss1': f"const PAGE_VERSION='{v}-test-ss1';" in test,
         'no /marks other than /marks-test/': not re.search(r'/marks(?!-test/)', test),
-        'banner with version': f'PAGE_VERSION {v}-test</div>' in test and 'TEST COPY – not live data' in test,
+        'banner with version': f'PAGE_VERSION {v}-test-ss1</div>' in test and 'TEST COPY – not live data' in test,
         'TEST title': '<title>TEST – ' in test,
         'noindex': '<meta name="robots" content="noindex,nofollow">' in test,
         'marks.php byte-identical': read(os.path.join(out, 'marks-test', 'marks.php'), 'rb') == read(MARKS, 'rb'),
@@ -211,7 +217,8 @@ def t0_build(tmp):
     # nothing else changed: undo the known replacements and compare with the live page
     back = (test.replace('<script src="/marks-test/key.js"></script>', '<script src="/marks/key.js"></script>')
                 .replace("const MARKS_BASE='/marks-test/', STORE='test-';", "const MARKS_BASE='/marks/', STORE='';")
-                .replace(f"const PAGE_VERSION='{v}-test';", f"const PAGE_VERSION='{v}';")
+                .replace(f"const PAGE_VERSION='{v}-test-ss1';", f"const PAGE_VERSION='{v}';")
+                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss1"></script>\n</body>', '</body>')
                 .replace('<title>TEST – ', '<title>')
                 .replace('<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', '<meta charset="utf-8">'))
     back = re.sub(r'<body>\n<div id="testBanner"[^\n]*</div>', '<body>', back)
@@ -1453,8 +1460,11 @@ def t28_local_build(tmp):
     b = read(os.path.join(loc, 'BUILD.txt'))
     g('BUILD.txt names the version and LOCAL', f'PAGE_VERSION {lv}\n' in b and 'label LOCAL: for the local test site only' in b)
     g('the normal build names no LOCAL', 'LOCAL' not in nt and 'label LOCAL' not in read(os.path.join(norm, 'BUILD.txt')))
-    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test';")
-              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test</div>')
+    g('the LOCAL build leaves sailscoring-test.js out', 'sailscoring-test' not in lt
+      and not os.path.exists(os.path.join(loc, 'course-test', 'sailscoring-test.js')))
+    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss1';")
+              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss1</div>')
+              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss1"></script>\n</body>')
               .replace('<title>LOCAL TEST – ', '<title>TEST – ')
               .replace('>LOCAL TEST – not live data · ', '>TEST COPY – not live data · '))
     g('nothing else differs from the normal build', back == nt)
@@ -1912,6 +1922,51 @@ def t34_line_rules_guards():
       rows.index("'<optgroup label=\"Pins\">'") < rows.index("opt('place','Place a pin from the committee boat…'") < rows.index("'<optgroup label=\"Harbour marks\">'"))
 
 
+def t35_sailscoring(tmp):
+    """Sail Scoring, Stage 1: sailscoring-test.js in the test build only, and the build's checks on it."""
+    ss = os.path.join(ROOT, 'pages', 'course', 'sailscoring-test.js')
+    live, js = read(PAGE), read(ss)
+    v = re.search(r"const PAGE_VERSION='([^']+)';", live).group(1)
+    g = lambda name, ok, detail='': report('35 Sail Scoring: ' + name, ok, detail)
+    out = os.path.join(tmp, 'out35')
+    r = run(PAGE, out)
+    g('the build exits 0', r.returncode == 0, r.stdout + r.stderr)
+    if r.returncode:
+        return
+    test = read(os.path.join(out, 'course-test', 'index.html'))
+    tag = f'<script src="sailscoring-test.js?v={v}-test-ss1"></script>'
+    g('the live page does not name the file', 'sailscoring-test' not in live)
+    g('the test page loads it once, after the page\'s own script, just before </body>',
+      test.count('sailscoring-test') == 1 and test.count('</script>\n' + tag + '\n</body>') == 1, test[-200:])
+    g('copied byte for byte', read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb') == read(ss, 'rb'))
+    g('BUILD.txt names it', 'course-test/sailscoring-test.js sha256 ' in read(os.path.join(out, 'BUILD.txt')))
+    g('the redirect address is a fixed constant', "const REDIRECT_URI='https://tradboats.ie/course-test/';" in js
+      and 'location.href' not in js.split('*/', 1)[1])
+    before = read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb')
+    cases = {
+        'a storage key without STORE': js.replace("localStorage.removeItem(PTR);", "localStorage.removeItem('x');"),
+        "STORE other than 'test-'": js.replace("const STORE='test-';", "const STORE='';"),
+        '/marks named': js.replace("const PENDING='pending';", "const PENDING='/marks/pending';"),
+        'PUT named': js.replace("const PENDING='pending';", "const PENDING='pending',M='PUT';"),
+        'DELETE named': js.replace("const PENDING='pending';", "const PENDING='pending',M='DELETE';"),
+        'a second POST': js.replace("const PENDING='pending';", "const PENDING='pending';fetch(API,{method:'POST'});"),
+        'tokenPost no longer refusing other addresses': js.replace("if(url!==TOKEN&&url!==REVOKE)throw", "if(!url)throw"),
+        'ssApi no longer refusing other methods': js.replace("if(method!=='GET')throw", "if(!method)throw"),
+    }
+    for name, text in cases.items():
+        p = os.path.join(tmp, 'bad35.js')
+        with open(p, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+        r = run(PAGE, out, ss=p)
+        g('refused: ' + name, text != js and r.returncode != 0 and 'REFUSED' in r.stdout
+          and read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb') == before, r.stdout.strip()[:160])
+    p = os.path.join(tmp, 'bad35.html')
+    with open(p, 'w', encoding='utf-8', newline='') as f:
+        f.write(live.replace('<head>', '<head>\n<script src="sailscoring-test.js"></script>', 1))
+    r = run(p, out)
+    g('refused: a live page naming the file', r.returncode != 0 and 'REFUSED' in r.stdout, r.stdout.strip()[:160])
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         t0_build(tmp)
@@ -1949,6 +2004,7 @@ def main():
         t32_v46(tmp)
         t33_lines_guards()
         t34_line_rules_guards()
+        t35_sailscoring(tmp)
     print(f'\n{len(failed)} failed' if failed else '\nall passed')
     return 1 if failed else 0
 
