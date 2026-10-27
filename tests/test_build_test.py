@@ -1887,6 +1887,10 @@ def t34_line_rules_guards():
     g('A134: a start saved before the line rules is marked so before the unsent-edits check',
       "if(/^\\d+\\|\\d+$/.test(k)&&!(rec.lines&&typeof rec.lines==='object')&&!(S.lines||{})[k])S.lineLegacy[k]=true;" in ap
       and ap.index("S.lineLegacy[k]=true;") < ap.index("if(S.synced[k]!==undefined&&isDirty(k))return;"))
+    # .46e, the .46d round: a refused Undo names the race only for a start in another race, in both halves
+    uw = fn_body(code, 'function lnUndoWhy(')
+    g('.46e: a refused Undo names the race only for a start in another race, in both halves',
+      "says.push(who(r,s0)+' uses this '" in uw and "says.push(who(r,s0)+' uses '+t)" in uw and 'says.push(u+' not in uw)
 
 
 def main():

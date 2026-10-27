@@ -2480,8 +2480,9 @@ function lnUndoWhy(m,k,which,w){const users=lineUsers(m,k);if(!users.length)retu
   users.forEach(u=>{const[r,st]=u.match(/\d+/g).map(Number), s0=st-1, xs=[];
     if(isNewLines(r,s0))['s','f'].forEach(x=>{const sp=lnSpec(r,s0,x), L=lnResolve(r,s0,x);if(!sp||sp.t==='start'||!L)return;
       if([L.cb,L.pin,L.end].includes(m))xs.push([x,sp.t==='use'&&sp.of===k+'|'+which?'this '+ln(which):'this '+(w==='cb'?'committee boat':'pin')+' in its '+ln(x)]);});
-    if(!xs.length){says.push(u+' uses this '+(w==='cb'?'committee boat':'pin'));change.push(who(r,s0)+'\'s lines');return;}
-    xs.forEach(([x,t])=>{says.push(u+' uses '+t);change.push(who(r,s0)+'\'s '+ln(x));});});
+    // .46e (Pat, 27 October 2026): the race is named only for a start in another race, in both halves
+    if(!xs.length){says.push(who(r,s0)+' uses this '+(w==='cb'?'committee boat':'pin'));change.push(who(r,s0)+'\'s lines');return;}
+    xs.forEach(([x,t])=>{says.push(who(r,s0)+' uses '+t);change.push(who(r,s0)+'\'s '+ln(x));});});
   return 'Not undone: '+says.join('; ')+'. Change '+change.join(' and ')+' first.';}
 /* .46, A124 (Pat, 26 October 2026): a committee boat placed from a harbour mark (the route that sets the Start Pin there
    too) saves the mark's name as hm and is described "0.5 nm at 090°M from No.13": nautical miles to one decimal, the
