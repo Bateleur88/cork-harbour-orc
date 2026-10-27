@@ -2854,8 +2854,9 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     let pl=opt('','Choose the other end…',vOf(pinE));
     const pins=lnFixOpts(n=>isStartPin(n)||isFinishPin(n));
     if(pins.length)pl+='<optgroup label="Pins">'+pins.map(m=>opt(refFor(m),lnFixLabel(m),vOf(pinE))).join('')+'</optgroup>';
-    pl+='<optgroup label="Harbour marks">'+lnHarbour().map(nm=>opt('mark:'+nm,nm,vOf(pinE))).join('')+'</optgroup>';
+    // .46e (Pat, 27 October 2026): straight after the pins, so the RO need not scroll past every harbour mark
     if(cbM)pl+=opt('place','Place a pin from the committee boat…',d[P+'po']?'place':vOf(pinE));
+    pl+='<optgroup label="Harbour marks">'+lnHarbour().map(nm=>opt('mark:'+nm,nm,vOf(pinE))).join('')+'</optgroup>';
     h+='<div class="endSec"><div class="secHead">Other end</div><select class="lnEnd" data-l="'+which+'" data-e="pin" aria-label="Other end">'+pl+'</select>'+
       (pinM&&!pinM.markEnd&&lnPlacedRec(pinM,k)?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
     if(d[P+'po']&&cbM){if(d[P+'pt']==='')d[P+'pt']=startTime();

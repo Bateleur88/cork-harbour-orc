@@ -1891,6 +1891,8 @@ def t34_line_rules_guards():
     uw = fn_body(code, 'function lnUndoWhy(')
     g('.46e: a refused Undo names the race only for a start in another race, in both halves',
       "says.push(who(r,s0)+' uses this '" in uw and "says.push(who(r,s0)+' uses '+t)" in uw and 'says.push(u+' not in uw)
+    g('.46e: "Place a pin from the committee boat…" comes straight after the Pins, before the harbour marks',
+      rows.index("'<optgroup label=\"Pins\">'") < rows.index("opt('place','Place a pin from the committee boat…'") < rows.index("'<optgroup label=\"Harbour marks\">'"))
 
 
 def main():
