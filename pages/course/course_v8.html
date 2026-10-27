@@ -2484,13 +2484,11 @@ function lnUndoWhy(m,k,which,w){const users=lineUsers(m,k);if(!users.length)retu
     if(!xs.length){says.push(who(r,s0)+' uses this '+(w==='cb'?'committee boat':'pin'));change.push(who(r,s0)+'\'s lines');return;}
     xs.forEach(([x,t])=>{says.push(who(r,s0)+' uses '+t);change.push(who(r,s0)+'\'s '+ln(x));});});
   return 'Not undone: '+says.join('; ')+'. Change '+change.join(' and ')+' first.';}
-/* .46, A124 (Pat, 26 October 2026): a committee boat placed from a harbour mark (the route that sets the Start Pin there
-   too) saves the mark's name as hm and is described "0.5 nm at 090°M from No.13": nautical miles to one decimal, the
-   mark named plainly. Every other placed end, and a record saved before (no hm), keeps "1000 m at 090°M from <from>";
-   from itself is saved as before, so Copy for Sail Scoring (helpX) and an older page read it unchanged. Below 0.1 nm
-   (Pat, 26 October 2026) in metres instead, "80 m at 090°M from No.13": the saved whole metres, 185 m and less in
-   metres, 186 m and more in nm (0.1 nm is 185.2 m), so "0.0 nm" never appears */
-function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+/* .46, A124: a committee boat placed from a harbour mark saves the mark's name as hm and is described from the mark named
+   plainly, "926 m at 090°M from No.13"; every other placed end, and a record saved before (no hm), "1000 m at 090°M from
+   <from>"; from itself is saved as before, so an older page reads it unchanged. .46e (Pat, 27 October 2026): every placed
+   end in whole metres, exactly as saved, since the boxes take whole metres (no nm: 150 m and 200 m both read "0.1 nm") */
+function estAt(e){return e.m+' m at '+pad(e.brgM,3)+'°M from '+(e.hm||e.from);}
 /* .46d, Finding A (Pat, 27 October 2026): a placing box takes the distance in whole metres, 1 to 5000, and the bearing in
    whole degrees, 0 to 359, exactly as typed; anything else is refused, saying why, and nothing is placed. Each returns
    the reason, or '' when the number is one the box takes */
@@ -2499,7 +2497,7 @@ function lnDistWhy(v){const t='Type the distance in whole metres (1 to 5000)';v=
   return +v<1?t+': '+v+' is less than 1.':+v>5000?t+': '+v+' is more than 5000.':'';}
 function lnBrgWhy(v){const t='Type the bearing in whole degrees from 0 to 359 °M';v=String(v??'').trim();if(v==='')return t+'.';
   if(!/^\d+$/.test(v))return t+': '+v+' is not a whole degree.';return +v>359?t+': '+v+' is more than 359.':'';}
-// .46d, Finding B: "1 m from No.13", "0.5 nm from No.13": estAt without the bearing, to tell placed ends apart
+// .46d, Finding B: "1 m from No.13", "926 m from No.13": estAt without the bearing, to tell placed ends apart
 function estFrom(e){return estAt(e).replace(/ at \d{3}°M from /,' from ');}
 function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate

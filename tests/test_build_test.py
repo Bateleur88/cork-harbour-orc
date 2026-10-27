@@ -1574,7 +1574,7 @@ def t29_pin_routes_guards():
     g('6: saved data read as before: placements from a harbour mark keep their from; a record with no hm keeps its wording (A124)',
       "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl_h
       and "function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}" in code
-      and "e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in fn_body(code, 'function estAt('))
+      and "e.m+' m at '+pad(e.brgM,3)+'°M from '+(e.hm||e.from);}" in fn_body(code, 'function estAt('))   # .46e: no hm, from as saved
     # layout (Pat, 22 October 2026): each pin route in its own box, its message inside it, "or" only between two
     rb = fn_body(code, 'function routeBox(')
     g('layout: "Option 1 – Pin at a mark" and "Option 2 – Pin by distance and bearing", each a bordered box',
@@ -1701,13 +1701,9 @@ def t32_v46(tmp):
       and "from:rp?pinName('Start Pin',rp.at):ref.card&&!ref.atFix?ref.name:fixWords2(ref)" in pl)
     g('A124: hm is kept when a committee boat record is read (estRec), never for a Start Pin',
       "le.w==='cb'&&le.hm?{hm:String(le.hm)}:{}" in fn_body(code, 'function estRec('))
-    g('A124: with hm, "<nm to one decimal> nm at <°M> from <mark>", below 0.1 nm "<m> m …"; without, "<m> m at <°M> from <from>"',
-      "function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}" in code)
-    # the switch, worked here as the page works it: 185 m and less in metres, 186 m and more in nm, never "0.0 nm"
-    dist = lambda m: f'{m} m' if m * 10 < 1852 else f'{m / 1852:.1f} nm'
-    g('A124: the switch: 80 m, 185 m in metres; 186 m is 0.1 nm, 277 m 0.1 nm, 278 m 0.2 nm; 1 to 5000 m never "0.0 nm"',
-      [dist(m) for m in (80, 185, 186, 277, 278, 1000)] == ['80 m', '185 m', '0.1 nm', '0.1 nm', '0.2 nm', '0.5 nm']
-      and not any(dist(m) == '0.0 nm' for m in range(1, 5001)), str([dist(m) for m in (80, 185, 186, 277, 278, 1000)]))
+    # .46e (Pat, 27 October 2026): every placed end in whole metres, exactly as saved: "926 m at 090°M from No.13"
+    g('.46e: a placed end in whole metres as saved, from the mark (hm) or from <from>; no nm for any placed end',
+      "function estAt(e){return e.m+' m at '+pad(e.brgM,3)+'°M from '+(e.hm||e.from);}" in code and '/1852).toFixed(1)' not in code)
     hl = fn_body(code, 'function helpLong(')
     g('A124: helpLong (Start line section, fixes list) and estWords (section 4, the message) use it; no bracketed time with hm',
       "const placed=(lab,e)=>{const fw=e.hm?'':fromWhenOf(e,m);return lab+' – estimate: '+estAt(e)+(fw?' ('+fw+')':'')+'; on the water '+fixWhen(m)+rp;};" in hl
