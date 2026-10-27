@@ -2471,6 +2471,18 @@ function lineUsers(m,skip,placed){const out=[];if(!m)return out;
     const now=['cb','pin','fcb','fpin'].some(w=>endPick(w,r,st).m===m);
     if(saved||rec||now)out.push('Race '+r+' Start '+(st+1));});
   return out;}
+/* .46d, Finding B (Pat, 27 October 2026): why Undo of end w of start k's line (which) is refused, in plain words: each
+   other start whose line uses it, and what to change first; '' when none does. A start set by the RO is read from its
+   lines (a line used from k, or the end chosen itself); every other use lineUsers finds is named as before */
+function lnUndoWhy(m,k,which,w){const users=lineUsers(m,k);if(!users.length)return '';
+  const r0=+k.split('|')[0], ln=x=>x==='s'?'start line':'finish line', who=(r,st)=>(r===r0?'':'Race '+r+' ')+'Start '+(st+1);
+  const says=[], change=[];
+  users.forEach(u=>{const[r,st]=u.match(/\d+/g).map(Number), s0=st-1, xs=[];
+    if(isNewLines(r,s0))['s','f'].forEach(x=>{const sp=lnSpec(r,s0,x), L=lnResolve(r,s0,x);if(!sp||sp.t==='start'||!L)return;
+      if([L.cb,L.pin,L.end].includes(m))xs.push([x,sp.t==='use'&&sp.of===k+'|'+which?'this '+ln(which):'this '+(w==='cb'?'committee boat':'pin')+' in its '+ln(x)]);});
+    if(!xs.length){says.push(u+' uses this '+(w==='cb'?'committee boat':'pin'));change.push(who(r,s0)+'\'s lines');return;}
+    xs.forEach(([x,t])=>{says.push(u+' uses '+t);change.push(who(r,s0)+'\'s '+ln(x));});});
+  return 'Not undone: '+says.join('; ')+'. Change '+change.join(' and ')+' first.';}
 /* .46, A124 (Pat, 26 October 2026): a committee boat placed from a harbour mark (the route that sets the Start Pin there
    too) saves the mark's name as hm and is described "0.5 nm at 090°M from No.13": nautical miles to one decimal, the
    mark named plainly. Every other placed end, and a record saved before (no hm), keeps "1000 m at 090°M from <from>";
@@ -2486,6 +2498,8 @@ function lnDistWhy(v){const t='Type the distance in whole metres (1 to 5000)';v=
   return +v<1?t+': '+v+' is less than 1.':+v>5000?t+': '+v+' is more than 5000.':'';}
 function lnBrgWhy(v){const t='Type the bearing in whole degrees from 0 to 359 °M';v=String(v??'').trim();if(v==='')return t+'.';
   if(!/^\d+$/.test(v))return t+': '+v+' is not a whole degree.';return +v>359?t+': '+v+' is more than 359.':'';}
+// .46d, Finding B: "1 m from No.13", "0.5 nm from No.13": estAt without the bearing, to tell placed ends apart
+function estFrom(e){return estAt(e).replace(/ at \d{3}°M from /,' from ');}
 function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
@@ -2532,9 +2546,9 @@ function helpWarn(m){const fz=finOf(m), p=setOf(m)||(fz&&fz.w==='fpin'?fz:null),
 // one line end in the "Line ends:" line (fix 5)
 function lineEndWords(m){const t=String(m.time||'').replace(/ on \S+ \d{1,2} \S+$/,''), rp=goneOf(m)?', replaced':'', w=m.notSent?' (not sent)':m.pending?' (sending)':'';
   const fz=finOf(m), sp=setOf(m), e=estOf(m);
-  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est.) '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est.) '+t)+rp+w;
+  if(fz)return (fz.w==='fpin'?(+fz.m>0?'Finish Pin (est. '+estFrom(fz)+') '+t:'Finish Pin: '+shortAt(fz.at)+' ('+t+')'):'Finish boat (est. '+estFrom(fz)+') '+t)+rp+w;
   if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;
-  if(e)return (e.w==='cb'?'Committee boat':'Start Pin')+' (est.) '+t+rp+w;
+  if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+') '+t+rp+w;   // .46d, Finding B
   return m.name+' '+t+(isPasted(m)?' (pasted)':isTypedPos(m)?' (typed)':'')+w;}
 function fixWords2(m){return m.name+' R'+m.race+(m.time?' '+String(m.time).replace(/ on \S+ \d{1,2} \S+$/,''):'');}
 // the start line's estimate for start r|st: {kind:'mid'|'placed', text} or null
@@ -4713,7 +4727,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');i
     say(nm+' placed as an estimate: '+estWords(rec)+' ('+ddm(p.lat,true)+' '+ddm(p.lon,false)+'), saved as a typed position: sending…',null);msgFix('ln'+which+(cbP?'cb':'pin'),k,id);
     return;}
   if(act==='lnUndo'){const end=b.dataset.e==='cb'?'cb':'pin', sp=lnSpec(S.race,S.start,which), m=sp&&sp[end]&&lnFix(sp[end].ref), en=lnPlacedRec(m,k);if(!m||!en)return;
-    const others=lineUsers(m,k);if(others.length){say('Not undone: the '+m.name+' is also used by '+others.join(', ')+'.',false);return;}
+    const why=lnUndoWhy(m,k,which,end);if(why){say(why,false);return;}
     if(m.pending||!m.sid){say('The '+m.name+' is still being sent: try again in a moment.',false);return;}
     if(!verReady(say))return;
     if(!confirm('Undo? The '+m.name+' '+endDid(en)+' is withdrawn from the race record (kept, marked withdrawn).'))return;

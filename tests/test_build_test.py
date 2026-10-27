@@ -1873,6 +1873,14 @@ def t34_line_rules_guards():
       "if(why.length){say(why.join(' ')+' Nothing placed.',false);return;}" in code
       and "from:cbP?from.name:fixWords2(from),m:dist,brgM};" in code
       and "dist=+d[P+x+'d']" not in code)
+    # .46d, Finding B
+    g('Finding B: a refused Undo names the start that uses the line and what to change first',
+      "const why=lnUndoWhy(m,k,which,end);if(why){say(why,false);return;}" in code
+      and "return 'Not undone: '+says.join('; ')+'. Change '+change.join(' and ')+' first.';}" in fn_body(code, 'function lnUndoWhy(')
+      and "const users=lineUsers(m,k);if(!users.length)return '';" in fn_body(code, 'function lnUndoWhy('))   # never refuses less than before
+    g('Finding B: a placed end in the Line ends line says how far and from what: "Committee boat (est. 1 m from No.13) 15:00"',
+      "if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+') '+t+rp+w;" in fn_body(code, 'function lineEndWords(')
+      and "return estAt(e).replace(/ at \\d{3}°M from /,' from ');}" in fn_body(code, 'function estFrom('))
 
 
 def main():
