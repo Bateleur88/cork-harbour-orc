@@ -493,7 +493,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.46d';
+const PAGE_VERSION='2026-10-06.46e';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -4463,6 +4463,10 @@ function applyServerCourses(obj){
     const rec=obj[k]&&obj[k].data; if(!rec)return;
     // the day-wide groups are never edited or saved here, so the server's copy always wins
     if(k==='_starts'){S.dayClasses=Array.isArray(rec.classes)?rec.classes:[];S.synced[k]=JSON.stringify(recordFor(k));return;}
+    /* .46e, A134 (Pat, 27 October 2026): a start the server holds as saved before the line rules (no lines), for which this
+       device holds no lines of its own, is one, marked so before the check below: a copy stored by a page before .46b is
+       then compared in its own shape, so it is not taken for an unsent edit and sent back as a start with empty lines */
+    if(/^\d+\|\d+$/.test(k)&&!(rec.lines&&typeof rec.lines==='object')&&!(S.lines||{})[k])S.lineLegacy[k]=true;
     // a device that has never synced this course takes the server's version; otherwise unsent local edits win until saved
     if(S.synced[k]!==undefined&&isDirty(k))return;
     // A8: the day's series, the day it came from

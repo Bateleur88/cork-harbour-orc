@@ -1685,7 +1685,7 @@ def t32_v46(tmp):
     page = read(PAGE)
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('32 .46: ' + name, ok, detail)
-    g('PAGE_VERSION 2026-10-06.46d', "const PAGE_VERSION='2026-10-06.46d';" in code)
+    g('PAGE_VERSION 2026-10-06.46e', "const PAGE_VERSION='2026-10-06.46e';" in code)
     # A123
     g('A123: it is red: the warning colour as its background',
       '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
@@ -1881,6 +1881,12 @@ def t34_line_rules_guards():
     g('Finding B: a placed end in the Line ends line says how far and from what: "Committee boat (est. 1 m from No.13) 15:00"',
       "if(e)return (e.w==='cb'?'Committee boat':e.nm||'Start Pin')+' (est. '+estFrom(e)+') '+t+rp+w;" in fn_body(code, 'function lineEndWords(')
       and "return estAt(e).replace(/ at \\d{3}°M from /,' from ');}" in fn_body(code, 'function estFrom('))
+    # .46e, A134: a start the server holds with no lines, and this device holds none for, is an old start before the
+    # unsent-edits check, so a copy stored by a page before .46b is never sent back with empty lines
+    ap = fn_body(code, 'function applyServerCourses(')
+    g('A134: a start saved before the line rules is marked so before the unsent-edits check',
+      "if(/^\\d+\\|\\d+$/.test(k)&&!(rec.lines&&typeof rec.lines==='object')&&!(S.lines||{})[k])S.lineLegacy[k]=true;" in ap
+      and ap.index("S.lineLegacy[k]=true;") < ap.index("if(S.synced[k]!==undefined&&isDirty(k))return;"))
 
 
 def main():
