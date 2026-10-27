@@ -493,7 +493,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.46c';
+const PAGE_VERSION='2026-10-06.46d';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -2478,6 +2478,14 @@ function lineUsers(m,skip,placed){const out=[];if(!m)return out;
    (Pat, 26 October 2026) in metres instead, "80 m at 090°M from No.13": the saved whole metres, 185 m and less in
    metres, 186 m and more in nm (0.1 nm is 185.2 m), so "0.0 nm" never appears */
 function estAt(e){return e.hm?(e.m*10<1852?e.m+' m':(e.m/1852).toFixed(1)+' nm')+' at '+pad(e.brgM,3)+'°M from '+e.hm:e.m+' m at '+pad(e.brgM,3)+'°M from '+e.from;}
+/* .46d, Finding A (Pat, 27 October 2026): a placing box takes the distance in whole metres, 1 to 5000, and the bearing in
+   whole degrees, 0 to 359, exactly as typed; anything else is refused, saying why, and nothing is placed. Each returns
+   the reason, or '' when the number is one the box takes */
+function lnDistWhy(v){const t='Type the distance in whole metres (1 to 5000)';v=String(v??'').trim();if(v==='')return t+'.';
+  if(!/^\d+$/.test(v)){const n=+v, m=Math.round(n*1852);return t+': '+v+' is not whole metres.'+(n>0&&m>=1&&m<=5000?' '+v+' nm is '+m+' m.':'');}
+  return +v<1?t+': '+v+' is less than 1.':+v>5000?t+': '+v+' is more than 5000.':'';}
+function lnBrgWhy(v){const t='Type the bearing in whole degrees from 0 to 359 °M';v=String(v??'').trim();if(v==='')return t+'.';
+  if(!/^\d+$/.test(v))return t+': '+v+' is not a whole degree.';return +v>359?t+': '+v+' is more than 359.':'';}
 function estWords(e){return (e.w==='cb'?'committee boat':(e.nm||'Start Pin'))+' placed '+estAt(e);}
 /* A Start Pin set at a mark (S.linePinAt[start] = {ref, at}) is the RO's definite choice of the pin end, not an estimate
    (Pat, 14 October 2026, correcting answer 2); a line end placed by distance and bearing (S.lineEst) is an estimate. Either
@@ -2820,8 +2828,8 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     h+='<div class="endSec"><div class="secHead">Committee boat</div><select class="lnEnd" data-l="'+which+'" data-e="cb" aria-label="Committee boat">'+cbl+'</select>'+
       (cbM&&lnPlacedRec(cbM,k)?'<div class="meta cautTxt">'+esc(helpLong(cbM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="cb">Undo</button></div>':'');
     if(d[P+'bo']){if(d[P+'bt']==='')d[P+'bt']=startTime();   // rule 22, C9: the start time, kept as typed
-      h+='<div class="meta estBox">Place committee boat: <input class="estIn" data-f="'+P+'bd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'bd'])+'" style="width:5.5em"> m at '+
-        '<input class="estIn" data-f="'+P+'bb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'bb'])+'" style="width:5em">°M from '+
+      h+='<div class="meta estBox">Place committee boat: <input class="estIn" data-f="'+P+'bd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'bd'])+'" style="width:5.5em"> metres at '+
+        '<input class="estIn" data-f="'+P+'bb" type="number" min="0" max="359" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'bb'])+'" style="width:5em">°M from '+
         '<select class="estIn" data-f="'+P+'br"><option value="">choose a harbour mark</option>'+lnHarbour().map(nm=>opt(nm,nm,d[P+'br'])).join('')+'</select> on the water '+
         '<input class="estIn" data-f="'+P+'bt" type="text" inputmode="numeric" value="'+esc(d[P+'bt'])+'" style="width:4.5em"> '+
         '<button type="button" class="lnAct estAct2" data-act="lnPlaceCb" data-l="'+which+'">Place</button></div>';}
@@ -2836,8 +2844,8 @@ function lnRow(which){const r=S.race, st=S.start, k=ckey(r,st), old=!isNewLines(
     h+='<div class="endSec"><div class="secHead">Other end</div><select class="lnEnd" data-l="'+which+'" data-e="pin" aria-label="Other end">'+pl+'</select>'+
       (pinM&&!pinM.markEnd&&lnPlacedRec(pinM,k)?'<div class="meta cautTxt">'+esc(helpLong(pinM))+' <button type="button" class="ghost lnAct chgBtn" data-act="lnUndo" data-l="'+which+'" data-e="pin">Undo</button></div>':'');
     if(d[P+'po']&&cbM){if(d[P+'pt']==='')d[P+'pt']=startTime();
-      h+='<div class="meta estBox">Place pin: <input class="estIn" data-f="'+P+'pd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'pd'])+'" style="width:5.5em"> m at '+
-        '<input class="estIn" data-f="'+P+'pb" type="number" min="0" max="360" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'pb'])+'" style="width:5em">°M from the committee boat on the water '+
+      h+='<div class="meta estBox">Place pin: <input class="estIn" data-f="'+P+'pd" type="number" min="1" inputmode="numeric" placeholder="m" value="'+esc(d[P+'pd'])+'" style="width:5.5em"> metres at '+
+        '<input class="estIn" data-f="'+P+'pb" type="number" min="0" max="359" inputmode="numeric" placeholder="°M" value="'+esc(d[P+'pb'])+'" style="width:5em">°M from the committee boat on the water '+
         '<input class="estIn" data-f="'+P+'pt" type="text" inputmode="numeric" value="'+esc(d[P+'pt'])+'" style="width:4.5em"> '+
         '<button type="button" class="lnAct estAct2" data-act="lnPlacePin" data-l="'+which+'">Place</button></div>';}
     h+=msgSlot('ln'+which+'pin')+'</div>';
@@ -4690,14 +4698,15 @@ document.addEventListener('click',async e=>{const b=e.target.closest('.lnAct');i
   const man=()=>{const L=lnTouch(k);if(!L[which]||L[which].t!=='man')L[which]={t:'man',cb:null,pin:null,mid:null};return L[which];};
   if(act==='lnMid'){lnSet(which,()=>{man().mid=b.dataset.e==='cb'?'cb':'pin';});return;}
   if(act==='lnUnmid'){lnSet(which,()=>{man().mid=null;});return;}
-  if(act==='lnPlaceCb'||act==='lnPlacePin'){const cbP=act==='lnPlaceCb', x=cbP?'b':'p', dist=+d[P+x+'d'], brgM=+d[P+x+'b'];
-    if(!(dist>0&&dist<=5000)||String(d[P+x+'b']).trim()===''||!(brgM>=0&&brgM<=360)){say('Type a distance in metres (1 to 5000) and a bearing from 0 to 360 °M: nothing placed.',false);return;}
+  if(act==='lnPlaceCb'||act==='lnPlacePin'){const cbP=act==='lnPlaceCb', x=cbP?'b':'p', why=[lnDistWhy(d[P+x+'d']),lnBrgWhy(d[P+x+'b'])].filter(Boolean);
+    if(why.length){say(why.join(' ')+' Nothing placed.',false);return;}
+    const dist=+String(d[P+x+'d']).trim(), brgM=+String(d[P+x+'b']).trim();   // whole numbers: placed and saved exactly as typed
     const t=lnWhen(d[P+x+'t']);if(t===null){say('Give the time on the water as hh:mm, for example 11:09: nothing placed.',false);return;}
     // rule 4: the committee boat from a harbour mark only; a pin from the committee boat only
     const from=cbP?(lnHarbour().includes(d[P+'br'])?markPt(d[P+'br'],S.race):null):lnEndPt((lnSpec(S.race,S.start,which)||{}).cb,S.race);
     if(!from){say(cbP?'Choose the harbour mark to place the committee boat from: nothing placed.':'Choose the committee boat first: a pin is placed from it only.',false);return;}
     const p=geoDest(from,((brgM-varW())%360+360)%360,dist), nm=cbP?'Committee boat':which==='f'?'Finish Pin':'Start Pin', id=lnAddFix(nm,p,t);
-    const rec={ref:'s:'+id,ln:true,w:cbP?'cb':'pin',from:cbP?from.name:fixWords2(from),m:Math.round(dist),brgM:Math.round(brgM)%360};
+    const rec={ref:'s:'+id,ln:true,w:cbP?'cb':'pin',from:cbP?from.name:fixWords2(from),m:dist,brgM};
     if(cbP)rec.hm=from.name;else{rec.nm=nm;const fw=fromWhenNew(from,rec.from);if(fw)rec.fromWhen=fw;}
     lnSet(which,L=>{const sp=man();sp[cbP?'cb':'pin']=rec;if(sp.cb&&sp.pin)sp.mid=null;(L.p=L.p||[]).push(Object.assign({},rec));});
     [P+x+'d',P+x+'b',P+x+'t',P+x+'o'].concat(cbP?[P+'br']:[]).forEach(f=>{d[f]='';});commit();sendOutbox();

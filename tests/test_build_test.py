@@ -1685,7 +1685,7 @@ def t32_v46(tmp):
     page = read(PAGE)
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('32 .46: ' + name, ok, detail)
-    g('PAGE_VERSION 2026-10-06.46c', "const PAGE_VERSION='2026-10-06.46c';" in code)
+    g('PAGE_VERSION 2026-10-06.46d', "const PAGE_VERSION='2026-10-06.46d';" in code)
     # A123
     g('A123: it is red: the warning colour as its background',
       '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
@@ -1861,6 +1861,18 @@ def t34_line_rules_guards():
       "if(sp)return 'Start Pin: '+shortAt(sp.at)+' ('+t+')'+rp+w;" in fn_body(code, 'function lineEndWords(')
       and "isMarkEnd(at)?lab+' at '+at+' '+fixWhen(m)+' · typed position'+rp:" in fn_body(code, 'function helpLong('))
     g('the sketch label placer is unchanged in this build', "drawn.filter(l=>cross(b,l)).length*6+(!ofLine&&notOwn(b,x,y)?8:0);" in code)
+    # .46d, Finding A: whole metres 1 to 5000 and whole degrees 0 to 359, exactly as typed, or refused saying why
+    g('Finding A: both placing boxes say "metres"',
+      code.count("""style="width:5.5em"> metres at '""") == 2 and code.count('''data-f="'+P+'bb" type="number" min="0" max="359"''') == 1 and code.count('''data-f="'+P+'pb" type="number" min="0" max="359"''') == 1)
+    g('Finding A: a distance that is not whole metres 1 to 5000 is refused, saying why, with the nm conversion for a decimal',
+      "if(!/^\\d+$/.test(v)){const n=+v, m=Math.round(n*1852);return t+': '+v+' is not whole metres.'+(n>0&&m>=1&&m<=5000?' '+v+' nm is '+m+' m.':'');}" in fn_body(code, 'function lnDistWhy(')
+      and "return +v<1?t+': '+v+' is less than 1.':+v>5000?t+': '+v+' is more than 5000.':'';}" in fn_body(code, 'function lnDistWhy('))
+    g('Finding A: a bearing that is not a whole degree 0 to 359 is refused, saying why',
+      "if(!/^\\d+$/.test(v))return t+': '+v+' is not a whole degree.';return +v>359?t+': '+v+' is more than 359.':'';}" in fn_body(code, 'function lnBrgWhy('))
+    g('Finding A: nothing is placed when either is refused, and the end is saved with exactly the numbers it was placed at',
+      "if(why.length){say(why.join(' ')+' Nothing placed.',false);return;}" in code
+      and "from:cbP?from.name:fixWords2(from),m:dist,brgM};" in code
+      and "dist=+d[P+x+'d']" not in code)
 
 
 def main():
