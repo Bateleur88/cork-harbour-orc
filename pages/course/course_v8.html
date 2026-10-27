@@ -877,7 +877,21 @@ function renderPicked(bm){const r=S.race, box=$('pickBank'), ids=new Set(bm.map(
       '<button type="button" class="pickX" data-unpick="'+esc(k)+'" aria-label="'+esc('Remove the '+lab+' chip'+(inUse?': '+inUse:''))+'"'+
         (inUse?' disabled title="'+esc(inUse)+'"':'')+'>×</button></span>';}).join('')+'</div>';}
 const CLASSES=['Class 1 Spinnaker','Class 2 Spinnaker','Class 3 Spinnaker','Class 1 Non Spinnaker','Class 2 Non Spinnaker','Class 3 Non Spinnaker'];
-function shortClass(c){return c.replace('Class ','').replace(' Non Spinnaker',' NS').replace(' Spinnaker',' Spin');}
+/* A147 (Pat, 27 October 2026): the club's class list, saved from Sail Scoring by the scorer (the test page's Sail Scoring
+   panel) in marks.php's classes.json, read with the day's marks and kept on this device for no signal (STORE+'class-list').
+   CLASS_LIST is false here and true only in a test copy made by scripts/build_test.py: while it is false nothing reads,
+   fetches or keeps a list, clubList stays null and the class box is exactly as before. With a list the class box offers
+   its class names, in its order, and every name is shown in full; a start holding a class not in the list keeps it,
+   ticked, marked "not in the current class list". */
+const CLASS_LIST=false;
+let clubList=null;
+if(CLASS_LIST){try{const j=JSON.parse(localStorage.getItem(STORE+'class-list')||'null');if(j&&Array.isArray(j.classes))clubList=j;}catch(_){}}
+function classList(){return clubList?clubList.classes.map(c=>c.name):CLASSES;}
+function classOrder(c){const i=classList().indexOf(c);return CLASS_LIST&&i<0?1e3:i;}
+function setClubList(l){clubList=l&&Array.isArray(l.classes)?l:null;
+  try{if(clubList)localStorage.setItem(STORE+'class-list',JSON.stringify(clubList));else localStorage.removeItem(STORE+'class-list');}catch(_){}
+  document.dispatchEvent(new Event('course-class-list'));}
+function shortClass(c){return clubList?c:c.replace('Class ','').replace(' Non Spinnaker',' NS').replace(' Spinnaker',' Spin');}
 /* Start groups belong to a race: S.raceClasses[race], saved as _starts|race. A race with none has empty groups; nothing
    is ever filled in from another race or day. Groups saved before that were one list for the whole day (_starts): the
    loaded day's copy is kept as S.dayClasses only to be shown, never used or saved, unless the RO taps to use it.
@@ -1462,14 +1476,16 @@ function render(){
   if(classOpen){
     const mine=CL[S.start]||[];
     pk.hidden=false;
-    pk.innerHTML='<p class="pickhead">Classes in Start '+(S.start+1)+'</p>'+CLASSES.map(c=>{
+    const offered=classList(), kept=CLASS_LIST?mine.filter(c=>!offered.includes(c)):[];   // A147: never dropped silently
+    pk.innerHTML='<p class="pickhead">Classes in Start '+(S.start+1)+'</p>'+offered.concat(kept).map(c=>{
       const other=CL.findIndex((l,i)=>i!==S.start&&l.includes(c));
-      return '<label class="pick'+(other>=0?' taken':'')+'"><input type="checkbox" value="'+esc(c)+'"'+(mine.includes(c)?' checked':'')+(other>=0?' disabled':'')+'> '+esc(c)+(other>=0?' <small>in Start '+(other+1)+'</small>':'')+'</label>';
+      return '<label class="pick'+(other>=0?' taken':'')+'"><input type="checkbox" value="'+esc(c)+'"'+(mine.includes(c)?' checked':'')+(other>=0?' disabled':'')+'> '+esc(c)+(other>=0?' <small>in Start '+(other+1)+'</small>':'')+
+        (kept.includes(c)?' <small class="amberTxt">not in the current class list</small>':'')+'</label>';
     }).join('')+'<button class="done" id="classDone">Done</button>'+
       (CL.length>1&&!mine.length?'<button class="rm" id="classRm">Remove Start '+(S.start+1)+'</button>':'');
     pk.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
       const g=editClasses(), l=g[S.start]; if(cb.checked){if(!l.includes(cb.value))l.push(cb.value);}else{g[S.start]=l.filter(x=>x!==cb.value);}
-      g[S.start].sort((a,b)=>CLASSES.indexOf(a)-CLASSES.indexOf(b)); save(); render();});
+      g[S.start].sort((a,b)=>classOrder(a)-classOrder(b)); save(); render();});
     $('classDone').onclick=()=>{classOpen=false;commit();};
     const rm=$('classRm'); if(rm)rm.onclick=()=>removeStartAsked(S.start);
   }else pk.hidden=true;
@@ -4179,6 +4195,7 @@ async function pull(quiet){
       const rc=await keyFetch(ENDPOINT+'?type=courses&date='+encodeURIComponent(day),{});
       const jc=await rc.json(); if(rc.ok&&jc.ok&&!stale())applyServerCourses(jc.courses);
     }catch(_){}
+    if(CLASS_LIST)await pullClassList();
     // T20 (Pat, 16 October 2026): in the race the rule above chose, Start 1, or the first start that has a course
     if(newDay&&!stale()){const sts=Object.keys(S.courses).filter(k=>/^\d+\|\d+$/.test(k)&&+k.split('|')[0]===S.race&&(S.courses[k]||[]).length)
       .map(k=>+k.split('|')[1]); S.start=sts.length?Math.min(...sts):0;}
@@ -4585,6 +4602,15 @@ function cbLabel(){return 'Record committee boat here – Race '+S.race;}
 /* A refused reply throws 'server <status>' as before, with e.status and e.text, the
    server's own error text cut to 120 characters (shown escaped). ms: abandon the request after ms milliseconds, an
    AbortError ("no reply"); course saves (the day's series among them, A8) and the queue (sendOutbox) pass it. */
+/* A147: the club's class list from the server (null: none saved); with no signal the copy on this device stays. The test
+   page's Sail Scoring panel saves or removes it through window.courseClassList, after the page version is confirmed (A65). */
+async function pullClassList(){
+  try{const r=await keyFetch(ENDPOINT+'?type=classes',{}), j=await r.json();
+    if(r.ok&&j.ok&&(j.list===null||(j.list&&Array.isArray(j.list.classes)))){setClubList(j.list);render();}}catch(_){}}
+if(CLASS_LIST)window.courseClassList={get:()=>clubList,
+  save:async list=>{
+    if(!verOk&&!(await ensureVersion()))throw new Error(verStuck?'a newer page is on the server: tap Reload under Get latest marks':'the page version could not be checked: try again with signal');
+    await postFix({action:'classes',list},OUTBOX_TIMEOUT_MS); setClubList(list); render();}};
 async function postFix(body,ms){
   const ac=ms&&typeof AbortController==='function'?new AbortController():null, tm=ac?setTimeout(()=>ac.abort(),ms):0;
   try{

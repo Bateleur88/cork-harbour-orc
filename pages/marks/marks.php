@@ -9,6 +9,10 @@
  * page offers it as carried, for the RO to check. data/series.json (one name for every day, action "series" and GET
  * ?type=series) is kept exactly as before for pages up to 2026-10-06.37; the page from .38 neither reads nor writes it.
  * Fixes no longer carry a series: a "series" sent by a page not yet reloaded is ignored, never a reason to refuse the fix.
+ * The club's class list (STATUS A147, Pat 27 October 2026): data/classes.json, one list for every day, saved with action
+ * "classes" (the race key and the lock; "list": null removes it) and read with GET ?type=classes. The list is checked by
+ * class_list below; a list identical to the saved one writes nothing; the replaced list goes into data/classes-history.json
+ * (the first list ever saved and the last HISTORY_KEEP replaced). Only the test page uses it so far.
  * Courses are keyed race|start; each race's start groups are _starts|race; the day's series is _day. The older day-wide
  * _starts (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
  * Upload it as /marks/marks.php. It creates a "data" folder next to itself.
@@ -126,6 +130,29 @@ function same($a, $b) {               // constant-time compare, also on PHP 5.3-
   return $r === 0;
 }
 function valid_date($d) { return is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d); }
+
+/* The club's class list, as the page saves it: {"series": {"id", "name"}, "loaded": "YYYY-MM-DDTHH:MM:SS(.sss)Z",
+   "classes": [{"name", "fleets": [{"id", "name", "scoringSystem"}]}]}, nothing else; 1 to 30 classes, names of 1 to 40
+   characters and no two alike, 1 to 60 fleets each; Sail Scoring's ids are UUIDs. null if anything is wrong. */
+function keys_are($a, $keys) { if (!is_array($a) || count($a) !== count($keys)) return false; foreach ($keys as $k) if (!array_key_exists($k, $a)) return false; return true; }
+function a_list($a, $lo, $hi) { return is_array($a) && count($a) >= $lo && count($a) <= $hi && array_keys($a) === range(0, count($a) - 1); }
+function ss_id($v) { return is_string($v) && preg_match('/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/D', $v); }
+function filled($v, $max) { $s = name_text($v, $max); return ($s !== null && trim($s) !== '') ? $s : null; }
+function class_list($l) {
+  if (!keys_are($l, array('series', 'loaded', 'classes')) || !keys_are($l['series'], array('id', 'name'))) return null;
+  if (!ss_id($l['series']['id']) || filled($l['series']['name'], 100) === null) return null;
+  if (!is_string($l['loaded']) || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/D', $l['loaded'])) return null;
+  if (!a_list($l['classes'], 1, 30)) return null;
+  $seen = array();
+  foreach ($l['classes'] as $c) {
+    if (!keys_are($c, array('name', 'fleets')) || filled($c['name'], 40) === null || trim($c['name']) !== $c['name']) return null;
+    if (isset($seen[$c['name']]) || !a_list($c['fleets'], 1, 60)) return null;
+    $seen[$c['name']] = true;
+    foreach ($c['fleets'] as $f)
+      if (!keys_are($f, array('id', 'name', 'scoringSystem')) || !ss_id($f['id']) || filled($f['name'], 100) === null || filled($f['scoringSystem'], 40) === null) return null;
+  }
+  return strlen(json_encode($l)) > 50000 ? null : $l;
+}
 
 /* ---------- safe writes ----------
    A day file is never rewritten in place. The new contents go to a .tmp file, which is renamed over the
@@ -257,6 +284,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (file_exists($f)) { $j = json_decode(file_get_contents($f), true); if (is_array($j)) $s = $j; }
     out(200, array('ok' => true, 'name' => (string)arg($s, 'name', ''), 'updated' => (int)arg($s, 'updated', 0)));
   }
+  if (arg($_GET, 'type', '') === 'classes') {        // the club's class list (A147): null while none is saved
+    $c = load_json($dir . '/classes.json');
+    out(200, array('ok' => true, 'list' => isset($c['list']) && is_array($c['list']) ? $c['list'] : null, 'updated' => (int)arg($c, 'updated', 0)));
+  }
   $d = arg($_GET, 'date', '');
   if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
   if (arg($_GET, 'type', '') === 'coursehistory') {
@@ -314,6 +345,28 @@ if ($action === 'series') {
   save_json($dir . '/series.json', array('name' => $name, 'updated' => time()));
   flock($lh, LOCK_UN); fclose($lh);
   out(200, array('ok' => true, 'name' => $name));
+}
+
+/* ---------- POST action "classes": the club's class list (A147); "list": null removes it ---------- */
+if ($action === 'classes') {
+  if (!array_key_exists('list', $in)) out(400, array('ok' => false, 'error' => 'bad class list'));
+  $list = $in['list'] === null ? null : class_list($in['list']);
+  if ($in['list'] !== null && $list === null) out(400, array('ok' => false, 'error' => 'bad class list: series id and name, loaded time, 1 to 30 classes of 1 to 40 characters, each with 1 to 60 fleets (id, name, scoring system)'));
+  $f  = $dir . '/classes.json';
+  $hf = $dir . '/classes-history.json';
+  $lh = lock_data($dir);
+  $c  = load_json($f);
+  $old = array_key_exists('list', $c) ? $c['list'] : null;
+  if (json_encode($old) === json_encode($list)) { flock($lh, LOCK_UN); fclose($lh); out(200, array('ok' => true, 'unchanged' => true)); }
+  if (array_key_exists('list', $c)) {     // the replaced list goes into the history FIRST, as a course's does
+    $h = array_values(load_json($hf));
+    $h[] = array('list' => $old, 'updated' => (int)arg($c, 'updated', 0), 'replaced' => time());
+    if (count($h) > 1 + HISTORY_KEEP) $h = array_merge(array($h[0]), array_slice($h, -HISTORY_KEEP));
+    save_json($hf, $h);
+  }
+  save_json($f, array('list' => $list, 'updated' => time()));
+  flock($lh, LOCK_UN); fclose($lh);
+  out(200, array('ok' => true));
 }
 
 $d      = arg($in, 'date', '');

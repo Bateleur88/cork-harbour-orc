@@ -16,7 +16,15 @@
    Refresh (Sail Scoring's rule): each refresh returns a new refresh token and the old one stops working; presenting a
    replaced one is treated as theft and ends every grant. So one refresh at a time across tabs (navigator.locks, or a lock
    in localStorage where that is missing), the new refresh token is stored and read back before the new access token is
-   used, and a refresh that is refused or whose answer cannot be read clears the stored tokens: never sent again. */
+   used, and a refresh that is refused or whose answer cannot be read clears the stored tokens: never sent again.
+
+   Stage 2 Part A (STATUS A147, Pat 27 October 2026): the club's class list. A Sail Scoring fleet named
+   "CLASS (RATING SYSTEM)", with anything after the bracket, belongs to the class CLASS (the text before the first "(",
+   trimmed); a fleet with no "(" or nothing before it is not a class and is never offered. The scorer picks a series,
+   taps "Use this series' classes" (one more GET of its fleets), checks the classes, and saves them with "Save as the
+   club's class list". The page saves it (window.courseClassList, only on a test page, with the race key, in marks.php's
+   classes.json) so every RO device reads it; this file never reaches marks.php itself. The saved list holds class names,
+   fleet ids, names and scoring systems, the series and the time: no tokens. */
 (function(){
 'use strict';
 const STORE='test-';   // every browser storage key starts with this (checked by scripts/build_test.py)
@@ -135,15 +143,19 @@ async function ssApi(method,path,token){
 const panel=document.createElement('details');
 panel.className='sec setupOnly';panel.id='ssPanel';
 panel.innerHTML='<summary><h2>Sail Scoring (test)</h2></summary>'+
-  '<p class="cardnote">Read-only test of the Sail Scoring connection. Nothing here changes the course, the message or anything sent to Sail Scoring.</p>'+
+  '<p class="cardnote">Test of the Sail Scoring connection. Nothing is ever sent to Sail Scoring. A class list saved here sets the classes the class box offers on every device.</p>'+
   '<p class="status" id="ssState" role="status" aria-live="polite"></p>'+
   '<p class="status" id="ssDetail" hidden></p>'+
   '<p class="status" id="ssWs" hidden></p>'+
+  '<p class="status" id="ssClassState"></p>'+
+  '<button class="ghost" id="ssClassRemove" type="button" hidden>Remove saved class list</button>'+
   '<button class="ghost" id="ssConnect" type="button">Connect to Sail Scoring</button>'+
   '<button class="ghost" id="ssDisconnect" type="button" hidden>Disconnect</button>'+
   '<div id="ssData" hidden>'+
   '<div class="fields"><label>Series<select id="ssSeries"></select></label></div>'+
   '<h3>Fleets in this series</h3><div id="ssFleets"><p class="cardnote">Pick a series.</p></div>'+
+  '<button class="ghost" id="ssUseClasses" type="button" hidden>Use this series\' classes</button>'+
+  '<div id="ssClasses" hidden></div>'+
   '<h3 id="ssDayHead">Races on the race day</h3><div id="ssRaces"><p class="cardnote">Pick a series.</p></div>'+
   '<button class="ghost" id="ssReload" type="button">Read Sail Scoring again</button>'+
   '</div>';
@@ -189,13 +201,14 @@ async function loadAll(){
   }catch(e){fail(e);}
   finally{loading=false;}}
 async function loadSeries(id){
+  hideClasses();
   if(!id){$('ssFleets').innerHTML=$('ssRaces').innerHTML='<p class="cardnote">Pick a series.</p>';return;}
   $('ssFleets').innerHTML=$('ssRaces').innerHTML='<p class="cardnote">Reading…</p>';
   try{
     const[f,r]=await Promise.all([ssApi('GET','/series/'+encodeURIComponent(id)+'/fleets'),ssApi('GET','/series/'+encodeURIComponent(id)+'/races')]);
     if($('ssSeries').value!==id)return;
     fleets[id]=Array.isArray(f&&f.fleets)?f.fleets:[];racesBy[id]=Array.isArray(r&&r.races)?r.races:[];
-    showFleets(id);showRaces();
+    showFleets(id);showRaces();$('ssUseClasses').hidden=false;
   }catch(e){$('ssFleets').innerHTML=$('ssRaces').innerHTML='';fail(e);}}
 const cell=v=>v===null?'null':typeof v==='object'?JSON.stringify(v):String(v);
 // every field the API returns, as it returns it: one column per field, in the order first seen
@@ -219,6 +232,71 @@ function showRaces(){
     (r.starts&&r.starts.length?r.starts.map((s,i)=>'<div>Start '+(i+1)+': gun '+esc(s.startTime||'no time')+' · fleets: '+
       esc((s.fleetIds||[]).map(name).join(', ')||'none')+(s.course?' · course set ('+esc((s.course.legs||[]).length)+' legs)':'')+'</div>').join('')
       :'<div>No starts.</div>')+'</div>').join('');}
+
+/* ---------- the club's class list (A147) ---------- */
+const CL=()=>window.courseClassList||null;
+const when=iso=>{try{return new Date(iso).toLocaleString('en-IE',{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});}catch(_){return iso;}};
+function showClassState(){
+  const c=CL(), l=c&&c.get(), el=$('ssClassState');
+  el.className='status';
+  el.textContent=!c?'Class list: not available on this copy of the page':
+    l?'Class list: from '+l.series.name+', loaded '+when(l.loaded):'Class list: page defaults (none saved)';
+  $('ssClassRemove').hidden=!(c&&l);}
+// the fleets as classes: the class is the text before the first "(", trimmed; classes in the order their first fleet comes
+function classesFrom(list){
+  const classes=[], none=[];
+  list.forEach(f=>{const n=String(f.name||''), i=n.indexOf('('), c=i>=0?n.slice(0,i).trim():'';
+    if(!c){none.push(f);return;}
+    let k=classes.find(x=>x.name===c); if(!k)classes.push(k={name:c,fleets:[]});
+    k.fleets.push({id:f.id,name:n,scoringSystem:f.scoringSystem});});
+  return{classes,none};}
+// what marks.php would refuse, said before the Save button is offered
+function classProblems(cs){
+  const p=[];
+  if(cs.length>30)p.push(cs.length+' classes: at most 30 can be saved');
+  cs.forEach(c=>{if(c.name.length>40)p.push(c.name+': a class name can be at most 40 characters');
+    if(/[<>]/.test(c.name))p.push(c.name+': a class name cannot hold < or >');
+    if(c.fleets.length>60)p.push(c.name+': at most 60 fleets');
+    c.fleets.forEach(f=>{if(typeof f.scoringSystem!=='string'||!f.scoringSystem.trim())p.push(f.name+': no scoring system');
+      if(/[<>]/.test(f.name)||f.name.length>100)p.push(f.name+': a fleet name of at most 100 characters, without < or >');});});
+  return p;}
+let pending=null;   // the class list shown, waiting for Save or Cancel
+function hideClasses(){pending=null;$('ssClasses').hidden=true;$('ssClasses').innerHTML='';$('ssUseClasses').hidden=true;}
+async function useClasses(){
+  const id=$('ssSeries').value, s=(series||[]).find(x=>x.id===id);
+  if(!id||!s)return;
+  const box=$('ssClasses');box.hidden=false;box.innerHTML='<p class="cardnote">Reading the fleets…</p>';
+  let f;
+  try{f=await ssApi('GET','/series/'+encodeURIComponent(id)+'/fleets');}
+  catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
+  if($('ssSeries').value!==id)return;
+  const{classes,none}=classesFrom(Array.isArray(f&&f.fleets)?f.fleets:[]), probs=classProblems(classes);
+  pending=classes.length&&!probs.length?{series:{id:s.id,name:s.name},loaded:new Date().toISOString(),classes}:null;
+  box.innerHTML='<h3>Classes from '+esc(s.name)+'</h3>'+
+    (classes.length?classes.map(c=>'<div class="info"><b>'+esc(c.name)+'</b>'+
+      c.fleets.map(x=>'<div>'+esc(x.name)+' · '+esc(x.scoringSystem)+'</div>').join('')+'</div>').join('')
+      :'<p class="cardnote">No fleet in this series has a class.</p>')+
+    '<p><b>Not used as a class:</b> '+(none.length?esc(none.map(x=>x.name).join(', ')):'Every fleet has a class.')+'</p>'+
+    (probs.length?'<p class="status err">Cannot be saved: '+esc(probs.join('; '))+'</p>':'')+
+    (!CL()?'<p class="status err">This copy of the page cannot save a class list.</p>':'')+
+    '<p class="status" id="ssClassSaid" hidden></p>'+
+    (pending&&CL()?'<button class="ghost" id="ssClassSave" type="button">Save as the club\'s class list</button>':'')+
+    '<button class="ghost" id="ssClassCancel" type="button">Cancel</button>';
+  const sv=$('ssClassSave');
+  if(sv)sv.onclick=async()=>{
+    const said=$('ssClassSaid'), rec=pending;
+    if(!rec)return;
+    sv.disabled=true;said.hidden=false;said.className='status';said.textContent='Saving…';
+    try{await CL().save(rec);hideClasses();$('ssUseClasses').hidden=false;
+      $('ssClassState').textContent='Saved. Class list: from '+rec.series.name+', loaded '+when(rec.loaded);$('ssClassState').className='status ok';}
+    catch(e){sv.disabled=false;said.className='status err';said.textContent='Not saved: '+errText(e)+(e&&e.text?' ('+e.text+')':'');}};
+  $('ssClassCancel').onclick=()=>{hideClasses();$('ssUseClasses').hidden=false;};}
+async function removeClasses(){
+  const c=CL();if(!c||!c.get())return;
+  if(!confirm('Remove the saved class list?\n\nThe class box goes back to the page defaults (Class 1 Spinnaker … Class 3 Non Spinnaker) on every device. A start that already holds a class keeps it.'))return;
+  const el=$('ssClassState');el.className='status';el.textContent='Removing the class list…';
+  try{await c.save(null);showClassState();}
+  catch(e){el.className='status err';el.textContent='Not removed: '+errText(e)+(e&&e.text?' ('+e.text+')':'');}}
 
 /* ---------- connect, the return, disconnect ---------- */
 async function connect(){
@@ -285,10 +363,14 @@ $('ssConnect').onclick=()=>{connect().catch(fail);};
 $('ssDisconnect').onclick=()=>{disconnect();};
 $('ssReload').onclick=()=>{loadAll();};
 $('ssSeries').onchange=()=>{loadSeries($('ssSeries').value);};
+$('ssUseClasses').onclick=()=>{useClasses();};
+$('ssClassRemove').onclick=()=>{removeClasses();};
+document.addEventListener('course-class-list',showClassState);
 if(dayBox())dayBox().addEventListener('change',showRaces);
 // read only when the panel is opened, so a closed panel sends nothing
 panel.addEventListener('toggle',()=>{if(panel.open&&readTokens()&&!series)loadAll();});
 showConnected(!!readTokens());
+showClassState();
 say(readTokens()?'Connected to Sail Scoring. Open this panel to read it.':'Not connected.','');
 handleReturn().catch(fail);
 })();

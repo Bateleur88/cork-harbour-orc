@@ -80,6 +80,13 @@ still present and unchanged:
                 kept as text; the wind cleared keeps the series; refused 400, writing nothing: direction over 360, not a
                 number, negative or with 3 decimals, speed over 99, a field missing or extra, a list, null, text, another
                 field beside it, a bad series beside a good wind
+ 22  classes    the club's class list (A147): unset reads null; saved and read back whole by GET ?type=classes; an
+                identical save writes nothing; a new list puts the replaced one in classes-history.json (the first and
+                the last 5 kept); "list": null removes it (the removed list kept in the history); refused 400, writing
+                nothing: no list, extra or missing fields, a bad UUID, no classes, 31 classes, a 41-character or empty
+                or untrimmed class name, two classes alike, a class with no fleets or 61, a fleet missing its scoring
+                system, < or > in a name, a bad loaded time; a wrong key 403 on GET and POST; a write failing part-way
+                500 with classes.json unchanged; the day files and series.json untouched
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -922,6 +929,86 @@ def t20_series_before():
            f'{got}; refused {bad}; series.json still read {old_series!r}; nothing written {nothing_written}')
 
 
+def classes_file(d): return os.path.join(d, 'data', 'classes.json')
+def classes_hist(d): return os.path.join(d, 'data', 'classes-history.json')
+SID = '0f8fad5b-d9cb-469f-a165-70867728950e'
+def fid(n): return f'7c9e6679-7425-40de-944b-e07fc1f9{n:04x}'
+
+
+def class_rec(names=('SPIN 1', 'NON-SPIN 2'), loaded='2026-10-27T10:15:00.000Z', fleets=2):
+    return {'series': {'id': SID, 'name': 'Autumn League 2026'}, 'loaded': loaded,
+            'classes': [{'name': n, 'fleets': [{'id': fid(i * 100 + j), 'name': f'{n} ({sys_})', 'scoringSystem': sys_.lower()}
+                                              for j, sys_ in enumerate(['IRC', 'ECHO', 'ORC'][:fleets])]}
+                        for i, n in enumerate(names)]}
+
+
+def t22_classes():
+    d = setup('t22')
+    put = lambda lst, key=KEY: req(d, body={'action': 'classes', 'list': lst}, key=key)
+    get = lambda key=KEY: req(d, 'GET', query='type=classes', key=key)
+    day_before = (sha(day_file(d)), sha(course_file(d)))
+    s_unset, g = get()
+    unset = g.get('list', 'absent')
+    a = class_rec()
+    s = [put(a)[0]]
+    back = get()[1].get('list')
+    h0 = sha(classes_file(d))
+    same_st, same_j = put(a)
+    unchanged = same_j.get('unchanged') is True and sha(classes_file(d)) == h0 and not os.path.exists(classes_hist(d))
+    b = class_rec(('SPIN 1', 'SPIN 2', 'NON-SPIN 1'), loaded='2026-10-27T11:00:00Z', fleets=3)
+    s.append(put(b)[0])
+    hist1 = load(classes_hist(d))
+    first_in_hist = [v.get('list') for v in hist1.values()] == [a]
+    back_b = get()[1].get('list')
+    for i in range(7):                                              # 7 more lists: first + last 5 kept
+        s.append(put(class_rec((f'C{i}',)))[0])
+    hist = [v['list'] for v in load(classes_hist(d)).values()]
+    capped = len(hist) == 6 and hist[0] == a and hist[-1] == class_rec(('C5',))
+    before = sha(classes_file(d)), sha(classes_hist(d))
+    def bad(**ch):
+        r = class_rec()
+        for k, v in ch.items():
+            if k == 'series_id': r['series']['id'] = v
+            elif k == 'cls': r['classes'] = v
+            elif k == 'cname': r['classes'][0]['name'] = v
+            elif k == 'fleet0': r['classes'][0]['fleets'][0] = v
+            elif k == 'fleets': r['classes'][0]['fleets'] = v
+            elif k == 'extra': r['extra'] = v
+            elif k == 'drop': del r[v]
+            else: r[k] = v
+        return put(r)
+    f0 = {'id': fid(1), 'name': 'SPIN 1 (IRC)'}
+    refused = {'no list': req(d, body={'action': 'classes'}), 'extra field': bad(extra=1), 'no loaded': bad(drop='loaded'),
+               'bad uuid': bad(series_id='abc'), 'no classes': bad(cls=[]),
+               '31 classes': put(class_rec(tuple(f'C{i}' for i in range(31)), fleets=1)),
+               '41 chars': bad(cname='x' * 41), 'empty name': bad(cname='  '), 'untrimmed': bad(cname=' SPIN 1'),
+               'two alike': put(class_rec(('SPIN 1', 'SPIN 1'))), 'no fleets': bad(fleets=[]),
+               '61 fleets': bad(fleets=[dict(f0, id=fid(i), scoringSystem='irc') for i in range(61)]),
+               'no scoring': bad(fleet0=f0), 'angle bracket': bad(cname='<b>SPIN'), 'bad time': bad(loaded='27/10/2026'),
+               'classes not a list': bad(cls={'a': 1}), 'wrong key POST': put(a, key='wrong-key'),
+               'wrong key GET': get(key='wrong-key')}
+    got = {k: st for k, (st, j) in refused.items()}
+    want = {k: 400 for k in refused}
+    want['wrong key POST'] = want['wrong key GET'] = 403
+    kept = (sha(classes_file(d)), sha(classes_hist(d))) == before
+    os.makedirs(classes_file(d) + '.tmp')                           # temp path unusable -> save_json fails
+    wf_st, wf_j = put(a)
+    os.rmdir(classes_file(d) + '.tmp')
+    wf_kept = sha(classes_file(d)) == before[0] and not leftovers(d)
+    s.append(put(None)[0])
+    removed = get()[1]
+    removed_ok = removed.get('list', 'absent') is None and [v['list'] for v in load(classes_hist(d)).values()][-1] == class_rec(('C6',))
+    untouched = (sha(day_file(d)), sha(course_file(d))) == day_before and not os.path.exists(series_file(d))
+    ok, detail = intact(d)
+    report('22 class list', ok and s_unset == 200 and unset is None and s == [200] * 10 and back == a and same_st == 200
+           and unchanged and first_in_hist and back_b == b and capped and got == want and kept and wf_st == 500
+           and wf_kept and removed_ok and untouched,
+           f'unset {unset!r}; statuses {s}; identical save {"wrote nothing" if unchanged else "WROTE"}; history '
+           f'{len(hist)} kept, first {"kept" if capped else "NOT KEPT"}; refused {got if got != want else "all as expected"}; '
+           f'files {"unchanged" if kept else "CHANGED"}; write fails {wf_st} {wf_j.get("error")!r}; removed '
+           f'{"ok" if removed_ok else removed}; day files {"untouched" if untouched else "CHANGED"}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
@@ -930,7 +1017,7 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before, t21_day_wind):
+                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before, t21_day_wind, t22_classes):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

@@ -44,11 +44,14 @@ three, a test manifest that names /course/ anywhere, and a page whose manifest l
 manifest.webmanifest.
 Sail Scoring, Stage 1 (Pat, 27 October 2026): the test page, and only the test page, loads sailscoring-test.js, copied
 unchanged beside it, by one <script src="sailscoring-test.js?v=<version>"> before </body>, and its PAGE_VERSION ends
--test-ss1 (SS_LABEL). The live page must not name the file. Refused if the file's browser storage keys do not all start
+-test-ss2 (SS_LABEL; -ss1 was Stage 1). The live page must not name the file. Refused if the file's browser storage keys do not all start
 with STORE (the page's check, with the file's STORE exactly 'test-'), or it names /marks, or names PUT, PATCH or DELETE,
 or holds a request method other than its one POST (tokenPost: the token and revoke endpoints only) and its one GET
 (ssApi, which refuses any other method). A LOCAL build leaves the file out: its sign-in returns only to
 https://tradboats.ie/course-test/, which a LOCAL build may not name.
+Sail Scoring, Stage 2 Part A (STATUS A147, Pat 27 October 2026): the club's class list. The live page holds
+const CLASS_LIST=false; exactly once (refused otherwise), and every test page, LOCAL too, gets const CLASS_LIST=true;
+in its place, so only a test page reads, keeps or offers the class list saved in marks.php's classes.json.
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
 
 --label LOCAL builds for the local test site on this PC (php -S), never for upload. It differs from the normal build only in:
@@ -89,7 +92,8 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 # --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
 # whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
-SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss1', "const STORE='test-';"
+SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss2', "const STORE='test-';"
+CLASS_OFF, CLASS_ON = 'const CLASS_LIST=false;', 'const CLASS_LIST=true;'
 LOCAL_URLS = ('https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://unpkg.com/leaflet@1.9.4/dist/',
               'https://tile.openstreetmap.de/', 'https://tiles.openseamap.org/seamark/', 'https://wa.me/')
 LIVE_HOSTS = re.compile(r'tradboats|orc-ireland', re.I)
@@ -313,6 +317,8 @@ def build_page(src, label='', stamp=''):
         raise Refused(f'expected exactly one PAGE_VERSION, found {len(m)}')
     if SS_FILE in src:
         raise Refused(f'the live page names {SS_FILE}: only the test build may add it')
+    if src.count(CLASS_OFF) != 1 or 'CLASS_LIST=true' in src:
+        raise Refused(f'the live page must hold {CLASS_OFF} exactly once and never switch the class list on (A147)')
     version = m[0] + '-test' + (f'-L{stamp}' if label else f'-{SS_LABEL}')
     title_pre, banner_pre = ('LOCAL TEST – ', 'LOCAL TEST – ') if label else ('TEST – ', 'TEST COPY – ')
     t = src
@@ -320,6 +326,7 @@ def build_page(src, label='', stamp=''):
     t = replace_once(t, "const MARKS_BASE='/marks/', STORE='';",
                      f"const MARKS_BASE='{TEST_BASE}', STORE='{TEST_STORE}';", 'MARKS_BASE and STORE')
     t = replace_once(t, f"const PAGE_VERSION='{m[0]}';", f"const PAGE_VERSION='{version}';", 'PAGE_VERSION')
+    t = replace_once(t, CLASS_OFF, CLASS_ON, 'the class list switch (A147)')
     titles = re.findall(r'<title>([^<]*)</title>', t)
     if len(titles) != 1:
         raise Refused(f'expected exactly one <title>, found {len(titles)}')
@@ -341,7 +348,7 @@ def build_page(src, label='', stamp=''):
     if problems:
         raise Refused('the test page uses a browser storage key without STORE:\n  ' + '\n  '.join(problems))
     for need in (f"STORE='{TEST_STORE}'", f"MARKS_BASE='{TEST_BASE}'", "ENDPOINT=MARKS_BASE+'marks.php'",
-                 'id="testBanner"', f'PAGE_VERSION {version}</div>', f'<title>{title_pre}',
+                 'id="testBanner"', f'PAGE_VERSION {version}</div>', CLASS_ON, f'<title>{title_pre}',
                  '<meta name="robots" content="noindex,nofollow">'):
         if t.count(need) != 1:
             raise Refused(f'the test page must contain {need!r} exactly once (found {t.count(need)})')
