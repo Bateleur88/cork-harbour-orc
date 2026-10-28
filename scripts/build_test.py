@@ -44,7 +44,7 @@ three, a test manifest that names /course/ anywhere, and a page whose manifest l
 manifest.webmanifest.
 Sail Scoring, Stage 1 (Pat, 27 October 2026): the test page, and only the test page, loads sailscoring-test.js, copied
 unchanged beside it, by one <script src="sailscoring-test.js?v=<version>"> before </body>, and its PAGE_VERSION ends
--test-ss4 (SS_LABEL; -ss1 was Stage 1, -ss2 Stage 2 Part A, -ss3 Stage 2 Part B before #708). The live page must not name the file. Refused if the file's browser storage keys do not all start
+-test-ss5 (SS_LABEL; -ss1 was Stage 1, -ss2 Stage 2 Part A, -ss3 Stage 2 Part B before #708, -ss4 before the split). The live page must not name the file. Refused if the file's browser storage keys do not all start
 with STORE (the page's check, with the file's STORE exactly 'test-'), or it names /marks, or names DELETE anywhere, or
 names PUT or PATCH outside its table of writes (SS_WRITES, exactly as here: Stage 2 Part B's four requests, a POST of
 new races, a PATCH of a start, a POST of a start added to a race and a PUT of a start's course), or holds a request method other than its one POST
@@ -99,7 +99,7 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 # --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
 # whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
-SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss4', "const STORE='test-';"
+SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss5', "const STORE='test-';"
 CLASS_OFF, CLASS_ON = 'const CLASS_LIST=false;', 'const CLASS_LIST=true;'
 SEND_OFF, SEND_ON = 'const SS_SEND=false;', 'const SS_SEND=true;'
 # the panel's writes (A148): exactly these four, in this one line, and the guards every write passes
