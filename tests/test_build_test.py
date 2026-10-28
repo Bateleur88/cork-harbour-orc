@@ -151,11 +151,14 @@ altered in ways it must refuse and checks that it writes nothing:
  35  Sail       Sail Scoring, Stage 1 (Pat, 27 October 2026): the test build copies sailscoring-test.js byte for byte,
      Scoring    loads it once with ?v=<version> just before </body> (after the page's own script) and names it in
                 BUILD.txt; the live page and the LOCAL build never name it. Refused, writing nothing: a storage key
-                without STORE, STORE other than 'test-', /marks named, PUT, PATCH or DELETE named, a second POST, a
+                without STORE, STORE other than 'test-', /marks named, DELETE named, PUT or PATCH named outside the
+                table of writes, the table changed, a fourth request or a second POST, a write guard removed, a
                 tokenPost that no longer refuses other addresses, and a live page naming the file. Stage 2 Part A
                 (A147): the live page holds const CLASS_LIST=false; once and reads, fetches and saves the class list
                 only behind it; the test page holds const CLASS_LIST=true; once; the panel never posts to marks.php
-                itself; refused, writing nothing: a live page with the switch on, without it, or with two
+                itself; refused, writing nothing: a live page with the switch on, without it, or with two. Stage 2
+                Part B (A148): the same for const SS_SEND, and the page reads and saves the day's record only behind
+                it; the panel never reaches marks.php itself
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -207,10 +210,11 @@ def t0_build(tmp):
     checks = {
         'key.js from /marks-test/': '<script src="/marks-test/key.js"></script>' in test,
         'MARKS_BASE and STORE': "const MARKS_BASE='/marks-test/', STORE='test-';" in test,
-        'PAGE_VERSION -test-ss2': f"const PAGE_VERSION='{v}-test-ss2';" in test,
+        'PAGE_VERSION -test-ss3': f"const PAGE_VERSION='{v}-test-ss3';" in test,
         'class list switched on (A147)': test.count('const CLASS_LIST=true;') == 1 and 'CLASS_LIST=false' not in test,
+        'send switched on (A148)': test.count('const SS_SEND=true;') == 1 and 'SS_SEND=false' not in test,
         'no /marks other than /marks-test/': not re.search(r'/marks(?!-test/)', test),
-        'banner with version': f'PAGE_VERSION {v}-test-ss2</div>' in test and 'TEST COPY – not live data' in test,
+        'banner with version': f'PAGE_VERSION {v}-test-ss3</div>' in test and 'TEST COPY – not live data' in test,
         'TEST title': '<title>TEST – ' in test,
         'noindex': '<meta name="robots" content="noindex,nofollow">' in test,
         'marks.php byte-identical': read(os.path.join(out, 'marks-test', 'marks.php'), 'rb') == read(MARKS, 'rb'),
@@ -221,9 +225,10 @@ def t0_build(tmp):
     # nothing else changed: undo the known replacements and compare with the live page
     back = (test.replace('<script src="/marks-test/key.js"></script>', '<script src="/marks/key.js"></script>')
                 .replace("const MARKS_BASE='/marks-test/', STORE='test-';", "const MARKS_BASE='/marks/', STORE='';")
-                .replace(f"const PAGE_VERSION='{v}-test-ss2';", f"const PAGE_VERSION='{v}';")
+                .replace(f"const PAGE_VERSION='{v}-test-ss3';", f"const PAGE_VERSION='{v}';")
                 .replace('const CLASS_LIST=true;', 'const CLASS_LIST=false;')
-                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss2"></script>\n</body>', '</body>')
+                .replace('const SS_SEND=true;', 'const SS_SEND=false;')
+                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss3"></script>\n</body>', '</body>')
                 .replace('<title>TEST – ', '<title>')
                 .replace('<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', '<meta charset="utf-8">'))
     back = re.sub(r'<body>\n<div id="testBanner"[^\n]*</div>', '<body>', back)
@@ -1467,9 +1472,9 @@ def t28_local_build(tmp):
     g('the normal build names no LOCAL', 'LOCAL' not in nt and 'label LOCAL' not in read(os.path.join(norm, 'BUILD.txt')))
     g('the LOCAL build leaves sailscoring-test.js out', 'sailscoring-test' not in lt
       and not os.path.exists(os.path.join(loc, 'course-test', 'sailscoring-test.js')))
-    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss2';")
-              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss2</div>')
-              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss2"></script>\n</body>')
+    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss3';")
+              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss3</div>')
+              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss3"></script>\n</body>')
               .replace('<title>LOCAL TEST – ', '<title>TEST – ')
               .replace('>LOCAL TEST – not live data · ', '>TEST COPY – not live data · '))
     g('nothing else differs from the normal build', back == nt)
@@ -1939,7 +1944,7 @@ def t35_sailscoring(tmp):
     if r.returncode:
         return
     test = read(os.path.join(out, 'course-test', 'index.html'))
-    tag = f'<script src="sailscoring-test.js?v={v}-test-ss2"></script>'
+    tag = f'<script src="sailscoring-test.js?v={v}-test-ss3"></script>'
     g('the live page does not name the file', 'sailscoring-test' not in live)
     g('the test page loads it once, after the page\'s own script, just before </body>',
       test.count('sailscoring-test') == 1 and test.count('</script>\n' + tag + '\n</body>') == 1, test[-200:])
@@ -1952,8 +1957,15 @@ def t35_sailscoring(tmp):
         'a storage key without STORE': js.replace("localStorage.removeItem(PTR);", "localStorage.removeItem('x');"),
         "STORE other than 'test-'": js.replace("const STORE='test-';", "const STORE='';"),
         '/marks named': js.replace("const PENDING='pending';", "const PENDING='/marks/pending';"),
-        'PUT named': js.replace("const PENDING='pending';", "const PENDING='pending',M='PUT';"),
+        'PUT named outside the table': js.replace("const PENDING='pending';", "const PENDING='pending',M='PUT';"),
+        'PATCH named outside the table': js.replace("const PENDING='pending';", "const PENDING='pending',M='PATCH';"),
         'DELETE named': js.replace("const PENDING='pending';", "const PENDING='pending',M='DELETE';"),
+        'DELETE named in a comment': js.replace("const PENDING='pending';", "const PENDING='pending';   // delete"),
+        'a fourth write in the table': js.replace("course:['PUT',", "x:['PUT',/^\\/series$/],course:['PUT',"),
+        'a write to another address': js.replace("\\/course\\?replace=true$/]", "\\/course$/]"),
+        'the write guard removed': js.replace("if(!w||!checked||!checked.ok)throw", "if(!w)throw"),
+        'a fourth request': js.replace("const PENDING='pending';", "const PENDING='pending';fetch(API);"),
+        'a request another way': js.replace("const PENDING='pending';", "const PENDING='pending';navigator.sendBeacon(API);"),
         'a second POST': js.replace("const PENDING='pending';", "const PENDING='pending';fetch(API,{method:'POST'});"),
         'tokenPost no longer refusing other addresses': js.replace("if(url!==TOKEN&&url!==REVOKE)throw", "if(!url)throw"),
         'ssApi no longer refusing other methods': js.replace("if(method!=='GET')throw", "if(!method)throw"),
@@ -1980,9 +1992,22 @@ def t35_sailscoring(tmp):
       and live.count('if(CLASS_LIST)await pullClassList();') == 1 and live.count('if(CLASS_LIST)window.courseClassList=') == 1
       and live.count('await pullClassList()') == 1 and live.count('window.courseClassList=') == 1)
     g('class list: the panel never reaches marks.php itself', "action:'classes'" not in js and 'classes.json' in js)
+    # Stage 2 Part B (A148): the send is off in the live source, on in the test page, and the page's part only behind it
+    g('send: the live page holds SS_SEND=false once and never true',
+      live.count('const SS_SEND=false;') == 1 and 'SS_SEND=true' not in live)
+    g('send: the test page holds SS_SEND=true once and never false',
+      test.count('const SS_SEND=true;') == 1 and 'SS_SEND=false' not in test)
+    g('send: the live page offers the send only behind the switch',
+      live.count('if(SS_SEND)window.courseSailScoring=') == 1 and live.count('courseSailScoring') == 1
+      and live.count("action:'sailscoring'") == 1 and live.count('?type=sailscoring') == 1)
+    g('send: the panel never reaches marks.php itself', "action:'sailscoring'" not in js and 'type=sailscoring' not in js
+      and 'sailscoring-DAY.json' in js)
     for name, text in {'CLASS_LIST=true in the live page': live.replace('const CLASS_LIST=false;', 'const CLASS_LIST=true;'),
                        'no CLASS_LIST switch in the live page': live.replace('const CLASS_LIST=false;', ''),
-                       'two CLASS_LIST switches': live.replace('const CLASS_LIST=false;', 'const CLASS_LIST=false;const CLASS_LIST=false;')}.items():
+                       'two CLASS_LIST switches': live.replace('const CLASS_LIST=false;', 'const CLASS_LIST=false;const CLASS_LIST=false;'),
+                       'SS_SEND=true in the live page': live.replace('const SS_SEND=false;', 'const SS_SEND=true;'),
+                       'no SS_SEND switch in the live page': live.replace('const SS_SEND=false;', ''),
+                       'two SS_SEND switches': live.replace('const SS_SEND=false;', 'const SS_SEND=false;const SS_SEND=false;')}.items():
         p = os.path.join(tmp, 'bad35c.html')
         with open(p, 'w', encoding='utf-8', newline='') as f:
             f.write(text)

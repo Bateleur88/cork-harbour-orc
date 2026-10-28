@@ -87,6 +87,13 @@ still present and unchanged:
                 or untrimmed class name, two classes alike, a class with no fleets or 61, a fleet missing its scoring
                 system, < or > in a name, a bad loaded time; a wrong key 403 on GET and POST; a write failing part-way
                 500 with classes.json unchanged; the day files and series.json untouched
+ 23  sailscoring the day's link to Sail Scoring (A148): unset reads null; saved and read back whole by GET
+                ?type=sailscoring&date=; an identical save writes nothing; a new record puts the replaced one in
+                sailscoring-history-DAY.json (the first and the last 5 kept); another day's record is separate; refused
+                400, writing nothing: no record, extra or missing fields, a bad UUID, a bad state or sent time, 10 races,
+                a race number 0 or 10 or repeated, an id used twice, 10 starts, a start number repeated, a course
+                fingerprint not 64 lower-case hex, a bad date; a wrong key 403 on GET and POST; a write failing part-way
+                500 with the record unchanged; the day files untouched
 
 Each throwaway folder gets its own key.js with a race key, and data/ro-key.php with an RO key, both generated at run
 time; no real key is ever in this repository.
@@ -1009,6 +1016,85 @@ def t22_classes():
            f'{"ok" if removed_ok else removed}; day files {"untouched" if untouched else "CHANGED"}; {detail}')
 
 
+def ss_file(d, day=DAY): return os.path.join(d, 'data', f'sailscoring-{day}.json')
+def ss_hist(d, day=DAY): return os.path.join(d, 'data', f'sailscoring-history-{day}.json')
+
+
+def ss_rec(races=((1, 2), (2, 1)), state='sent', sent='2026-10-28T10:15:00.000Z', course='a' * 64):
+    n = iter(range(1, 999))
+    return {'series': {'id': fid(900), 'name': 'Autumn League TESTING'}, 'sent': sent, 'state': state,
+            'races': [{'race': r, 'id': fid(next(n)), 'starts': [{'start': i + 1, 'id': fid(next(n)), 'course': course}
+                                                                for i in range(k)]} for r, k in races]}
+
+
+def t23_sailscoring():
+    d = setup('t23')
+    put = lambda rec, key=KEY, day=DAY: req(d, body={'action': 'sailscoring', 'date': day, 'record': rec}, key=key)
+    get = lambda key=KEY, day=DAY: req(d, 'GET', query=f'type=sailscoring&date={day}', key=key)
+    day_before = (sha(day_file(d)), sha(course_file(d)))
+    s_unset, g = get()
+    unset = g.get('record', 'absent')
+    a = ss_rec(state='sending', course='')
+    s = [put(a)[0]]
+    back = get()[1].get('record')
+    h0 = sha(ss_file(d))
+    same_st, same_j = put(a)
+    unchanged = same_j.get('unchanged') is True and sha(ss_file(d)) == h0 and not os.path.exists(ss_hist(d))
+    b = ss_rec()
+    s.append(put(b)[0])
+    first_in_hist = [v.get('record') for v in load(ss_hist(d)).values()] == [a]
+    back_b = get()[1].get('record')
+    for i in range(7):                                              # 7 more records: first + last 5 kept
+        s.append(put(ss_rec(races=((1, i + 1),)))[0])
+    hist = [v['record'] for v in load(ss_hist(d)).values()]
+    capped = len(hist) == 6 and hist[0] == a and hist[-1] == ss_rec(races=((1, 6),))
+    other = '2026-09-22'
+    s.append(put(b, day=other)[0])
+    separate = get(day=other)[1].get('record') == b and get()[1].get('record') == ss_rec(races=((1, 7),))
+    before = sha(ss_file(d)), sha(ss_hist(d))
+    def bad(fn):
+        r = ss_rec()
+        fn(r)
+        return put(r)
+    def setk(path, v):
+        def f(r):
+            o = r
+            for k in path[:-1]: o = o[k]
+            o[path[-1]] = v
+        return f
+    refused = {'no record': req(d, body={'action': 'sailscoring', 'date': DAY}), 'record null': put(None),
+               'extra field': bad(setk(('extra',), 1)), 'no state': bad(lambda r: r.pop('state')),
+               'bad state': bad(setk(('state',), 'done')), 'bad sent': bad(setk(('sent',), '28/10/2026')),
+               'bad series uuid': bad(setk(('series', 'id'), 'abc')), 'empty series name': bad(setk(('series', 'name'), ' ')),
+               '10 races': put(ss_rec(races=tuple((i % 9 + 1, 1) for i in range(10)))),
+               'race 0': bad(setk(('races', 0, 'race'), 0)), 'race 10': bad(setk(('races', 0, 'race'), 10)),
+               'race as text': bad(setk(('races', 0, 'race'), '1')), 'race twice': put(ss_rec(races=((1, 1), (1, 1)))),
+               'id twice': bad(setk(('races', 1, 'id'), fid(1))), 'start id = race id': bad(setk(('races', 0, 'starts', 0, 'id'), fid(1))),
+               '10 starts': put(ss_rec(races=((1, 10),))), 'start twice': bad(setk(('races', 0, 'starts', 1, 'start'), 1)),
+               'start extra field': bad(setk(('races', 0, 'starts', 0, 'x'), 1)),
+               'course upper hex': bad(setk(('races', 0, 'starts', 0, 'course'), 'A' * 64)),
+               'course short': bad(setk(('races', 0, 'starts', 0, 'course'), 'a' * 63)),
+               'races not a list': bad(setk(('races',), {'a': 1})), 'bad date': put(b, day='28-10-2026'),
+               'wrong key POST': put(b, key='wrong-key'), 'wrong key GET': get(key='wrong-key')}
+    got = {k: st for k, (st, j) in refused.items()}
+    want = {k: 400 for k in refused}
+    want['wrong key POST'] = want['wrong key GET'] = 403
+    kept = (sha(ss_file(d)), sha(ss_hist(d))) == before
+    os.makedirs(ss_file(d) + '.tmp')                                # temp path unusable -> save_json fails
+    wf_st, wf_j = put(b)
+    os.rmdir(ss_file(d) + '.tmp')
+    wf_kept = sha(ss_file(d)) == before[0] and not leftovers(d)
+    untouched = (sha(day_file(d)), sha(course_file(d))) == day_before
+    ok, detail = intact(d)
+    report('23 Sail Scoring link', ok and s_unset == 200 and unset is None and s == [200] * 10 and back == a
+           and same_st == 200 and unchanged and first_in_hist and back_b == b and capped and separate and got == want
+           and kept and wf_st == 500 and wf_kept and untouched,
+           f'unset {unset!r}; statuses {s}; identical save {"wrote nothing" if unchanged else "WROTE"}; history '
+           f'{len(hist)} kept, first {"kept" if capped else "NOT KEPT"}; other day {"separate" if separate else "MIXED"}; '
+           f'refused {got if got != want else "all as expected"}; files {"unchanged" if kept else "CHANGED"}; write fails '
+           f'{wf_st} {wf_j.get("error")!r}; day files {"untouched" if untouched else "CHANGED"}; {detail}')
+
+
 def main():
     if not PHPCGI or not os.path.exists(PHPCGI):
         print('php-cgi not found: install PHP, or set PHP_CGI to the php-cgi executable')
@@ -1017,7 +1103,8 @@ def main():
     try:
         for t in (t0_normal, t1_encode, t2_damaged, t3_write_fails, t4_moved, t6_key, t7_race_groups, t8_series, t9_tap,
                   t10_ro_key, t11_history, t12_history_cap, t13_history_fails, t14_history_concurrent, t15_decisions,
-                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before, t21_day_wind, t22_classes):
+                  t16_old_pages, t17_picked, t18_withdraw, t19_day_series, t20_series_before, t21_day_wind, t22_classes,
+                  t23_sailscoring):
             t()
         for run in (1, 2, 3):
             t5_concurrent(run)

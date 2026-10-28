@@ -13,6 +13,12 @@
  * "classes" (the race key and the lock; "list": null removes it) and read with GET ?type=classes. The list is checked by
  * class_list below; a list identical to the saved one writes nothing; the replaced list goes into data/classes-history.json
  * (the first list ever saved and the last HISTORY_KEEP replaced). Only the test page uses it so far.
+ * The race day's link to Sail Scoring (STATUS A148, Pat 28 October 2026): data/sailscoring-YYYY-MM-DD.json, which Sail
+ * Scoring series, race and start each page race and start was sent to, saved with action "sailscoring" (the race key and
+ * the lock) and read with GET ?type=sailscoring&date=. The record is checked by ss_record below; it holds ids, the series
+ * name, the time and each start's course fingerprint, no tokens. A record identical to the saved one writes nothing; the
+ * replaced one goes into data/sailscoring-history-YYYY-MM-DD.json (the first of the day and the last HISTORY_KEEP).
+ * Only the test page uses it so far.
  * Courses are keyed race|start; each race's start groups are _starts|race; the day's series is _day. The older day-wide
  * _starts (one set of groups for every race of the day) is still accepted, from pages not yet reloaded.
  * Upload it as /marks/marks.php. It creates a "data" folder next to itself.
@@ -152,6 +158,30 @@ function class_list($l) {
       if (!keys_are($f, array('id', 'name', 'scoringSystem')) || !ss_id($f['id']) || filled($f['name'], 100) === null || filled($f['scoringSystem'], 40) === null) return null;
   }
   return strlen(json_encode($l)) > 50000 ? null : $l;
+}
+// A148: {series {id, name}, sent (ISO time, Z), state "sending"|"sent", races: 0-9 of {race 1-9, id, starts: 0-9 of
+// {start 1-9, id, course: "" or a SHA-256 in hex}}}, race numbers and ids unique in the day, start numbers and ids in a race
+function ss_record($r) {
+  if (!keys_are($r, array('series', 'sent', 'state', 'races')) || !keys_are($r['series'], array('id', 'name'))) return null;
+  if (!ss_id($r['series']['id']) || filled($r['series']['name'], 100) === null) return null;
+  if (!is_string($r['sent']) || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/D', $r['sent'])) return null;
+  if ($r['state'] !== 'sending' && $r['state'] !== 'sent') return null;
+  if (!is_array($r['races']) || ($r['races'] && !a_list($r['races'], 1, 9))) return null;
+  $rn = array(); $ids = array();
+  foreach ($r['races'] as $x) {
+    if (!keys_are($x, array('race', 'id', 'starts')) || !is_int($x['race']) || $x['race'] < 1 || $x['race'] > 9 || !ss_id($x['id'])) return null;
+    if (isset($rn[$x['race']]) || isset($ids[strtolower($x['id'])])) return null;
+    $rn[$x['race']] = true; $ids[strtolower($x['id'])] = true;
+    if (!is_array($x['starts']) || ($x['starts'] && !a_list($x['starts'], 1, 9))) return null;
+    $sn = array();
+    foreach ($x['starts'] as $t) {
+      if (!keys_are($t, array('start', 'id', 'course')) || !is_int($t['start']) || $t['start'] < 1 || $t['start'] > 9 || !ss_id($t['id'])) return null;
+      if (!is_string($t['course']) || !preg_match('/^([0-9a-f]{64})?$/D', $t['course'])) return null;
+      if (isset($sn[$t['start']]) || isset($ids[strtolower($t['id'])])) return null;
+      $sn[$t['start']] = true; $ids[strtolower($t['id'])] = true;
+    }
+  }
+  return strlen(json_encode($r)) > 50000 ? null : $r;
 }
 
 /* ---------- safe writes ----------
@@ -296,6 +326,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (file_exists($f)) { $j = json_decode(file_get_contents($f), true); if (is_array($j)) $h = $j; }
     out(200, array('ok' => true, 'date' => $d, 'history' => (object)$h));
   }
+  if (arg($_GET, 'type', '') === 'sailscoring') {    // the day's link to Sail Scoring (A148): null while none is saved
+    $c = load_json($dir . '/sailscoring-' . $d . '.json');
+    out(200, array('ok' => true, 'date' => $d, 'record' => isset($c['record']) && is_array($c['record']) ? $c['record'] : null, 'updated' => (int)arg($c, 'updated', 0)));
+  }
   if (arg($_GET, 'type', '') === 'decisions') {
     $f = $dir . '/decisions-' . $d . '.json';
     $r = array();
@@ -372,6 +406,27 @@ if ($action === 'classes') {
 $d      = arg($in, 'date', '');
 $id     = arg($in, 'id', '');
 if (!valid_date($d)) out(400, array('ok' => false, 'error' => 'bad date'));
+
+/* ---------- POST action "sailscoring": the day's link to Sail Scoring (A148) ---------- */
+if ($action === 'sailscoring') {
+  $rec = ss_record(arg($in, 'record', null));
+  if ($rec === null) out(400, array('ok' => false, 'error' => 'bad Sail Scoring record: series id and name, sent time, state, up to 9 races and 9 starts each with ids and course fingerprints'));
+  $f  = $dir . '/sailscoring-' . $d . '.json';
+  $hf = $dir . '/sailscoring-history-' . $d . '.json';
+  $lh = lock_data($dir);
+  $c  = load_json($f);
+  $old = array_key_exists('record', $c) ? $c['record'] : null;
+  if (json_encode($old) === json_encode($rec)) { flock($lh, LOCK_UN); fclose($lh); out(200, array('ok' => true, 'unchanged' => true)); }
+  if ($old !== null) {      // the replaced record goes into the history FIRST, as a course's does
+    $h = array_values(load_json($hf));
+    $h[] = array('record' => $old, 'updated' => (int)arg($c, 'updated', 0), 'replaced' => time());
+    if (count($h) > 1 + HISTORY_KEEP) $h = array_merge(array($h[0]), array_slice($h, -HISTORY_KEEP));
+    save_json($hf, $h);
+  }
+  save_json($f, array('record' => $rec, 'updated' => time()));
+  flock($lh, LOCK_UN); fclose($lh);
+  out(200, array('ok' => true));
+}
 
 /* ---------- POST action "course": save one built course (race|start), one race's start groups (_starts|race) or the
    day's series (_day) ---------- */

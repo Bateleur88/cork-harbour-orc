@@ -4611,6 +4611,30 @@ if(CLASS_LIST)window.courseClassList={get:()=>clubList,
   save:async list=>{
     if(!verOk&&!(await ensureVersion()))throw new Error(verStuck?'a newer page is on the server: tap Reload under Get latest marks':'the page version could not be checked: try again with signal');
     await postFix({action:'classes',list},OUTBOX_TIMEOUT_MS); setClubList(list); render();}};
+/* A148 (Pat, 28 October 2026): the test page's Sail Scoring panel sends the race day to Sail Scoring. SS_SEND is false
+   here and true only in a test copy made by scripts/build_test.py: while it is false nothing here runs and the panel is
+   given nothing. The page gives the panel, read only, what it would send: the day loaded, its series, and each race's
+   starts with their classes, start time and the Copy for Sail Scoring document (ccDoc, unchanged). It reads and saves
+   the day's link to Sail Scoring (marks.php sailscoring-DAY.json), the save after the page version is confirmed (A65).
+   The panel never reaches marks.php itself. */
+const SS_SEND=false;
+if(SS_SEND)window.courseSailScoring={
+  day:()=>S.pulledDay&&$('day').value===S.pulledDay?S.pulledDay:'',
+  series:()=>daySeries(),
+  unsent:()=>allKeys().filter(isDirty).length,
+  races:()=>{const out=[];
+    for(let r=1;r<=9;r++){
+      const starts=classesOf(r).map((c,st)=>({start:st+1,classes:c.slice(),time:S.startTimes[ckey(r,st)]||'',
+        hasCourse:(S.courses[ckey(r,st)]||[]).length>0,doc:ccDoc(r,st)})).filter(x=>x.classes.length||x.hasCourse);
+      if(starts.length)out.push({race:r,starts});}
+    return out;},
+  load:async day=>{
+    const r=await keyFetch(ENDPOINT+'?type=sailscoring&date='+encodeURIComponent(day),{});let j=null;try{j=await r.json();}catch(_){}
+    if(!r.ok||!j||!j.ok)throw new Error('the record of the last send could not be read'+(j&&j.error?' ('+j.error+')':' (server '+r.status+')'));
+    return j.record||null;},
+  save:async(day,record)=>{
+    if(!verOk&&!(await ensureVersion()))throw new Error(verStuck?'a newer page is on the server: tap Reload under Get latest marks':'the page version could not be checked: try again with signal');
+    await postFix({action:'sailscoring',date:day,record},OUTBOX_TIMEOUT_MS);}};
 async function postFix(body,ms){
   const ac=ms&&typeof AbortController==='function'?new AbortController():null, tm=ac?setTimeout(()=>ac.abort(),ms):0;
   try{

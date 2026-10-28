@@ -1,4 +1,4 @@
-/* Sail Scoring connection, Stage 1: read-only, TEST COPY ONLY (Pat, 27 October 2026).
+/* Sail Scoring connection, TEST COPY ONLY: Stage 1 read-only (Pat, 27 October 2026), Stage 2 the class list and the send.
    scripts/build_test.py adds this file to the test page (/course-test/) and nowhere else: the live page never loads it, and
    pages/course/course_v8.html does not name it. It adds the closed "Sail Scoring (test)" panel at the foot of the page and
    touches nothing else on it, apart from putting the Race day box back after the sign-in (as the RO would set it by hand).
@@ -8,8 +8,10 @@
    because the page is often opened with ?v=. The code is exchanged at the token endpoint from the browser; if the browser
    refuses that (CORS or anything else), the exact error is shown and nothing more is tried: no relay, no proxy.
 
-   Read-only: every API call goes through ssApi, which refuses any method but GET. The only other requests are to the token
-   endpoint (the code exchange and the refresh) and to the revoke endpoint (Disconnect), all through tokenPost.
+   Reads: every read goes through ssApi, which refuses any method but GET. Writes (Stage 2 Part B): only through ssWrite,
+   which knows exactly three requests (WRITES) and refuses each unless the review has just checked that send. The only
+   other requests are to the token endpoint (the code exchange and the refresh) and to the revoke endpoint (Disconnect),
+   all through tokenPost. Nothing is ever removed from Sail Scoring: no race or start is taken away.
 
    Tokens: localStorage, under a key naming the client and the workspace (STORE+'sailscoring|'+CLIENT_ID+'|tokens|'+slug),
    with STORE+'sailscoring|'+CLIENT_ID+'|in-use' naming the workspace in use. Never printed, never in saved race data.
@@ -24,7 +26,22 @@
    taps "Use this series' classes" (one more GET of its fleets), checks the classes, and saves them with "Save as the
    club's class list". The page saves it (window.courseClassList, only on a test page, with the race key, in marks.php's
    classes.json) so every RO device reads it; this file never reaches marks.php itself. The saved list holds class names,
-   fleet ids, names and scoring systems, the series and the time: no tokens. */
+   fleet ids, names and scoring systems, the series and the time: no tokens.
+
+   Stage 2 Part B (STATUS A148, Pat 28 October 2026): send the race day to Sail Scoring, after a review. The scorer picks
+   the series at every send (nothing is preselected). One start on the page is one start in Sail Scoring. A page class
+   matches the class of the same name (trimmed) among the PICKED series' fleets, by the rule above, with that series' own
+   fleet ids; fleets with no bracket are not managed: never added, never taken off a start. Page Race n is the n-th race of
+   the series on the race day, unless the day's record names its race; a missing race is created after the series' last
+   race, with no name, its id and its starts' ids chosen here. A start is found by its id from the record, else by its
+   fleets; it is given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
+   for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
+   series; a start with no gun time, no course, an INCOMPLETE course or no classes; a start missing from a race that is
+   already in Sail Scoring (no call adds one); one page start whose classes are in two Sail Scoring starts, or two page
+   starts in one; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
+   Sail Scoring but not on the page is named and left. Changing the classes or gun time of a start with finishes, and
+   sending to a series other than the day's last one, each need their own tick. The record of the send (marks.php's
+   sailscoring-DAY.json, through window.courseSailScoring) is saved before anything is created and again after. */
 (function(){
 'use strict';
 const STORE='test-';   // every browser storage key starts with this (checked by scripts/build_test.py)
@@ -143,7 +160,7 @@ async function ssApi(method,path,token){
 const panel=document.createElement('details');
 panel.className='sec setupOnly';panel.id='ssPanel';
 panel.innerHTML='<summary><h2>Sail Scoring (test)</h2></summary>'+
-  '<p class="cardnote">Test of the Sail Scoring connection. Nothing is ever sent to Sail Scoring. A class list saved here sets the classes the class box offers on every device.</p>'+
+  '<p class="cardnote">Test of the Sail Scoring connection. Sail Scoring is written only by Send, after its review, and only to a series whose name contains TESTING. A class list saved here sets the classes the class box offers on every device.</p>'+
   '<p class="status" id="ssState" role="status" aria-live="polite"></p>'+
   '<p class="status" id="ssDetail" hidden></p>'+
   '<p class="status" id="ssWs" hidden></p>'+
@@ -158,6 +175,10 @@ panel.innerHTML='<summary><h2>Sail Scoring (test)</h2></summary>'+
   '<div id="ssClasses" hidden></div>'+
   '<h3 id="ssDayHead">Races on the race day</h3><div id="ssRaces"><p class="cardnote">Pick a series.</p></div>'+
   '<button class="ghost" id="ssReload" type="button">Read Sail Scoring again</button>'+
+  '<h3>Send the race day to Sail Scoring</h3>'+
+  '<div class="fields"><label>Send to series<select id="ssSendSeries"></select></label></div>'+
+  '<button class="ghost" id="ssReviewBtn" type="button" disabled>Review the send</button>'+
+  '<div id="ssReview" hidden></div>'+
   '</div>';
 const foot=document.querySelector('.wrap>.foot');
 if(foot)foot.parentNode.insertBefore(panel,foot);else document.body.appendChild(panel);
@@ -195,6 +216,7 @@ async function loadAll(){
     sel.innerHTML='<option value="">Pick a series</option>'+series.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name+
       (s.startDate||s.endDate?' ('+(s.startDate||'?')+' to '+(s.endDate||'?')+')':'')+(s.archived?' · archived':'')+(s.asPublished?' · as published':''))+'</option>').join('');
     if(was&&series.some(s=>s.id===was))sel.value=was;   // only the RO's own pick, kept on Read again; never picked for them
+    sendSeriesList();
     const t=readTokens();
     say('Connected to Sail Scoring.','ok',t&&!t.refresh?'Sail Scoring gave no refresh token: the connection lasts an hour.':'');
     if(sel.value)await loadSeries(sel.value);
@@ -298,6 +320,232 @@ async function removeClasses(){
   try{await c.save(null);showClassState();}
   catch(e){el.className='status err';el.textContent='Not removed: '+errText(e)+(e&&e.text?' ('+e.text+')':'');}}
 
+/* ---------- the send (A148) ---------- */
+const PG=()=>window.courseSailScoring||null;
+const SEND_TESTING='TESTING';
+const isId=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+function newId(){
+  if(crypto.randomUUID)return crypto.randomUUID();
+  const b=crypto.getRandomValues(new Uint8Array(16));b[6]=b[6]&15|64;b[8]=b[8]&63|128;
+  const h=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');
+  return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);}
+async function sha(text){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(d),x=>x.toString(16).padStart(2,'0')).join('');}
+const hm=t=>{const m=String(t||'').match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);return m?m[1]+':'+m[2]+(m[3]&&m[3]!=='00'?':'+m[3]:''):'';};
+const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+const ssErr=(r,body)=>'HTTP '+r.status+(body&&body.error?' '+body.error:'')+(body&&body.message?': '+body.message:'')+
+  (body&&Array.isArray(body.problems)&&body.problems.length?' ('+body.problems.map(x=>x.field+': '+x.message).join('; ')+')':'');
+
+/* The writes: exactly these three requests. checked is set only by a review whose stops are all clear (the workspace
+   ORC Ireland, the series named with TESTING, the series picked for this send), and holds every race and start the send
+   may touch; it is cleared when the send ends. Anything else is refused before a request is made. */
+const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],course:['PUT',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})\/course\?replace=true$/]};
+let checked=null;
+async function ssWrite(op,path,body,key){
+  const w=WRITES[op];
+  if(!w||!checked||!checked.ok)throw new Error('Refused: '+op+' without a checked send');
+  const m=path.match(w[1]);
+  if(!m)throw new Error('Refused: '+op+' to '+path);
+  if(op==='races'){
+    if(m[1]!==checked.series||!body||!Array.isArray(body.races)||!body.races.every(x=>checked.newRaces.has(x.id)&&
+      Array.isArray(x.starts)&&x.starts.every(y=>checked.newStarts.has(y.id))))throw new Error('Refused: races not checked for this send');}
+  else if(!checked.starts.has(m[1]+'|'+m[2]))throw new Error('Refused: a start not checked for this send');
+  const go=async tk=>{
+    const ac=new AbortController(), tm=setTimeout(()=>ac.abort(),WAIT_MS);
+    try{return await fetch(API+path,{method:w[0],headers:{Authorization:'Bearer '+tk,'Content-Type':'application/json','Idempotency-Key':key},
+      body:JSON.stringify(body),cache:'no-store',credentials:'omit',signal:ac.signal});}
+    catch(e){throw new Error('Sail Scoring not reached: '+errText(e));}
+    finally{clearTimeout(tm);}};
+  let tk=(await freshAccess('')).access;
+  let r=await go(tk);
+  if(r.status===401){tk=(await freshAccess(tk)).access;r=await go(tk);}   // the same Idempotency-Key: never done twice
+  let res=null;try{res=await r.json();}catch(_){}
+  if(!r.ok)throw new Error(ssErr(r,res));
+  return res;}
+
+function sendSeriesList(){
+  const sel=$('ssSendSeries');
+  sel.innerHTML='<option value="">Pick the series to send to</option>'+(series||[]).map(s=>'<option value="'+esc(s.id)+'">'+
+    esc(s.name+(s.archived?' · archived':'')+(s.asPublished?' · as published':''))+'</option>').join('');
+  sel.value='';$('ssReviewBtn').disabled=true;hideReview();}
+function hideReview(){plan=null;$('ssReview').hidden=true;$('ssReview').innerHTML='';}
+let plan=null;   // the send the review showed: what Send does, and nothing more
+
+// fleet names, and each fleet's class (the A147 rule) in the picked series
+function classMap(list){const{classes}=classesFrom(list), byName={}, fleetClass={};
+  classes.forEach(c=>{byName[c.name]=c.fleets.map(f=>f.id);c.fleets.forEach(f=>fleetClass[f.id]=c.name);});
+  return{byName,fleetClass,fleetName:Object.fromEntries(list.map(f=>[f.id,f.name]))};}
+function legsOf(c){if(!c||!Array.isArray(c.legs)||!c.legs.length)return 'none';
+  const nm=typeof c.distanceNm==='number'?c.distanceNm:c.legs.reduce((a,l)=>a+(+l.distanceNm||0),0);
+  return c.legs.length+' leg'+(c.legs.length>1?'s':'')+', '+nm.toFixed(2)+' nm';}
+function docLegs(d){const l=d.legs||[];return l.length+' leg'+(l.length>1?'s':'')+', '+l.reduce((a,x)=>a+(+x.distance||0),0).toFixed(2)+' nm';}
+
+async function review(){
+  hideReview();
+  const P=PG(), box=$('ssReview'), sid=$('ssSendSeries').value, ser=(series||[]).find(x=>x.id===sid);
+  if(!ser)return;
+  box.hidden=false;box.innerHTML='<p class="cardnote">Reading Sail Scoring…</p>';
+  if(!P){box.innerHTML='<p class="status err">This copy of the page cannot send to Sail Scoring.</p>';return;}
+  const day=P.day();
+  if(!day){box.innerHTML='<p class="status err">Nothing to review: tap Get latest marks for the race day in the Race day box first.</p>';return;}
+  let ws,fl,rl,rec;
+  try{[ws,fl,rl,rec]=await Promise.all([ssApi('GET','/workspaces'),ssApi('GET','/series/'+sid+'/fleets'),ssApi('GET','/series/'+sid+'/races'),P.load(day)]);}
+  catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
+  if($('ssSendSeries').value!==sid)return;
+  const page=P.races(), heading=P.series(), stops=[], wsl=Array.isArray(ws&&ws.workspaces)?ws.workspaces:[];
+  if(!(wsl.length===1&&String(wsl[0].name).trim()===EXPECTED_WS))stops.push('The test copy is connected to '+(wsl.map(x=>x.name).join(', ')||'no workspace')+', not '+EXPECTED_WS+'.');
+  if(!String(ser.name).includes(SEND_TESTING))stops.push('The series '+ser.name+' does not have '+SEND_TESTING+' in its name: this test copy sends only to a test series.');
+  const fleetList=Array.isArray(fl&&fl.fleets)?fl.fleets:[], cm=classMap(fleetList);
+  const races=(Array.isArray(rl&&rl.races)?rl.races:[]);
+  const dayRaces=races.filter(r=>r.date===day).sort((a,b)=>a.number-b.number);
+  const old=rec&&rec.series&&rec.series.id===sid?rec:null;      // a record of another series names nothing here
+  const moved=rec&&rec.series&&rec.series.id!==sid?rec:null;
+  const label=(n,c)=>c.length?c.join(', '):'none';
+  const nameF=f=>cm.fleetClass[f]||cm.fleetName[f]||'unknown fleet';
+  const clsOf=ids=>[...new Set(ids.map(nameF))];
+  const claimed=new Set(), out=[], items=[];   // out: per page race; items: what Send does
+  for(const pr of page){
+    const orec=old&&old.races.find(x=>x.race===pr.race);
+    let R=orec?races.find(x=>x.id===orec.id):null, fresh=false, rid;
+    if(!R&&!orec){const c=dayRaces[pr.race-1];
+      if(c&&claimed.has(c.id))stops.push('Race '+pr.race+': Sail Scoring\'s race '+c.number+' on this date is already linked to another page race.');
+      else if(c)R=c;}
+    if(R){rid=R.id;claimed.add(R.id);}else{fresh=true;rid=orec?orec.id:newId();}
+    const ro={race:pr.race,id:rid,fresh,number:R?R.number:null,starts:[],notOnPage:[]};
+    out.push(ro);
+    // each page start: its classes, fleets, time and course document
+    const ps=pr.starts.map(st=>{
+      const where='Race '+pr.race+', Start '+st.start, d=st.doc||{};
+      const p={start:st.start,classes:st.classes.map(c=>c.trim()),time:st.time,where,doc:d,want:[],notes:[]};
+      if(!p.classes.length)stops.push(where+' has a course but no classes.');
+      p.classes.forEach(c=>{if(!cm.byName[c])stops.push('Class '+c+' ('+where+') has no matching class in '+ser.name+'.');else p.want.push(...cm.byName[c]);});
+      if(!st.time)stops.push(where+' has no gun time.');
+      if(d.block)stops.push(where+': no course to send ('+d.block+')');
+      const inc=(d.warns||[]).filter(t=>/^INCOMPLETE/.test(t));
+      if(inc.length)stops.push(where+': the course is INCOMPLETE: '+inc.join(' '));
+      p.notes=(d.warns||[]).filter(t=>/^STAND-IN/.test(t));
+      return p;});
+    if(R){
+      // the start each page start is: by the record's id, else by its fleets
+      ps.forEach(p=>{const os=orec&&orec.starts.find(x=>x.start===p.start), byId=os&&R.starts.find(x=>x.id===os.id);
+        const cand=R.starts.filter(x=>(x.fleetIds||[]).some(f=>p.want.includes(f)));
+        if(byId)p.S=byId;
+        else if(cand.length===1)p.S=cand[0];
+        else if(!cand.length)stops.push('Race '+R.number+' in '+ser.name+' has no start for '+label(0,p.classes)+': add the start in Sail Scoring, then send again.');
+        else stops.push(p.where+': its classes are in '+(cand.length===2?'two':cand.length)+' starts in Sail Scoring (race '+R.number+', '+cand.map(x=>'start '+(R.starts.indexOf(x)+1)).join(' and ')+').');
+        p.os=os&&p.S&&os.id===p.S.id?os:null;});
+      ps.forEach(p=>{if(!p.S)return;const twin=ps.find(q=>q!==p&&q.S===p.S);
+        if(twin&&twin.start<p.start)stops.push('Starts '+twin.start+' and '+p.start+' of Race '+pr.race+' on the page are one start in Sail Scoring (race '+R.number+', start '+(R.starts.indexOf(p.S)+1)+'): add a start in Sail Scoring for '+label(0,p.classes)+', then send again.');});
+      // a fleet the page wants that sits in a Sail Scoring start no page start is
+      ps.forEach(p=>{if(!p.S)return;R.starts.forEach(x=>{if(x===p.S||ps.some(q=>q.S===x))return;
+        if((x.fleetIds||[]).some(f=>p.want.includes(f)))stops.push(p.where+': its classes are in two starts in Sail Scoring (race '+R.number+', start '+(R.starts.indexOf(p.S)+1)+' and start '+(R.starts.indexOf(x)+1)+').');});});
+      R.starts.forEach((x,i)=>{if(!ps.some(q=>q.S===x))ro.notOnPage.push('Start '+(i+1)+' ('+(clsOf(x.fleetIds||[]).join(', ')||'no fleets')+', gun '+(hm(x.startTime)||'none')+')');});}
+    else ps.forEach(p=>{const os=orec&&orec.starts.find(x=>x.start===p.start);p.newId=os?os.id:newId();});
+    for(const p of ps){
+      const hash=p.doc.text?await sha(p.doc.text):'', doc=p.doc.text?JSON.parse(p.doc.text):null;
+      const st={start:p.start,where:p.where,notes:p.notes,hash,doc,want:p.want};
+      if(R&&p.S){
+        const cur=p.S.fleetIds||[], keep=cur.filter(f=>!cm.fleetClass[f]);   // fleets with no class: never taken off
+        st.id=p.S.id;st.cur=cur;st.fleets=[...new Set(p.want.concat(keep))];
+        st.fleetsChange=!sameSet(cur,st.fleets);st.timeChange=hm(p.S.startTime)!==hm(p.time);
+        st.courseChange=!(p.os&&p.os.course&&p.os.course===hash);
+        st.before={classes:clsOf(cur),time:hm(p.S.startTime)||'none',course:legsOf(p.S.course)};}
+      else if(!R){st.id=p.newId;st.fleets=p.want.slice();st.created=true;st.fleetsChange=st.timeChange=st.courseChange=true;}
+      st.after={classes:clsOf(st.fleets||p.want),time:hm(p.time)||'none',course:doc?docLegs(doc):'none'};
+      st.time=p.time;st.oldHash=p.os?p.os.course:'';
+      ro.starts.push(st);}}
+  dayRaces.forEach(r=>{if(!claimed.has(r.id)&&!out.some(o=>o.id===r.id))out.push({extra:true,number:r.number,starts:r.starts||[]});});
+  // finishes: a start with finishes whose classes or gun time would change needs its own tick
+  let comp=null;
+  for(const ro of out.filter(o=>!o.extra&&!o.fresh)){
+    if(!ro.starts.some(s=>s.id&&!s.created&&(s.fleetsChange||s.timeChange)))continue;
+    let fin;try{fin=await ssApi('GET','/races/'+ro.id+'/finishes');}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
+    const list=Array.isArray(fin&&fin.finishes)?fin.finishes:[];
+    if(!list.length)continue;
+    if(!comp){try{const c=await ssApi('GET','/series/'+sid+'/competitors');comp=Array.isArray(c&&c.competitors)?c.competitors:[];}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}}
+    const fleetsDone=new Set(), unknown=list.some(f=>!f.competitorId);
+    list.forEach(f=>{const c=comp.find(x=>x.id===f.competitorId);if(c)(c.fleetIds||[]).forEach(x=>fleetsDone.add(x));else if(f.competitorId)fleetsDone.add('?');});
+    ro.starts.forEach(s=>{if(s.cur&&(s.fleetsChange||s.timeChange)&&(unknown||fleetsDone.has('?')||s.cur.some(f=>fleetsDone.has(f))))s.finishes=true;});}
+  if($('ssSendSeries').value!==sid)return;
+  const work=out.filter(o=>!o.extra).some(o=>o.fresh||o.starts.some(s=>s.fleetsChange||s.timeChange||s.courseChange));
+  const needFin=out.some(o=>(o.starts||[]).some(s=>s.finishes));
+  plan={sid,ser,day,page:JSON.stringify(page),out,stops,old,moved,heading,work};
+  const ch=(a,b,c)=>c?'<span class="caut">'+esc(a)+' → '+esc(b)+'</span>':esc(b)+' <small>(unchanged)</small>';
+  box.innerHTML='<p><b>Message heading:</b> '+esc(heading||'(no series set for this day)')+' · <b>Sending to:</b> '+esc(ser.name)+'</p>'+
+    (P.unsent()?'<p class="cardnote caut">This device has '+P.unsent()+' course change'+(P.unsent()>1?'s':'')+' not yet saved to the server: the send uses the courses as they are on this device.</p>':'')+
+    (stops.length?'<div class="info"><p class="status err"><b>Nothing can be sent until these are put right:</b></p>'+stops.map(t=>'<p class="status err">'+esc(t)+'</p>').join('')+'</div>':'')+
+    (moved?'<p class="status caut">This race day was sent to '+esc(moved.series.name)+' on '+esc(when(moved.sent))+'; sending to '+esc(ser.name)+' will create it there too.</p>'+
+      '<label><input type="checkbox" id="ssMoveOk"> Send to '+esc(ser.name)+' as well</label>':'')+
+    out.map(o=>o.extra?'<div class="info"><b>Sail Scoring race '+esc(o.number)+'</b><div>In Sail Scoring but not on the page: remove it in Sail Scoring if it should go.</div></div>':
+      '<div class="info"><b>Race '+o.race+(o.fresh?' → a new race in '+esc(ser.name)+' (numbered by Sail Scoring)':' → Sail Scoring race '+esc(o.number))+'</b>'+
+      o.starts.map(s=>'<div><b>Start '+s.start+(s.created?' (new)':'')+'</b>'+
+        (s.created?'<div>Classes: '+esc(s.after.classes.join(', '))+'</div><div>Gun: '+esc(s.after.time)+'</div><div>Course: '+esc(s.after.course)+'</div>':
+          (s.before?'<div>Classes: '+ch(s.before.classes.join(', ')||'none',s.after.classes.join(', '),s.fleetsChange)+'</div>'+
+            '<div>Gun: '+ch(s.before.time,s.after.time,s.timeChange)+'</div><div>Course: '+ch(s.before.course,s.after.course,s.courseChange)+'</div>':''))+
+        (s.finishes?'<div class="status err">has finishes</div>':'')+
+        s.notes.map(t=>'<div class="cardnote caut">'+esc(t)+'</div>').join('')+'</div>').join('')+
+      o.notOnPage.map(t=>'<div>'+esc(t)+': In Sail Scoring but not on the page: remove it in Sail Scoring if it should go.</div>').join('')+'</div>').join('')+
+    (needFin?'<label><input type="checkbox" id="ssFinOk"> Change the classes or gun time of the starts marked "has finishes"</label>':'')+
+    (!work&&!stops.length?'<p class="status ok">Nothing to send.</p>':'')+
+    '<p class="status" id="ssSendSaid" hidden></p><div id="ssResults"></div>'+
+    '<button class="ghost" id="ssSendBtn" type="button" disabled>Send to Sail Scoring</button>'+
+    '<button class="ghost" id="ssReviewCancel" type="button">Cancel</button>';
+  const upd=()=>{const b=$('ssSendBtn');if(b)b.disabled=!plan||!!plan.stops.length||!plan.work||(plan.moved&&!$('ssMoveOk').checked)||(needFin&&!$('ssFinOk').checked);};
+  if($('ssMoveOk'))$('ssMoveOk').onchange=upd;
+  if($('ssFinOk'))$('ssFinOk').onchange=upd;
+  upd();
+  $('ssSendBtn').onclick=()=>{send().catch(e=>{say(errText(e),'err');});};
+  $('ssReviewCancel').onclick=()=>{$('ssSendSeries').value='';$('ssReviewBtn').disabled=true;hideReview();};}
+
+// the record of the send: every page race and start with its Sail Scoring id and the course last confirmed sent
+function recordOf(pl,state,courseOf){
+  return{series:{id:pl.ser.id,name:pl.ser.name},sent:pl.at,state,
+    races:pl.out.filter(o=>!o.extra).map(o=>({race:o.race,id:o.id,starts:o.starts.map(s=>({start:s.start,id:s.id,course:courseOf(s)}))}))};}
+async function send(){
+  const pl=plan, P=PG(), said=$('ssSendSaid'), res=$('ssResults'), btn=$('ssSendBtn');
+  if(!pl||pl.stops.length||!P)return;
+  if(JSON.stringify(P.races())!==pl.page||P.day()!==pl.day){said.hidden=false;said.className='status err';said.textContent='The page has changed since the review: review again.';btn.disabled=true;return;}
+  btn.disabled=true;$('ssReviewCancel').disabled=true;said.hidden=false;said.className='status';said.textContent='Sending…';
+  pl.at=new Date().toISOString();
+  const sendId=newId(), lines=[], line=(t,ok)=>{lines.push('<p class="status '+(ok?'ok':'err')+'">'+esc(t)+'</p>');res.innerHTML=lines.join('');};
+  const races=pl.out.filter(o=>!o.extra), fresh=races.filter(o=>o.fresh), done=new Map();   // done: start id -> course hash now in Sail Scoring
+  checked={ok:true,series:pl.sid,newRaces:new Set(fresh.map(o=>o.id)),newStarts:new Set(fresh.flatMap(o=>o.starts.map(s=>s.id))),
+    starts:new Set(races.flatMap(o=>o.starts.map(s=>o.id+'|'+s.id)))};
+  try{
+    // 1. the record, with the ids about to be created, before anything is created: a repeat finds them by id
+    if(fresh.length){
+      try{await P.save(pl.day,recordOf(pl,'sending',s=>s.created?'':(s.oldHash||'')));}
+      catch(e){said.className='status err';said.textContent='Nothing sent: the record of the send could not be saved first: '+errText(e)+(e&&e.text?' ('+e.text+')':'');return;}
+      // 2. the new races, with their starts
+      try{await ssWrite('races','/series/'+pl.sid+'/races',{races:fresh.map(o=>({id:o.id,date:pl.day,starts:o.starts.map(s=>({id:s.id,fleetIds:s.fleets,startTime:hm(s.time)}))}))},sendId+':races');
+        fresh.forEach(o=>{o.ok=true;line('Race '+o.race+': created, with '+o.starts.length+' start'+(o.starts.length>1?'s':'')+'.',true);});}
+      catch(e){fresh.forEach(o=>line('Race '+o.race+': not created: '+e.message,false));}}
+    // 3. starts already in Sail Scoring: a fleet moving between two starts leaves the one first (a fleet starts once per race)
+    for(const o of races.filter(o=>!o.fresh)){
+      const ch=o.starts.filter(s=>s.fleetsChange||s.timeChange);
+      for(const s of ch){const gone=s.cur.filter(f=>!s.fleets.includes(f));
+        if(gone.length&&o.starts.some(q=>q!==s&&gone.some(f=>q.fleets.includes(f)))){
+          try{await ssWrite('start','/races/'+o.id+'/starts/'+s.id,{fleetIds:s.cur.filter(f=>s.fleets.includes(f))},sendId+':leave:'+s.id);}
+          catch(e){s.fail='Race '+o.race+', Start '+s.start+': classes not changed: '+e.message;}}}
+      for(const s of ch){if(s.fail){line(s.fail,false);continue;}
+        const body={};if(s.fleetsChange)body.fleetIds=s.fleets;if(s.timeChange)body.startTime=hm(s.time);
+        try{await ssWrite('start','/races/'+o.id+'/starts/'+s.id,body,sendId+':start:'+s.id);
+          line('Race '+o.race+', Start '+s.start+': '+[s.fleetsChange&&'classes',s.timeChange&&'gun time'].filter(Boolean).join(' and ')+' done.',true);}
+        catch(e){s.fail=1;line('Race '+o.race+', Start '+s.start+': '+[s.fleetsChange&&'classes',s.timeChange&&'gun time'].filter(Boolean).join(' and ')+' failed: '+e.message,false);}}}
+    // 4. the courses
+    for(const o of races){if(o.fresh&&!o.ok)continue;
+      for(const s of o.starts){
+        if(!s.courseChange){done.set(s.id,s.oldHash);continue;}
+        try{await ssWrite('course','/races/'+o.id+'/starts/'+s.id+'/course?replace=true',s.doc,sendId+':course:'+s.id);
+          done.set(s.id,s.hash);line('Race '+o.race+', Start '+s.start+': course done.',true);}
+        catch(e){line('Race '+o.race+', Start '+s.start+': course failed: '+e.message,false);}}}
+  }finally{checked=null;}
+  // 5. the record again: what Sail Scoring now holds; a failed part is sent again by the next send
+  try{await P.save(pl.day,recordOf(pl,'sent',s=>done.has(s.id)?done.get(s.id)||'':(s.created?'':(s.oldHash||''))));
+    said.className='status ok';said.textContent='Sent to '+pl.ser.name+'. Review again to check: a repeat sends only what is still different.';}
+  catch(e){said.className='status err';said.textContent='Sent, but the record of the send could not be saved: '+errText(e)+(e&&e.text?' ('+e.text+')':'')+'. Send again: nothing is doubled.';}
+  plan=null;$('ssSendSeries').value='';$('ssReviewBtn').disabled=true;$('ssReviewCancel').disabled=false;$('ssReviewCancel').textContent='Close';}
+
 /* ---------- connect, the return, disconnect ---------- */
 async function connect(){
   if(location.origin+location.pathname.replace(/index\.html$/,'')!==REDIRECT_URI){
@@ -364,9 +612,11 @@ $('ssDisconnect').onclick=()=>{disconnect();};
 $('ssReload').onclick=()=>{loadAll();};
 $('ssSeries').onchange=()=>{loadSeries($('ssSeries').value);};
 $('ssUseClasses').onclick=()=>{useClasses();};
+$('ssSendSeries').onchange=()=>{hideReview();$('ssReviewBtn').disabled=!$('ssSendSeries').value;};
+$('ssReviewBtn').onclick=()=>{review().catch(fail);};
 $('ssClassRemove').onclick=()=>{removeClasses();};
 document.addEventListener('course-class-list',showClassState);
-if(dayBox())dayBox().addEventListener('change',showRaces);
+if(dayBox())dayBox().addEventListener('change',()=>{showRaces();hideReview();});
 // read only when the panel is opened, so a closed panel sends nothing
 panel.addEventListener('toggle',()=>{if(panel.open&&readTokens()&&!series)loadAll();});
 showConnected(!!readTokens());
