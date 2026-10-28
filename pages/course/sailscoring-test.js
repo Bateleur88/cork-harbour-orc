@@ -36,7 +36,8 @@
    race, with no name, its id and its starts' ids chosen here. A start is found by its id from the record, else by its
    fleets; it is given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
    for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
-   series; a start with no gun time, no course, an INCOMPLETE course or no classes; a start missing from a race that is
+   series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course or no
+   classes; a start missing from a race that is
    already in Sail Scoring (no call adds one); one page start whose classes are in two Sail Scoring starts, or two page
    starts in one; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
    Sail Scoring but not on the page is named and left. Changing the classes or gun time of a start with finishes, and
@@ -394,6 +395,7 @@ async function review(){
   if($('ssSendSeries').value!==sid)return;
   const page=P.races(), heading=P.series(), stops=[], wsl=Array.isArray(ws&&ws.workspaces)?ws.workspaces:[];
   if(!(wsl.length===1&&String(wsl[0].name).trim()===EXPECTED_WS))stops.push('The test copy is connected to '+(wsl.map(x=>x.name).join(', ')||'no workspace')+', not '+EXPECTED_WS+'.');
+  if(P.unsent())stops.push('This device has course changes not yet saved: save them first, then send.');
   if(!String(ser.name).includes(SEND_TESTING))stops.push('The series '+ser.name+' does not have '+SEND_TESTING+' in its name: this test copy sends only to a test series.');
   const fleetList=Array.isArray(fl&&fl.fleets)?fl.fleets:[], cm=classMap(fleetList);
   const races=(Array.isArray(rl&&rl.races)?rl.races:[]);
@@ -472,7 +474,6 @@ async function review(){
   plan={sid,ser,day,page:JSON.stringify(page),out,stops,old,moved,heading,work};
   const ch=(a,b,c)=>c?'<span class="caut">'+esc(a)+' → '+esc(b)+'</span>':esc(b)+' <small>(unchanged)</small>';
   box.innerHTML='<p><b>Message heading:</b> '+esc(heading||'(no series set for this day)')+' · <b>Sending to:</b> '+esc(ser.name)+'</p>'+
-    (P.unsent()?'<p class="cardnote caut">This device has '+P.unsent()+' course change'+(P.unsent()>1?'s':'')+' not yet saved to the server: the send uses the courses as they are on this device.</p>':'')+
     (stops.length?'<div class="info"><p class="status err"><b>Nothing can be sent until these are put right:</b></p>'+stops.map(t=>'<p class="status err">'+esc(t)+'</p>').join('')+'</div>':'')+
     (moved?'<p class="status caut">This race day was sent to '+esc(moved.series.name)+' on '+esc(when(moved.sent))+'; sending to '+esc(ser.name)+' will create it there too.</p>'+
       '<label><input type="checkbox" id="ssMoveOk"> Send to '+esc(ser.name)+' as well</label>':'')+
