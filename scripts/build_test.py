@@ -44,12 +44,13 @@ three, a test manifest that names /course/ anywhere, and a page whose manifest l
 manifest.webmanifest.
 Sail Scoring, Stage 1 (Pat, 27 October 2026): the test page, and only the test page, loads sailscoring-test.js, copied
 unchanged beside it, by one <script src="sailscoring-test.js?v=<version>"> before </body>, and its PAGE_VERSION ends
--test-ss3 (SS_LABEL; -ss1 was Stage 1, -ss2 Stage 2 Part A). The live page must not name the file. Refused if the file's browser storage keys do not all start
+-test-ss4 (SS_LABEL; -ss1 was Stage 1, -ss2 Stage 2 Part A, -ss3 Stage 2 Part B before #708). The live page must not name the file. Refused if the file's browser storage keys do not all start
 with STORE (the page's check, with the file's STORE exactly 'test-'), or it names /marks, or names DELETE anywhere, or
-names PUT or PATCH outside its table of writes (SS_WRITES, exactly as here: Stage 2 Part B's three requests, a POST of
-new races, a PATCH of a start and a PUT of a start's course), or holds a request method other than its one POST
+names PUT or PATCH outside its table of writes (SS_WRITES, exactly as here: Stage 2 Part B's four requests, a POST of
+new races, a PATCH of a start, a POST of a start added to a race and a PUT of a start's course), or holds a request method other than its one POST
 (tokenPost: the token and revoke endpoints only), its one GET (ssApi, which refuses any other method) and its one write
-(ssWrite, which refuses any write the review has not checked, SS_GUARD), or makes a request anywhere else. A LOCAL
+(ssWrite, which refuses any write the review has not checked, SS_GUARD, and any added start the review has not
+checked, SS_ADD_GUARD), or makes a request anywhere else. A LOCAL
 build leaves the file out: its sign-in returns only to
 https://tradboats.ie/course-test/, which a LOCAL build may not name.
 Sail Scoring, Stage 2 Part A (STATUS A147, Pat 27 October 2026): the club's class list. The live page holds
@@ -98,14 +99,17 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 # --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
 # whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
-SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss3', "const STORE='test-';"
+SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss4', "const STORE='test-';"
 CLASS_OFF, CLASS_ON = 'const CLASS_LIST=false;', 'const CLASS_LIST=true;'
 SEND_OFF, SEND_ON = 'const SS_SEND=false;', 'const SS_SEND=true;'
-# the panel's writes (A148): exactly these three, in this one line, and the guard every write passes
+# the panel's writes (A148): exactly these four, in this one line, and the guards every write passes
 SS_WRITES = (r"const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],"
              r"start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],"
+             r"add:['POST',/^\/races\/([0-9a-f-]{36})\/starts$/],"
              r"course:['PUT',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})\/course\?replace=true$/]};")
 SS_GUARD = "if(!w||!checked||!checked.ok)throw new Error('Refused: '+op+' without a checked send');"
+SS_ADD_GUARD = ("else if(op==='add'){if(!body||!checked.addStarts.has(m[1]+'|'+body.id))"
+                "throw new Error('Refused: a start not checked to be added');}")
 LOCAL_URLS = ('https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://unpkg.com/leaflet@1.9.4/dist/',
               'https://tile.openstreetmap.de/', 'https://tiles.openseamap.org/seamark/', 'https://wa.me/')
 LIVE_HOSTS = re.compile(r'tradboats|orc-ireland', re.I)
@@ -289,8 +293,8 @@ def local_url_problems(text):
 def ss_problems(js):
     """What is wrong with sailscoring-test.js (Sail Scoring), as readable lines: every browser storage key starts with
     STORE and its STORE is 'test-'; it never names /marks; it never names DELETE; its only requests are GET (ssApi),
-    one POST (tokenPost, to the token and revoke endpoints only) and ssWrite's three writes, SS_WRITES exactly, each
-    refused without a checked send (SS_GUARD)."""
+    one POST (tokenPost, to the token and revoke endpoints only) and ssWrite's four writes, SS_WRITES exactly, each
+    refused without a checked send (SS_GUARD), an added start also without its check (SS_ADD_GUARD)."""
     code = strip_js(js)
     out = storage_problems('<script>' + js + '</script>')
     if code.count(SS_STORE) != 1:
@@ -300,7 +304,7 @@ def ss_problems(js):
     if re.search(r'\bDELETE\b', js, re.I):
         out.append('it names DELETE: nothing is ever removed from Sail Scoring')
     if code.count(SS_WRITES) != 1:
-        out.append('its table of writes must be SS_WRITES exactly, once (the three requests of A148)')
+        out.append('its table of writes must be SS_WRITES exactly, once (the four requests of A148)')
     rest = code.replace(SS_WRITES, '')
     for m in ('PUT', 'PATCH'):
         if re.search(r'\b' + m + r'\b', rest):
@@ -313,6 +317,8 @@ def ss_problems(js):
         out.append('it must make requests only in tokenPost, ssApi and ssWrite: three fetch calls and nothing else')
     if code.count(SS_GUARD) != 1:
         out.append('ssWrite must refuse every write without a checked send (SS_GUARD)')
+    if code.count(SS_ADD_GUARD) != 1:
+        out.append('ssWrite must refuse every added start the review has not checked (SS_ADD_GUARD)')
     if code.count("if(url!==TOKEN&&url!==REVOKE)throw") != 1 or code.count("if(method!=='GET')throw") != 1:
         out.append('tokenPost must refuse any address but the token and revoke endpoints, and ssApi any method but GET')
     return out

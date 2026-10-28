@@ -9,7 +9,7 @@
    refuses that (CORS or anything else), the exact error is shown and nothing more is tried: no relay, no proxy.
 
    Reads: every read goes through ssApi, which refuses any method but GET. Writes (Stage 2 Part B): only through ssWrite,
-   which knows exactly three requests (WRITES) and refuses each unless the review has just checked that send. The only
+   which knows exactly four requests (WRITES) and refuses each unless the review has just checked that send. The only
    other requests are to the token endpoint (the code exchange and the refresh) and to the revoke endpoint (Disconnect),
    all through tokenPost. Nothing is ever removed from Sail Scoring: no race or start is taken away.
 
@@ -34,11 +34,11 @@
    fleet ids; fleets with no bracket are not managed: never added, never taken off a start. Page Race n is the n-th race of
    the series on the race day, unless the day's record names its race; a missing race is created after the series' last
    race, with no name, its id and its starts' ids chosen here. A start is found by its id from the record, else by its
-   fleets; it is given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
+   fleets; a start none of whose classes is in the race yet is added to it, its id chosen here (Sail Scoring #708). It is
+   given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
    for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
    series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course or no
-   classes; a start missing from a race that is
-   already in Sail Scoring (no call adds one); one page start whose classes are in two Sail Scoring starts, or two page
+   classes; one page start whose classes are in two Sail Scoring starts, or two page
    starts in one; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
    Sail Scoring but not on the page is named and left. Changing the classes or gun time of a start with finishes, and
    sending to a series other than the day's last one, each need their own tick. The record of the send (marks.php's
@@ -337,10 +337,10 @@ const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
 const ssErr=(r,body)=>'HTTP '+r.status+(body&&body.error?' '+body.error:'')+(body&&body.message?': '+body.message:'')+
   (body&&Array.isArray(body.problems)&&body.problems.length?' ('+body.problems.map(x=>x.field+': '+x.message).join('; ')+')':'');
 
-/* The writes: exactly these three requests. checked is set only by a review whose stops are all clear (the workspace
+/* The writes: exactly these four requests. checked is set only by a review whose stops are all clear (the workspace
    ORC Ireland, the series named with TESTING, the series picked for this send), and holds every race and start the send
    may touch; it is cleared when the send ends. Anything else is refused before a request is made. */
-const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],course:['PUT',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})\/course\?replace=true$/]};
+const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],add:['POST',/^\/races\/([0-9a-f-]{36})\/starts$/],course:['PUT',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})\/course\?replace=true$/]};
 let checked=null;
 async function ssWrite(op,path,body,key){
   const w=WRITES[op];
@@ -350,6 +350,7 @@ async function ssWrite(op,path,body,key){
   if(op==='races'){
     if(m[1]!==checked.series||!body||!Array.isArray(body.races)||!body.races.every(x=>checked.newRaces.has(x.id)&&
       Array.isArray(x.starts)&&x.starts.every(y=>checked.newStarts.has(y.id))))throw new Error('Refused: races not checked for this send');}
+  else if(op==='add'){if(!body||!checked.addStarts.has(m[1]+'|'+body.id))throw new Error('Refused: a start not checked to be added');}
   else if(!checked.starts.has(m[1]+'|'+m[2]))throw new Error('Refused: a start not checked for this send');
   const go=async tk=>{
     const ac=new AbortController(), tm=setTimeout(()=>ac.abort(),WAIT_MS);
@@ -420,7 +421,7 @@ async function review(){
       const where='Race '+pr.race+', Start '+st.start, d=st.doc||{};
       const p={start:st.start,classes:st.classes.map(c=>c.trim()),time:st.time,where,doc:d,want:[],notes:[]};
       if(!p.classes.length)stops.push(where+' has a course but no classes.');
-      p.classes.forEach(c=>{if(!cm.byName[c])stops.push('Class '+c+' ('+where+') has no matching class in '+ser.name+'.');else p.want.push(...cm.byName[c]);});
+      p.classes.forEach(c=>{if(!cm.byName[c])stops.push((/^class\b/i.test(c)?'':'Class ')+c+' ('+where+') has no matching class in '+ser.name+'.');else p.want.push(...cm.byName[c]);});
       if(!st.time)stops.push(where+' has no gun time.');
       if(d.block)stops.push(where+': no course to send ('+d.block+')');
       const inc=(d.warns||[]).filter(t=>/^INCOMPLETE/.test(t));
@@ -433,7 +434,7 @@ async function review(){
         const cand=R.starts.filter(x=>(x.fleetIds||[]).some(f=>p.want.includes(f)));
         if(byId)p.S=byId;
         else if(cand.length===1)p.S=cand[0];
-        else if(!cand.length)stops.push('Race '+R.number+' in '+ser.name+' has no start for '+label(0,p.classes)+': add the start in Sail Scoring, then send again.');
+        else if(!cand.length&&p.want.length)p.add=os?os.id:newId();   // none of its classes in the race yet: added (#708)
         else stops.push(p.where+': its classes are in '+(cand.length===2?'two':cand.length)+' starts in Sail Scoring (race '+R.number+', '+cand.map(x=>'start '+(R.starts.indexOf(x)+1)).join(' and ')+').');
         p.os=os&&p.S&&os.id===p.S.id?os:null;});
       ps.forEach(p=>{if(!p.S)return;const twin=ps.find(q=>q!==p&&q.S===p.S);
@@ -452,6 +453,7 @@ async function review(){
         st.fleetsChange=!sameSet(cur,st.fleets);st.timeChange=hm(p.S.startTime)!==hm(p.time);
         st.courseChange=!(p.os&&p.os.course&&p.os.course===hash);
         st.before={classes:clsOf(cur),time:hm(p.S.startTime)||'none',course:legsOf(p.S.course)};}
+      else if(R&&p.add){st.id=p.add;st.fleets=p.want.slice();st.created=st.added=true;st.fleetsChange=st.timeChange=st.courseChange=true;}
       else if(!R){st.id=p.newId;st.fleets=p.want.slice();st.created=true;st.fleetsChange=st.timeChange=st.courseChange=true;}
       st.after={classes:clsOf(st.fleets||p.want),time:hm(p.time)||'none',course:doc?docLegs(doc):'none'};
       st.time=p.time;st.oldHash=p.os?p.os.course:'';
@@ -491,7 +493,9 @@ async function review(){
     '<p class="status" id="ssSendSaid" hidden></p><div id="ssResults"></div>'+
     '<button class="ghost" id="ssSendBtn" type="button" disabled>Send to Sail Scoring</button>'+
     '<button class="ghost" id="ssReviewCancel" type="button">Cancel</button>';
-  const upd=()=>{const b=$('ssSendBtn');if(b)b.disabled=!plan||!!plan.stops.length||!plan.work||(plan.moved&&!$('ssMoveOk').checked)||(needFin&&!$('ssFinOk').checked);};
+  const upd=()=>{const b=$('ssSendBtn');if(!b)return;
+    b.disabled=!plan||!!plan.stops.length||!plan.work||(plan.moved&&!$('ssMoveOk').checked)||(needFin&&!$('ssFinOk').checked);
+    b.style.opacity=b.disabled?'.4':'';b.style.cursor=b.disabled?'default':'';};   // the page's .ghost has no greyed look of its own
   if($('ssMoveOk'))$('ssMoveOk').onchange=upd;
   if($('ssFinOk'))$('ssFinOk').onchange=upd;
   upd();
@@ -505,25 +509,27 @@ function recordOf(pl,state,courseOf){
 async function send(){
   const pl=plan, P=PG(), said=$('ssSendSaid'), res=$('ssResults'), btn=$('ssSendBtn');
   if(!pl||pl.stops.length||!P)return;
-  if(JSON.stringify(P.races())!==pl.page||P.day()!==pl.day){said.hidden=false;said.className='status err';said.textContent='The page has changed since the review: review again.';btn.disabled=true;return;}
-  btn.disabled=true;$('ssReviewCancel').disabled=true;said.hidden=false;said.className='status';said.textContent='Sending…';
+  if(JSON.stringify(P.races())!==pl.page||P.day()!==pl.day){said.hidden=false;said.className='status err';said.textContent='The page has changed since the review: review again.';btn.disabled=true;btn.style.opacity='.4';return;}
+  btn.disabled=true;btn.style.opacity='.4';$('ssReviewCancel').disabled=true;said.hidden=false;said.className='status';said.textContent='Sending…';
   pl.at=new Date().toISOString();
   const sendId=newId(), lines=[], line=(t,ok)=>{lines.push('<p class="status '+(ok?'ok':'err')+'">'+esc(t)+'</p>');res.innerHTML=lines.join('');};
   const races=pl.out.filter(o=>!o.extra), fresh=races.filter(o=>o.fresh), done=new Map();   // done: start id -> course hash now in Sail Scoring
+  const added=races.filter(o=>!o.fresh).flatMap(o=>o.starts.filter(s=>s.added).map(s=>({o,s})));   // starts to add to races already there
   checked={ok:true,series:pl.sid,newRaces:new Set(fresh.map(o=>o.id)),newStarts:new Set(fresh.flatMap(o=>o.starts.map(s=>s.id))),
-    starts:new Set(races.flatMap(o=>o.starts.map(s=>o.id+'|'+s.id)))};
+    starts:new Set(races.flatMap(o=>o.starts.map(s=>o.id+'|'+s.id))),addStarts:new Set(added.map(x=>x.o.id+'|'+x.s.id))};
   try{
     // 1. the record, with the ids about to be created, before anything is created: a repeat finds them by id
-    if(fresh.length){
+    if(fresh.length||added.length){
       try{await P.save(pl.day,recordOf(pl,'sending',s=>s.created?'':(s.oldHash||'')));}
-      catch(e){said.className='status err';said.textContent='Nothing sent: the record of the send could not be saved first: '+errText(e)+(e&&e.text?' ('+e.text+')':'');return;}
-      // 2. the new races, with their starts
+      catch(e){said.className='status err';said.textContent='Nothing sent: the record of the send could not be saved first: '+errText(e)+(e&&e.text?' ('+e.text+')':'');return;}}
+    // 2. the new races, with their starts
+    if(fresh.length){
       try{await ssWrite('races','/series/'+pl.sid+'/races',{races:fresh.map(o=>({id:o.id,date:pl.day,starts:o.starts.map(s=>({id:s.id,fleetIds:s.fleets,startTime:hm(s.time)}))}))},sendId+':races');
         fresh.forEach(o=>{o.ok=true;line('Race '+o.race+': created, with '+o.starts.length+' start'+(o.starts.length>1?'s':'')+'.',true);});}
       catch(e){fresh.forEach(o=>line('Race '+o.race+': not created: '+e.message,false));}}
     // 3. starts already in Sail Scoring: a fleet moving between two starts leaves the one first (a fleet starts once per race)
     for(const o of races.filter(o=>!o.fresh)){
-      const ch=o.starts.filter(s=>s.fleetsChange||s.timeChange);
+      const ch=o.starts.filter(s=>!s.added&&(s.fleetsChange||s.timeChange));
       for(const s of ch){const gone=s.cur.filter(f=>!s.fleets.includes(f));
         if(gone.length&&o.starts.some(q=>q!==s&&gone.some(f=>q.fleets.includes(f)))){
           try{await ssWrite('start','/races/'+o.id+'/starts/'+s.id,{fleetIds:s.cur.filter(f=>s.fleets.includes(f))},sendId+':leave:'+s.id);}
@@ -533,15 +539,20 @@ async function send(){
         try{await ssWrite('start','/races/'+o.id+'/starts/'+s.id,body,sendId+':start:'+s.id);
           line('Race '+o.race+', Start '+s.start+': '+[s.fleetsChange&&'classes',s.timeChange&&'gun time'].filter(Boolean).join(' and ')+' done.',true);}
         catch(e){s.fail=1;line('Race '+o.race+', Start '+s.start+': '+[s.fleetsChange&&'classes',s.timeChange&&'gun time'].filter(Boolean).join(' and ')+' failed: '+e.message,false);}}}
-    // 4. the courses
+    // 4. starts added to races already in Sail Scoring, after any fleet has left its old start (a fleet starts once per race)
+    for(const{o,s}of added){
+      try{await ssWrite('add','/races/'+o.id+'/starts',{id:s.id,fleetIds:s.fleets,startTime:hm(s.time)},sendId+':add:'+s.id);
+        s.ok=true;line('Race '+o.race+', Start '+s.start+': added.',true);}
+      catch(e){line('Race '+o.race+', Start '+s.start+': not added: '+e.message,false);}}
+    // 5. the courses
     for(const o of races){if(o.fresh&&!o.ok)continue;
-      for(const s of o.starts){
+      for(const s of o.starts){if(s.added&&!s.ok)continue;
         if(!s.courseChange){done.set(s.id,s.oldHash);continue;}
         try{await ssWrite('course','/races/'+o.id+'/starts/'+s.id+'/course?replace=true',s.doc,sendId+':course:'+s.id);
           done.set(s.id,s.hash);line('Race '+o.race+', Start '+s.start+': course done.',true);}
         catch(e){line('Race '+o.race+', Start '+s.start+': course failed: '+e.message,false);}}}
   }finally{checked=null;}
-  // 5. the record again: what Sail Scoring now holds; a failed part is sent again by the next send
+  // 6. the record again: what Sail Scoring now holds; a failed part is sent again by the next send
   try{await P.save(pl.day,recordOf(pl,'sent',s=>done.has(s.id)?done.get(s.id)||'':(s.created?'':(s.oldHash||''))));
     said.className='status ok';said.textContent='Sent to '+pl.ser.name+'. Review again to check: a repeat sends only what is still different.';}
   catch(e){said.className='status err';said.textContent='Sent, but the record of the send could not be saved: '+errText(e)+(e&&e.text?' ('+e.text+')':'')+'. Send again: nothing is doubled.';}
@@ -606,7 +617,7 @@ async function disconnect(){
       clearTokens();});
   }catch(e){clearTokens();note=e.message;}
   showConnected(false);
-  say('Disconnected','',note);}
+  say('Disconnected from Sail Scoring.','',note);}
 
 $('ssConnect').onclick=()=>{connect().catch(fail);};
 $('ssDisconnect').onclick=()=>{disconnect();};
