@@ -36,11 +36,14 @@
    race, with no name, its id and its starts' ids chosen here. A start is found by its id from the record, else by its
    fleets; a start none of whose classes is in the race yet is added to it, its id chosen here (Sail Scoring #708). Two
    page starts found as one Sail Scoring start are split: the one the record names keeps it (else the first on the page),
-   and each other one's classes are taken off it and added as a new start, after every change to existing starts. It is
+   and each other one's classes are taken off it and added as a new start, after every change to existing starts. When a
+   class moves off a start (a split, or to another start), a fleet with no bracket on that start moves with it only if
+   every competitor in that fleet is also entered in that class (the series' competitors); otherwise, or with no
+   competitors, it stays, and the review says so. It is
    given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
    for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
-   series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course or no
-   classes; one page start whose classes are in two Sail Scoring starts; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
+   series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course, no
+   wind direction on its course's legs or no classes; one page start whose classes are in two Sail Scoring starts; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
    Sail Scoring but not on the page is named and left. Changing the classes or gun time of a start with finishes, and
    sending to a series other than the day's last one, each need their own tick. The record of the send (marks.php's
    sailscoring-DAY.json, through window.courseSailScoring) is saved before anything is created and again after. */
@@ -408,6 +411,8 @@ async function review(){
   const nameF=f=>cm.fleetClass[f]||cm.fleetName[f]||'unknown fleet';
   const clsOf=ids=>[...new Set(ids.map(nameF))];
   const claimed=new Set(), out=[], items=[];   // out: per page race; items: what Send does
+  let compList=null;   // the series' competitors, read once, only when needed
+  const comps=async()=>{if(!compList){const c=await ssApi('GET','/series/'+sid+'/competitors');compList=Array.isArray(c&&c.competitors)?c.competitors:[];}return compList;};
   for(const pr of page){
     const orec=old&&old.races.find(x=>x.race===pr.race);
     let R=orec?races.find(x=>x.id===orec.id):null, fresh=false, rid;
@@ -427,6 +432,8 @@ async function review(){
       if(d.block)stops.push(where+': no course to send ('+d.block+')');
       const inc=(d.warns||[]).filter(t=>/^INCOMPLETE/.test(t));
       if(inc.length)stops.push(where+': the course is INCOMPLETE: '+inc.join(' '));
+      if(!d.block&&d.text){let lg=null;try{lg=JSON.parse(d.text).legs;}catch(_){}
+        if(Array.isArray(lg)&&lg.some(l=>typeof l.windDirection!=='number'))stops.push(where+': no wind direction for its course: set the wind for this start or the day\'s wind, then review again.');}
       p.notes=(d.warns||[]).filter(t=>/^STAND-IN/.test(t));
       return p;});
     if(R){
@@ -463,7 +470,25 @@ async function review(){
       else if(!R){st.id=p.newId;st.fleets=p.want.slice();st.created=true;st.fleetsChange=st.timeChange=st.courseChange=true;}
       st.after={classes:clsOf(st.fleets||p.want),time:hm(p.time)||'none',course:doc?docLegs(doc):'none'};
       st.time=p.time;st.oldHash=p.os?p.os.course:'';
-      ro.starts.push(st);}}
+      ro.starts.push(st);}
+    // a fleet with no bracket on a start a class moves off (Pat, 28 October 2026): it moves with that class only when every
+    // competitor in it is also entered in a fleet of that class; otherwise, or with no competitors, it stays, and is named
+    for(const src of ro.starts.filter(x=>x.cur)){
+      const moving={};   // class -> the start its fleets go to
+      src.cur.forEach(f=>{const c=cm.fleetClass[f];if(!c||src.fleets.includes(f))return;
+        const to=ro.starts.find(q=>q!==src&&(q.fleets||[]).includes(f));if(to)moving[c]=to;});
+      const names=Object.keys(moving), loose=src.fleets.filter(f=>!cm.fleetClass[f]);
+      if(!names.length||!loose.length)continue;
+      let comp;try{comp=await comps();}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
+      const n=R.starts.findIndex(x=>x.id===src.id)+1;
+      for(const e of loose){
+        const inE=comp.filter(x=>(x.fleetIds||[]).includes(e));
+        const fit=inE.length?names.filter(c=>inE.every(x=>(x.fleetIds||[]).some(f=>cm.byName[c].includes(f)))):[];
+        const en=cm.fleetName[e]||'unknown fleet';
+        if(fit.length===1){const to=moving[fit[0]];src.fleets=src.fleets.filter(f=>f!==e);to.fleets=to.fleets.concat([e]);
+          to.notes=to.notes.concat([en+' moves with '+fit[0]]);}
+        else src.notes=src.notes.concat([en+' stays on Sail Scoring start '+n+'; check whether it should move with '+(fit.length?fit:names).join(' or ')]);}
+      ro.starts.forEach(x=>{if(x.cur)x.fleetsChange=!sameSet(x.cur,x.fleets);x.after.classes=clsOf(x.fleets||x.want);});}}
   dayRaces.forEach(r=>{if(!claimed.has(r.id)&&!out.some(o=>o.id===r.id))out.push({extra:true,number:r.number,starts:r.starts||[]});});
   // finishes: a start with finishes whose classes or gun time would change needs its own tick
   let comp=null;
@@ -472,7 +497,7 @@ async function review(){
     let fin;try{fin=await ssApi('GET','/races/'+ro.id+'/finishes');}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
     const list=Array.isArray(fin&&fin.finishes)?fin.finishes:[];
     if(!list.length)continue;
-    if(!comp){try{const c=await ssApi('GET','/series/'+sid+'/competitors');comp=Array.isArray(c&&c.competitors)?c.competitors:[];}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}}
+    if(!comp){try{comp=await comps();}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}}
     const fleetsDone=new Set(), unknown=list.some(f=>!f.competitorId);
     list.forEach(f=>{const c=comp.find(x=>x.id===f.competitorId);if(c)(c.fleetIds||[]).forEach(x=>fleetsDone.add(x));else if(f.competitorId)fleetsDone.add('?');});
     ro.starts.forEach(s=>{if(s.cur&&(s.fleetsChange||s.timeChange)&&(unknown||fleetsDone.has('?')||s.cur.some(f=>fleetsDone.has(f))))s.finishes=true;});}

@@ -211,11 +211,11 @@ def t0_build(tmp):
     checks = {
         'key.js from /marks-test/': '<script src="/marks-test/key.js"></script>' in test,
         'MARKS_BASE and STORE': "const MARKS_BASE='/marks-test/', STORE='test-';" in test,
-        'PAGE_VERSION -test-ss5': f"const PAGE_VERSION='{v}-test-ss5';" in test,
+        'PAGE_VERSION -test-ss6': f"const PAGE_VERSION='{v}-test-ss6';" in test,
         'class list switched on (A147)': test.count('const CLASS_LIST=true;') == 1 and 'CLASS_LIST=false' not in test,
         'send switched on (A148)': test.count('const SS_SEND=true;') == 1 and 'SS_SEND=false' not in test,
         'no /marks other than /marks-test/': not re.search(r'/marks(?!-test/)', test),
-        'banner with version': f'PAGE_VERSION {v}-test-ss5</div>' in test and 'TEST COPY – not live data' in test,
+        'banner with version': f'PAGE_VERSION {v}-test-ss6</div>' in test and 'TEST COPY – not live data' in test,
         'TEST title': '<title>TEST – ' in test,
         'noindex': '<meta name="robots" content="noindex,nofollow">' in test,
         'marks.php byte-identical': read(os.path.join(out, 'marks-test', 'marks.php'), 'rb') == read(MARKS, 'rb'),
@@ -226,10 +226,10 @@ def t0_build(tmp):
     # nothing else changed: undo the known replacements and compare with the live page
     back = (test.replace('<script src="/marks-test/key.js"></script>', '<script src="/marks/key.js"></script>')
                 .replace("const MARKS_BASE='/marks-test/', STORE='test-';", "const MARKS_BASE='/marks/', STORE='';")
-                .replace(f"const PAGE_VERSION='{v}-test-ss5';", f"const PAGE_VERSION='{v}';")
+                .replace(f"const PAGE_VERSION='{v}-test-ss6';", f"const PAGE_VERSION='{v}';")
                 .replace('const CLASS_LIST=true;', 'const CLASS_LIST=false;')
                 .replace('const SS_SEND=true;', 'const SS_SEND=false;')
-                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss5"></script>\n</body>', '</body>')
+                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss6"></script>\n</body>', '</body>')
                 .replace('<title>TEST – ', '<title>')
                 .replace('<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', '<meta charset="utf-8">'))
     back = re.sub(r'<body>\n<div id="testBanner"[^\n]*</div>', '<body>', back)
@@ -1473,9 +1473,9 @@ def t28_local_build(tmp):
     g('the normal build names no LOCAL', 'LOCAL' not in nt and 'label LOCAL' not in read(os.path.join(norm, 'BUILD.txt')))
     g('the LOCAL build leaves sailscoring-test.js out', 'sailscoring-test' not in lt
       and not os.path.exists(os.path.join(loc, 'course-test', 'sailscoring-test.js')))
-    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss5';")
-              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss5</div>')
-              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss5"></script>\n</body>')
+    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss6';")
+              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss6</div>')
+              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss6"></script>\n</body>')
               .replace('<title>LOCAL TEST – ', '<title>TEST – ')
               .replace('>LOCAL TEST – not live data · ', '>TEST COPY – not live data · '))
     g('nothing else differs from the normal build', back == nt)
@@ -1945,7 +1945,7 @@ def t35_sailscoring(tmp):
     if r.returncode:
         return
     test = read(os.path.join(out, 'course-test', 'index.html'))
-    tag = f'<script src="sailscoring-test.js?v={v}-test-ss5"></script>'
+    tag = f'<script src="sailscoring-test.js?v={v}-test-ss6"></script>'
     g('the live page does not name the file', 'sailscoring-test' not in live)
     g('the test page loads it once, after the page\'s own script, just before </body>',
       test.count('sailscoring-test') == 1 and test.count('</script>\n' + tag + '\n</body>') == 1, test[-200:])
