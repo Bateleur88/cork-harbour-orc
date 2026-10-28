@@ -39,7 +39,9 @@
    and each other one's classes are taken off it and added as a new start, after every change to existing starts. When a
    class moves off a start (a split, or to another start), a fleet with no bracket on that start moves with it only if
    every competitor in that fleet is also entered in that class (the series' competitors); otherwise, or with no
-   competitors, it stays, and the review says so. It is
+   competitors, it stays, and the review says so. When the page creates a race or adds a start, a fleet with no bracket
+   not on that race goes on the one new start with a class every competitor in that fleet is also entered in; for more
+   than one such start, none, or no competitors, it is not added, and the review says so. It is
    given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
    for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
    series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course, no
@@ -420,7 +422,7 @@ async function review(){
       if(c&&claimed.has(c.id))stops.push('Race '+pr.race+': Sail Scoring\'s race '+c.number+' on this date is already linked to another page race.');
       else if(c)R=c;}
     if(R){rid=R.id;claimed.add(R.id);}else{fresh=true;rid=orec?orec.id:newId();}
-    const ro={race:pr.race,id:rid,fresh,number:R?R.number:null,starts:[],notOnPage:[]};
+    const ro={race:pr.race,id:rid,fresh,number:R?R.number:null,starts:[],notOnPage:[],notes:[]};
     out.push(ro);
     // each page start: its classes, fleets, time and course document
     const ps=pr.starts.map(st=>{
@@ -488,7 +490,21 @@ async function review(){
         if(fit.length===1){const to=moving[fit[0]];src.fleets=src.fleets.filter(f=>f!==e);to.fleets=to.fleets.concat([e]);
           to.notes=to.notes.concat([en+' moves with '+fit[0]]);}
         else src.notes=src.notes.concat([en+' stays on Sail Scoring start '+n+'; check whether it should move with '+(fit.length?fit:names).join(' or ')]);}
-      ro.starts.forEach(x=>{if(x.cur)x.fleetsChange=!sameSet(x.cur,x.fleets);x.after.classes=clsOf(x.fleets||x.want);});}}
+      ro.starts.forEach(x=>{if(x.cur)x.fleetsChange=!sameSet(x.cur,x.fleets);x.after.classes=clsOf(x.fleets||x.want);});}
+    // a fleet with no bracket, when the page creates a race or adds a start (Pat, 28 October 2026): added to the one new
+    // start with a class every competitor in it is also entered in; for more than one, none, or no competitors, not added
+    const made=ro.starts.filter(x=>x.created);
+    const onRace=f=>ro.starts.some(x=>(x.fleets||[]).includes(f))||(!!R&&R.starts.some(x=>!ro.starts.some(q=>q.id===x.id)&&(x.fleetIds||[]).includes(f)));
+    const free=made.length?fleetList.map(f=>f.id).filter(f=>!cm.fleetClass[f]&&!onRace(f)):[];
+    if(free.length){
+      let comp;try{comp=await comps();}catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
+      for(const e of free){
+        const inE=comp.filter(x=>(x.fleetIds||[]).includes(e)), en=cm.fleetName[e]||'unknown fleet';
+        const fit=inE.length?made.map(x=>({x,cls:[...new Set(x.want.map(f=>cm.fleetClass[f]).filter(Boolean))]
+          .filter(c=>inE.every(b=>(b.fleetIds||[]).some(f=>cm.byName[c].includes(f))))})).filter(o=>o.cls.length):[];
+        if(fit.length===1){const x=fit[0].x;x.fleets=x.fleets.concat([e]);x.after.classes=clsOf(x.fleets);
+          x.notes=x.notes.concat([en+' added with '+fit[0].cls.join(' and ')]);}
+        else ro.notes.push(en+' not added; add it in Sail Scoring if it should race');}}}
   dayRaces.forEach(r=>{if(!claimed.has(r.id)&&!out.some(o=>o.id===r.id))out.push({extra:true,number:r.number,starts:r.starts||[]});});
   // finishes: a start with finishes whose classes or gun time would change needs its own tick
   let comp=null;
@@ -518,7 +534,8 @@ async function review(){
             '<div>Gun: '+ch(s.before.time,s.after.time,s.timeChange)+'</div><div>Course: '+ch(s.before.course,s.after.course,s.courseChange)+'</div>':''))+
         (s.finishes?'<div class="status err">has finishes</div>':'')+
         s.notes.map(t=>'<div class="cardnote caut">'+esc(t)+'</div>').join('')+'</div>').join('')+
-      o.notOnPage.map(t=>'<div>'+esc(t)+': In Sail Scoring but not on the page: remove it in Sail Scoring if it should go.</div>').join('')+'</div>').join('')+
+      o.notOnPage.map(t=>'<div>'+esc(t)+': In Sail Scoring but not on the page: remove it in Sail Scoring if it should go.</div>').join('')+
+      o.notes.map(t=>'<div class="cardnote caut">'+esc(t)+'</div>').join('')+'</div>').join('')+
     (needFin?'<label><input type="checkbox" id="ssFinOk"> Change the classes or gun time of the starts marked "has finishes"</label>':'')+
     (!work&&!stops.length?'<p class="status ok">Nothing to send.</p>':'')+
     '<p class="status" id="ssSendSaid" hidden></p><div id="ssResults"></div>'+
