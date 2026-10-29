@@ -1,7 +1,9 @@
-/* Sail Scoring connection, TEST COPY ONLY: Stage 1 read-only (Pat, 27 October 2026), Stage 2 the class list and the send.
-   scripts/build_test.py adds this file to the test page (/course-test/) and nowhere else: the live page never loads it, and
-   pages/course/course_v8.html does not name it. It adds the closed "Sail Scoring (test)" panel at the foot of the page and
-   touches nothing else on it, apart from putting the Race day box back after the sign-in (as the RO would set it by hand).
+/* Sail Scoring connection: Stage 1 read-only (Pat, 27 October 2026), Stage 2 the class list and the send, live from .47
+   (STATUS A149, Pat 29 October 2026). The live page (/course/) loads this file as sailscoring.js; scripts/build_test.py
+   makes the test copy's sailscoring-test.js from it by changing exactly four lines: STORE ('test-'), TEST (true),
+   REDIRECT_URI (/course-test/) and SEND_WS (ORC Ireland only). It adds the closed "Sail Scoring" panel ("Sail Scoring
+   (test)" on the test copy) at the foot of the page and touches nothing else on it, apart from putting the Race day box
+   back after the sign-in (as the RO would set it by hand).
 
    The page is a public OAuth client of Sail Scoring's authenticated public API (no secret): authorization code with PKCE
    (S256) and a random state checked on return. The redirect address is a fixed constant, never built from location.href,
@@ -24,7 +26,7 @@
    "CLASS (RATING SYSTEM)", with anything after the bracket, belongs to the class CLASS (the text before the first "(",
    trimmed); a fleet with no "(" or nothing before it is not a class and is never offered. The scorer picks a series,
    taps "Use this series' classes" (one more GET of its fleets), checks the classes, and saves them with "Save as the
-   club's class list". The page saves it (window.courseClassList, only on a test page, with the race key, in marks.php's
+   club's class list". The page saves it (window.courseClassList, with the race key, in marks.php's
    classes.json) so every RO device reads it; this file never reaches marks.php itself. The saved list holds class names,
    fleet ids, names and scoring systems, the series and the time: no tokens.
 
@@ -45,22 +47,29 @@
    given the page's classes (a managed class not raced that day is taken off it), the gun time, and the Copy
    for Sail Scoring document as its course (replacing any course). Stops, nothing sent: a class with no match in the
    series; course changes on this device not yet saved; a start with no gun time, no course, an INCOMPLETE course, no
-   wind direction on its course's legs or no classes; one page start whose classes are in two Sail Scoring starts; a workspace other than ORC Ireland; a series whose name does not contain TESTING. A start or race in
+   wind direction on its course's legs or no classes; one page start whose classes are in two Sail Scoring starts; a workspace not in SEND_WS
+   (live: Royal Cork Yacht Club or ORC Ireland; test copy: ORC Ireland), by its slug; on the test copy only, a series
+   whose name does not contain TESTING. A start or race in
    Sail Scoring but not on the page is named and left. Changing the classes or gun time of a start with finishes, and
    sending to a series other than the day's last one, each need their own tick. The record of the send (marks.php's
    sailscoring-DAY.json, through window.courseSailScoring) is saved before anything is created and again after. */
 (function(){
 'use strict';
-const STORE='test-';   // every browser storage key starts with this (checked by scripts/build_test.py)
+const STORE='';   // every browser storage key starts with this: '' live, 'test-' on the test copy (scripts/build_test.py)
+const TEST=false;   // true only on the test copy: its wording, and its rule that a series name holds TESTING
 const CLIENT_ID='seKPxFYHkQKjsZiOcOfbJPKtAMDbszoT';
-const REDIRECT_URI='https://tradboats.ie/course-test/';
+const REDIRECT_URI='https://tradboats.ie/course/';
 const SCOPES='read races offline_access';
 const ISSUER='https://app.sailscoring.ie/api/auth';
 const AUTHORIZE='https://app.sailscoring.ie/api/auth/oauth2/authorize';
 const TOKEN='https://app.sailscoring.ie/api/auth/oauth2/token';
 const REVOKE='https://app.sailscoring.ie/api/auth/oauth2/revoke';
 const API='https://app.sailscoring.ie/api/public/v1';
-const EXPECTED_WS='ORC Ireland';
+const SEND_WS=['rcyc','orc-ireland'];   // the only workspaces Send writes to, by slug (the test copy: orc-ireland only)
+const WS_NAME={'rcyc':'Royal Cork Yacht Club','orc-ireland':'ORC Ireland'};
+const SEND_TO=SEND_WS.map(s=>WS_NAME[s]||s).join(' or ');
+const wsOk=list=>list.length===1&&SEND_WS.includes(String(list[0].slug));
+const wsName=x=>x.name+' ('+x.slug+')';
 const LAPSED='Sail Scoring connection has lapsed: connect again';
 const PENDING='pending';   // the tokens' workspace before GET /workspaces has named it
 const PTR=STORE+'sailscoring|'+CLIENT_ID+'|in-use', AUTH=STORE+'sailscoring|'+CLIENT_ID+'|auth', LOCK=STORE+'sailscoring|'+CLIENT_ID+'|lock';
@@ -166,8 +175,8 @@ async function ssApi(method,path,token){
 /* ---------- the panel ---------- */
 const panel=document.createElement('details');
 panel.className='sec setupOnly';panel.id='ssPanel';
-panel.innerHTML='<summary><h2>Sail Scoring (test)</h2></summary>'+
-  '<p class="cardnote">Test of the Sail Scoring connection. Sail Scoring is written only by Send, after its review, and only to a series whose name contains TESTING. A class list saved here sets the classes the class box offers on every device.</p>'+
+panel.innerHTML='<summary><h2>Sail Scoring'+(TEST?' (test)':'')+'</h2></summary>'+
+  '<p class="cardnote">'+(TEST?'Test of the Sail Scoring connection. ':'')+'Sail Scoring is written only by Send, after its review, and only to '+esc(SEND_TO)+(TEST?', in a series whose name contains TESTING':'')+'. A class list saved here sets the classes the class box offers on every device.</p>'+
   '<p class="status" id="ssState" role="status" aria-live="polite"></p>'+
   '<p class="status" id="ssDetail" hidden></p>'+
   '<p class="status" id="ssWs" hidden></p>'+
@@ -205,12 +214,12 @@ const raceDay=()=>(dayBox()&&dayBox().value)||'';
 /* ---------- what the connection reaches, and the series ---------- */
 let series=null, fleets={}, racesBy={}, loading=false;
 function showWorkspace(list){
-  const w=$('ssWs'), names=list.map(x=>x.name);
+  const w=$('ssWs');
   w.hidden=false;
-  if(!list.length){w.className='status amberTxt';w.textContent='Test copy is connected to no workspace, expected '+EXPECTED_WS;return;}
-  const ok=list.length===1&&String(list[0].name).trim()===EXPECTED_WS;
+  if(!list.length){w.className='status amberTxt';w.textContent='Connected to no workspace: this page sends only to '+SEND_TO+'.';return;}
+  const ok=wsOk(list);
   w.className='status'+(ok?' ok':' amberTxt');
-  w.textContent=ok?'Workspace: '+list[0].name+' ('+list[0].slug+')':'Test copy is connected to '+names.join(', ')+', expected '+EXPECTED_WS;}
+  w.textContent=ok?'Workspace: '+wsName(list[0]):'Connected to '+list.map(wsName).join(', ')+': this page sends only to '+SEND_TO+'.';}
 async function loadAll(){
   if(loading)return;loading=true;
   try{
@@ -343,8 +352,8 @@ const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
 const ssErr=(r,body)=>'HTTP '+r.status+(body&&body.error?' '+body.error:'')+(body&&body.message?': '+body.message:'')+
   (body&&Array.isArray(body.problems)&&body.problems.length?' ('+body.problems.map(x=>x.field+': '+x.message).join('; ')+')':'');
 
-/* The writes: exactly these four requests. checked is set only by a review whose stops are all clear (the workspace
-   ORC Ireland, the series named with TESTING, the series picked for this send), and holds every race and start the send
+/* The writes: exactly these four requests. checked is set only by a review whose stops are all clear (the workspace in
+   SEND_WS, on the test copy the series named with TESTING, the series picked for this send), and holds every race and start the send
    may touch; it is cleared when the send ends. Anything else is refused before a request is made. */
 const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],add:['POST',/^\/races\/([0-9a-f-]{36})\/starts$/],course:['PUT',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})\/course\?replace=true$/]};
 let checked=null;
@@ -401,9 +410,9 @@ async function review(){
   catch(e){box.innerHTML='';box.hidden=true;fail(e);return;}
   if($('ssSendSeries').value!==sid)return;
   const page=P.races(), heading=P.series(), stops=[], wsl=Array.isArray(ws&&ws.workspaces)?ws.workspaces:[];
-  if(!(wsl.length===1&&String(wsl[0].name).trim()===EXPECTED_WS))stops.push('The test copy is connected to '+(wsl.map(x=>x.name).join(', ')||'no workspace')+', not '+EXPECTED_WS+'.');
+  if(!wsOk(wsl))stops.push('Connected to '+(wsl.map(wsName).join(', ')||'no workspace')+': this page sends only to '+SEND_TO+'.');
   if(P.unsent())stops.push('This device has course changes not yet saved: save them first, then send.');
-  if(!String(ser.name).includes(SEND_TESTING))stops.push('The series '+ser.name+' does not have '+SEND_TESTING+' in its name: this test copy sends only to a test series.');
+  if(TEST&&!String(ser.name).includes(SEND_TESTING))stops.push('The series '+ser.name+' does not have '+SEND_TESTING+' in its name: this test copy sends only to a test series.');
   const fleetList=Array.isArray(fl&&fl.fleets)?fl.fleets:[], cm=classMap(fleetList);
   const races=(Array.isArray(rl&&rl.races)?rl.races:[]);
   const dayRaces=races.filter(r=>r.date===day).sort((a,b)=>a.number-b.number);

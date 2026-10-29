@@ -42,23 +42,23 @@ from the live manifest with the test copy's name ("TEST – Course plot", "TEST 
 icon-192.png, icon-512.png and icon-maskable-512.png. It refuses a live manifest that does not name /course/ for all
 three, a test manifest that names /course/ anywhere, and a page whose manifest link is not the relative
 manifest.webmanifest.
-Sail Scoring, Stage 1 (Pat, 27 October 2026): the test page, and only the test page, loads sailscoring-test.js, copied
-unchanged beside it, by one <script src="sailscoring-test.js?v=<version>"> before </body>, and its PAGE_VERSION ends
--test-ss7 (SS_LABEL; -ss1 was Stage 1, -ss2 Stage 2 Part A, -ss3 to -ss6 earlier builds of Stage 2 Part B). The live page must not name the file. Refused if the file's browser storage keys do not all start
-with STORE (the page's check, with the file's STORE exactly 'test-'), or it names /marks, or names DELETE anywhere, or
-names PUT or PATCH outside its table of writes (SS_WRITES, exactly as here: Stage 2 Part B's four requests, a POST of
-new races, a PATCH of a start, a POST of a start added to a race and a PUT of a start's course), or holds a request method other than its one POST
-(tokenPost: the token and revoke endpoints only), its one GET (ssApi, which refuses any other method) and its one write
-(ssWrite, which refuses any write the review has not checked, SS_GUARD, and any added start the review has not
-checked, SS_ADD_GUARD), or makes a request anywhere else. A LOCAL
-build leaves the file out: its sign-in returns only to
-https://tradboats.ie/course-test/, which a LOCAL build may not name.
-Sail Scoring, Stage 2 Part A (STATUS A147, Pat 27 October 2026): the club's class list. The live page holds
-const CLASS_LIST=false; exactly once (refused otherwise), and every test page, LOCAL too, gets const CLASS_LIST=true;
-in its place, so only a test page reads, keeps or offers the class list saved in marks.php's classes.json.
-Sail Scoring, Stage 2 Part B (STATUS A148, Pat 28 October 2026): the send. The live page holds const SS_SEND=false;
-exactly once (refused otherwise), and every test page, LOCAL too, gets const SS_SEND=true; in its place, so only a test
-page gives the Sail Scoring panel what to send and the day's record in marks.php's sailscoring-DAY.json.
+Sail Scoring (Stage 1 Pat 27 October 2026; live from .47, STATUS A149, Pat 29 October 2026): the live page loads
+sailscoring.js (pages/course/sailscoring.js, in its live form) by one <script src="sailscoring.js?v=<PAGE_VERSION>"> just
+before </body>, and holds const CLASS_LIST=true; (A147) and const SS_SEND=true; (A148) once each (refused otherwise, or if
+it names sailscoring-test.js or switches either off). The test page loads instead sailscoring-test.js?v=<test version>,
+made from sailscoring.js by changing exactly four lines (SS_LINES): STORE '' -> 'test-', TEST false -> true (the test
+wording and the rule that a series name holds TESTING), REDIRECT_URI /course/ -> /course-test/, and SEND_WS, the
+workspaces Send writes to by slug, ['rcyc','orc-ireland'] -> ['orc-ireland']. Its PAGE_VERSION ends -test-ss8 (SS_LABEL;
+-ss1 was Stage 1, -ss2 Stage 2 Part A, -ss3 to -ss7 earlier builds of Stage 2 Part B). Both forms of the file are checked
+(ss_problems) and either is refused, writing nothing, if: it does not hold its own form of each of the four lines exactly
+once and none of the other form's; the workspace check or the TESTING rule (SS_RULES) is not there exactly once, or
+tradboats.ie other than once (in REDIRECT_URI); its browser storage keys do not all start with STORE; it names /marks, or
+DELETE anywhere, or PUT or PATCH outside its table of writes (SS_WRITES, exactly as here: Stage 2 Part B's four requests,
+a POST of new races, a PATCH of a start, a POST of a start added to a race and a PUT of a start's course); it holds a
+request method other than its one POST (tokenPost: the token and revoke endpoints only), its one GET (ssApi, which refuses
+any other method) and its one write (ssWrite, which refuses any write the review has not checked, SS_GUARD, and any added
+start the review has not checked, SS_ADD_GUARD), or makes a request anywhere else. A LOCAL build leaves the file and its
+tag out: its sign-in returns only to https://tradboats.ie/course-test/, which a LOCAL build may not name.
 The keys are never part of the build: key.js and data/ro-key.php are placed on the server by hand (see the README).
 
 --label LOCAL builds for the local test site on this PC (php -S), never for upload. It differs from the normal build only in:
@@ -99,9 +99,20 @@ SW_NEED = ("const CACHE='coursepage|'+PAGE_PATH+'|'+VERSION;",
            "const copyOf=(res,buf)=>{const t=res.headers.get('Content-Type');return new Response(buf,{status:200,headers:t?{'Content-Type':t}:{}});};")
 # --label LOCAL: the only full web addresses a local build may name (fonts, the map library and tiles, WhatsApp), each a
 # whole address or, ending in /, the start of one; and the live hosts it must never name, in any form
-SS_FILE, SS_LABEL, SS_STORE = 'sailscoring-test.js', 'ss7', "const STORE='test-';"
+SS_SRC, SS_FILE, SS_LABEL = 'sailscoring.js', 'sailscoring-test.js', 'ss8'
+SS_TAG_LIVE = '<script src="sailscoring.js?v={}"></script>'
 CLASS_OFF, CLASS_ON = 'const CLASS_LIST=false;', 'const CLASS_LIST=true;'
 SEND_OFF, SEND_ON = 'const SS_SEND=false;', 'const SS_SEND=true;'
+# the panel's only differences between live and the test copy (A149): (live, test), each exactly once
+SS_LINES = (("const STORE='';", "const STORE='test-';"),
+            ("const TEST=false;", "const TEST=true;"),
+            ("const REDIRECT_URI='https://tradboats.ie/course/';", "const REDIRECT_URI='https://tradboats.ie/course-test/';"),
+            ("const SEND_WS=['rcyc','orc-ireland'];", "const SEND_WS=['orc-ireland'];"))
+# the workspace check, by slug, and the test copy's TESTING rule (A149), each exactly once in both forms
+SS_RULES = ("const wsOk=list=>list.length===1&&SEND_WS.includes(String(list[0].slug));",
+            "if(!wsOk(wsl))stops.push(",
+            "const SEND_TESTING='TESTING';",
+            "if(TEST&&!String(ser.name).includes(SEND_TESTING))stops.push(")
 # the panel's writes (A148): exactly these four, in this one line, and the guards every write passes
 SS_WRITES = (r"const WRITES={races:['POST',/^\/series\/([0-9a-f-]{36})\/races$/],"
              r"start:['PATCH',/^\/races\/([0-9a-f-]{36})\/starts\/([0-9a-f-]{36})$/],"
@@ -290,15 +301,23 @@ def local_url_problems(text):
     return out
 
 
-def ss_problems(js):
-    """What is wrong with sailscoring-test.js (Sail Scoring), as readable lines: every browser storage key starts with
-    STORE and its STORE is 'test-'; it never names /marks; it never names DELETE; its only requests are GET (ssApi),
+def ss_problems(js, live):
+    """What is wrong with sailscoring.js (live) or sailscoring-test.js (not live), as readable lines: it holds its own
+    form of each SS_LINES line once and none of the other form's; SS_RULES once each; tradboats.ie only once (its
+    REDIRECT_URI); every browser storage key starts with STORE; it never names /marks; it never names DELETE; its only requests are GET (ssApi),
     one POST (tokenPost, to the token and revoke endpoints only) and ssWrite's four writes, SS_WRITES exactly, each
     refused without a checked send (SS_GUARD), an added start also without its check (SS_ADD_GUARD)."""
     code = strip_js(js)
     out = storage_problems('<script>' + js + '</script>')
-    if code.count(SS_STORE) != 1:
-        out.append(f'it must contain {SS_STORE!r} exactly once (found {code.count(SS_STORE)})')
+    for pair in SS_LINES:
+        mine, other = pair if live else pair[::-1]
+        if code.count(mine) != 1 or other in code:
+            out.append(f'it must contain {mine!r} exactly once and never {other!r}')
+    for rule in SS_RULES:
+        if code.count(rule) != 1:
+            out.append(f'it must contain {rule!r} exactly once (the workspace check and the TESTING rule)')
+    if len(re.findall(r'tradboats', js, re.I)) != 1:
+        out.append('it must name tradboats.ie exactly once, in REDIRECT_URI')
     if '/marks' in js:
         out.append('it names /marks: it must never reach race data')
     if re.search(r'\bDELETE\b', js, re.I):
@@ -324,6 +343,21 @@ def ss_problems(js):
     return out
 
 
+def build_ss(js):
+    """The test copy's sailscoring-test.js, made from the live sailscoring.js by changing the SS_LINES lines only; both
+    must pass ss_problems."""
+    problems = ss_problems(js, True)
+    if problems:
+        raise Refused(f'{SS_SRC}:\n  ' + '\n  '.join(problems))
+    t = js
+    for a, b in SS_LINES:
+        t = replace_once(t, a, b, f'{SS_SRC}: {a}')
+    problems = ss_problems(t, False)
+    if problems:
+        raise Refused(f'{SS_FILE}:\n  ' + '\n  '.join(problems))
+    return t
+
+
 def build_page(src, label='', stamp=''):
     """The test page and its PAGE_VERSION. label 'LOCAL' (with stamp, the build time as HHMM) makes the local test site's
     page instead; without it the result is the normal test copy."""
@@ -347,10 +381,13 @@ def build_page(src, label='', stamp=''):
         raise Refused(f'expected exactly one PAGE_VERSION, found {len(m)}')
     if SS_FILE in src:
         raise Refused(f'the live page names {SS_FILE}: only the test build may add it')
-    if src.count(CLASS_OFF) != 1 or 'CLASS_LIST=true' in src:
-        raise Refused(f'the live page must hold {CLASS_OFF} exactly once and never switch the class list on (A147)')
-    if src.count(SEND_OFF) != 1 or 'SS_SEND=true' in src:
-        raise Refused(f'the live page must hold {SEND_OFF} exactly once and never switch the send on (A148)')
+    live_tag = SS_TAG_LIVE.format(m[0])
+    if src.count(SS_SRC + '?v=') != 1 or src.count(live_tag + '\n</body>') != 1:
+        raise Refused(f'the live page must load {SS_SRC} exactly once, as {live_tag} just before </body> (A149)')
+    if src.count(CLASS_ON) != 1 or 'CLASS_LIST=false' in src:
+        raise Refused(f'the live page must hold {CLASS_ON} exactly once and never switch the class list off (A147, A149)')
+    if src.count(SEND_ON) != 1 or 'SS_SEND=false' in src:
+        raise Refused(f'the live page must hold {SEND_ON} exactly once and never switch the send off (A148, A149)')
     version = m[0] + '-test' + (f'-L{stamp}' if label else f'-{SS_LABEL}')
     title_pre, banner_pre = ('LOCAL TEST – ', 'LOCAL TEST – ') if label else ('TEST – ', 'TEST COPY – ')
     t = src
@@ -358,8 +395,6 @@ def build_page(src, label='', stamp=''):
     t = replace_once(t, "const MARKS_BASE='/marks/', STORE='';",
                      f"const MARKS_BASE='{TEST_BASE}', STORE='{TEST_STORE}';", 'MARKS_BASE and STORE')
     t = replace_once(t, f"const PAGE_VERSION='{m[0]}';", f"const PAGE_VERSION='{version}';", 'PAGE_VERSION')
-    t = replace_once(t, CLASS_OFF, CLASS_ON, 'the class list switch (A147)')
-    t = replace_once(t, SEND_OFF, SEND_ON, 'the send switch (A148)')
     titles = re.findall(r'<title>([^<]*)</title>', t)
     if len(titles) != 1:
         raise Refused(f'expected exactly one <title>, found {len(titles)}')
@@ -371,8 +406,7 @@ def build_page(src, label='', stamp=''):
               f'{TEST_BASE} · PAGE_VERSION {version}</div>')
     t = replace_once(t, '<body>', '<body>\n' + banner, 'body tag')
     ss_tag = f'<script src="{SS_FILE}?v={version}"></script>'
-    if not label:
-        t = replace_once(t, '</body>', ss_tag + '\n</body>', 'closing body tag')
+    t = replace_once(t, live_tag + '\n', '' if label else ss_tag + '\n', 'the panel script tag')
     # the result: no way back to live data, every storage key prefixed, the TEST markings present
     stray = [t[max(0, x.start() - 30):x.start() + 30] for x in re.finditer(r'/marks(?!-test/)', t)]
     if stray:
@@ -385,7 +419,7 @@ def build_page(src, label='', stamp=''):
                  '<meta name="robots" content="noindex,nofollow">'):
         if t.count(need) != 1:
             raise Refused(f'the test page must contain {need!r} exactly once (found {t.count(need)})')
-    if t.count(SS_FILE) != (0 if label else 1) or (not label and t.count(ss_tag) != 1):
+    if t.count(SS_FILE) != (0 if label else 1) or (not label and t.count(ss_tag) != 1) or SS_SRC + '?v=' in t:
         raise Refused(f'the test page must load {SS_FILE} exactly once, and a LOCAL page never')
     if label:
         problems = local_url_problems(t)
@@ -423,7 +457,7 @@ def main():
     ap.add_argument('--marks', default=os.path.join(ROOT, 'pages', 'marks', 'marks.php'))
     ap.add_argument('--manifest', default=os.path.join(ROOT, 'pages', 'course', 'manifest.webmanifest'))
     ap.add_argument('--assets', default=os.path.join(ROOT, 'pages', 'course', 'assets'))
-    ap.add_argument('--ss', default=os.path.join(ROOT, 'pages', 'course', SS_FILE))
+    ap.add_argument('--ss', default=os.path.join(ROOT, 'pages', 'course', SS_SRC))
     ap.add_argument('--out', default=os.path.join(ROOT, 'build', 'test'))
     ap.add_argument('--label', choices=['LOCAL'], default='', help='LOCAL: for the local test site only, never uploaded')
     a = ap.parse_args()
@@ -436,11 +470,8 @@ def main():
             marks = f.read()
         ss = None
         if not a.label:
-            with open(a.ss, 'rb') as f:
-                ss = f.read()
-            problems = ss_problems(ss.decode('utf-8'))
-            if problems:
-                raise Refused(f'{SS_FILE}:\n  ' + '\n  '.join(problems))
+            with open(a.ss, encoding='utf-8', newline='') as f:
+                ss = build_ss(f.read()).encode('utf-8')
         man = None
         if os.path.exists(a.manifest):
             with open(a.manifest, encoding='utf-8', newline='') as f:
@@ -496,7 +527,7 @@ def main():
                     f'course-test/index.html sha256 {sha(pb)}\n'
                     f'course-test/sw.js      sha256 {sha(wb)}\n'
                     f'marks-test/marks.php   sha256 {sha(marks)}\n'
-                    + (f'course-test/{SS_FILE} sha256 {sha(ss)} (copied from {source_of(a.ss, commit)})\n' if ss is not None
+                    + (f'course-test/{SS_FILE} sha256 {sha(ss)} (made from {source_of(a.ss, commit)})\n' if ss is not None
                        else f'{SS_FILE} left out: a LOCAL build never includes it\n')
                     + (f'manifest built from {source_of(a.manifest, commit)}\n'
                        f'course-test/manifest.webmanifest sha256 {sha(man)}\n'

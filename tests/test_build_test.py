@@ -148,18 +148,20 @@ altered in ways it must refuse and checks that it writes nothing:
                 sources and their sizes; the test build writes the test manifest (TEST names, /course-test/ only) and the
                 TEST icons byte for byte, and refuses a live manifest not naming /course/, a page whose manifest link is
                 not relative, and a missing test icon; the worker still handles only the page and key.js
- 35  Sail       Sail Scoring, Stage 1 (Pat, 27 October 2026): the test build copies sailscoring-test.js byte for byte,
-     Scoring    loads it once with ?v=<version> just before </body> (after the page's own script) and names it in
-                BUILD.txt; the live page and the LOCAL build never name it. Refused, writing nothing: a storage key
-                without STORE, STORE other than 'test-', /marks named, DELETE named, PUT or PATCH named outside the
-                table of writes, the table changed (a fifth write, the added start's address or its entry dropped), a fourth
-                request or a second POST, a write guard or the added-start guard removed, a
-                tokenPost that no longer refuses other addresses, and a live page naming the file. Stage 2 Part A
-                (A147): the live page holds const CLASS_LIST=false; once and reads, fetches and saves the class list
-                only behind it; the test page holds const CLASS_LIST=true; once; the panel never posts to marks.php
-                itself; refused, writing nothing: a live page with the switch on, without it, or with two. Stage 2
-                Part B (A148): the same for const SS_SEND, and the page reads and saves the day's record only behind
-                it; the panel never reaches marks.php itself
+ 35  Sail       Sail Scoring, live from .47 (STATUS A149, Pat 29 October 2026): the live page loads sailscoring.js
+     Scoring    once with ?v=<PAGE_VERSION> just before </body> (after the page's own script) and holds const
+                CLASS_LIST=true; and const SS_SEND=true; once each; the test build loads sailscoring-test.js instead,
+                made from sailscoring.js by changing exactly STORE, TEST, REDIRECT_URI and SEND_WS, and names it in
+                BUILD.txt; the LOCAL build names neither. Refused, writing nothing, for the live source or (where
+                the test form differs) the test file: a storage key without STORE, the wrong form of any of the four
+                lines, the workspace check or the TESTING rule removed, tradboats.ie named twice, /marks named,
+                DELETE named, PUT or PATCH named outside the table of writes, the table changed (a fifth write, the
+                added start's address or its entry dropped), a fourth request or a second POST, a write guard or the
+                added-start guard removed, a tokenPost that no longer refuses other addresses; and a live page
+                naming sailscoring-test.js, without its sailscoring.js tag, with two, with a tag not naming its
+                PAGE_VERSION, or with either switch off, missing or doubled. The page reads, fetches and saves the
+                class list (A147) and the day's record (A148) only behind the switches; the panel never reaches
+                marks.php itself
 Needs no PHP and no browser. Exits non-zero if any test fails.
 """
 import os
@@ -211,11 +213,11 @@ def t0_build(tmp):
     checks = {
         'key.js from /marks-test/': '<script src="/marks-test/key.js"></script>' in test,
         'MARKS_BASE and STORE': "const MARKS_BASE='/marks-test/', STORE='test-';" in test,
-        'PAGE_VERSION -test-ss7': f"const PAGE_VERSION='{v}-test-ss7';" in test,
+        'PAGE_VERSION -test-ss8': f"const PAGE_VERSION='{v}-test-ss8';" in test,
         'class list switched on (A147)': test.count('const CLASS_LIST=true;') == 1 and 'CLASS_LIST=false' not in test,
         'send switched on (A148)': test.count('const SS_SEND=true;') == 1 and 'SS_SEND=false' not in test,
         'no /marks other than /marks-test/': not re.search(r'/marks(?!-test/)', test),
-        'banner with version': f'PAGE_VERSION {v}-test-ss7</div>' in test and 'TEST COPY – not live data' in test,
+        'banner with version': f'PAGE_VERSION {v}-test-ss8</div>' in test and 'TEST COPY – not live data' in test,
         'TEST title': '<title>TEST – ' in test,
         'noindex': '<meta name="robots" content="noindex,nofollow">' in test,
         'marks.php byte-identical': read(os.path.join(out, 'marks-test', 'marks.php'), 'rb') == read(MARKS, 'rb'),
@@ -226,10 +228,9 @@ def t0_build(tmp):
     # nothing else changed: undo the known replacements and compare with the live page
     back = (test.replace('<script src="/marks-test/key.js"></script>', '<script src="/marks/key.js"></script>')
                 .replace("const MARKS_BASE='/marks-test/', STORE='test-';", "const MARKS_BASE='/marks/', STORE='';")
-                .replace(f"const PAGE_VERSION='{v}-test-ss7';", f"const PAGE_VERSION='{v}';")
-                .replace('const CLASS_LIST=true;', 'const CLASS_LIST=false;')
-                .replace('const SS_SEND=true;', 'const SS_SEND=false;')
-                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss7"></script>\n</body>', '</body>')
+                .replace(f"const PAGE_VERSION='{v}-test-ss8';", f"const PAGE_VERSION='{v}';")
+                .replace(f'<script src="sailscoring-test.js?v={v}-test-ss8"></script>\n</body>',
+                         f'<script src="sailscoring.js?v={v}"></script>\n</body>')
                 .replace('<title>TEST – ', '<title>')
                 .replace('<meta charset="utf-8">\n<meta name="robots" content="noindex,nofollow">', '<meta charset="utf-8">'))
     back = re.sub(r'<body>\n<div id="testBanner"[^\n]*</div>', '<body>', back)
@@ -404,7 +405,7 @@ def t2_refusals(tmp):
     out = os.path.join(tmp, 'out2')
     r = run(PAGE, out)                                  # a good build first: a refusal must leave it as it was
     before = read(os.path.join(out, 'course-test', 'index.html'), 'rb') if r.returncode == 0 else None
-    script_end = live.rindex('</script>')
+    script_end = live.rindex('</script>', 0, live.index('<script src="sailscoring.js?v='))   # the page's own script
     inject = lambda code: live[:script_end] + code + '\n' + live[script_end:]
     cases = {
         'setItem without STORE': inject("try{localStorage.setItem('ro-name','x');}catch(e){}"),
@@ -466,7 +467,7 @@ def t3_allowed(tmp):
     """What the check must NOT refuse: the forbidden words in comments only, and a regex literal holding a quote and
     // followed by a prefixed call (the tokenizer must not read the regex as a string or a comment)."""
     live = read(PAGE)
-    script_end = live.rindex('</script>')
+    script_end = live.rindex('</script>', 0, live.index('<script src="sailscoring.js?v='))   # the page's own script
     inject = lambda code: live[:script_end] + code + '\n' + live[script_end:]
     cases = {
         'words in comments only': inject("/* no document.cookie, indexedDB, caches, serviceWorker or a bare localStorage here */\n"
@@ -1471,11 +1472,11 @@ def t28_local_build(tmp):
     b = read(os.path.join(loc, 'BUILD.txt'))
     g('BUILD.txt names the version and LOCAL', f'PAGE_VERSION {lv}\n' in b and 'label LOCAL: for the local test site only' in b)
     g('the normal build names no LOCAL', 'LOCAL' not in nt and 'label LOCAL' not in read(os.path.join(norm, 'BUILD.txt')))
-    g('the LOCAL build leaves sailscoring-test.js out', 'sailscoring-test' not in lt
+    g('the LOCAL build leaves sailscoring-test.js and its tag out', 'sailscoring-test' not in lt and 'sailscoring.js?v=' not in lt
       and not os.path.exists(os.path.join(loc, 'course-test', 'sailscoring-test.js')))
-    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss7';")
-              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss7</div>')
-              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss7"></script>\n</body>')
+    back = (lt.replace(f"const PAGE_VERSION='{lv}';", f"const PAGE_VERSION='{v}-test-ss8';")
+              .replace(f'PAGE_VERSION {lv}</div>', f'PAGE_VERSION {v}-test-ss8</div>')
+              .replace('\n</body>', f'\n<script src="sailscoring-test.js?v={v}-test-ss8"></script>\n</body>')
               .replace('<title>LOCAL TEST – ', '<title>TEST – ')
               .replace('>LOCAL TEST – not live data · ', '>TEST COPY – not live data · '))
     g('nothing else differs from the normal build', back == nt)
@@ -1483,7 +1484,7 @@ def t28_local_build(tmp):
         g(f + ' byte-identical to the normal build\'s', read(os.path.join(loc, f), 'rb') == read(os.path.join(norm, f), 'rb'))
     # refused in a LOCAL build, built normally; a refusal leaves the earlier LOCAL build as it was
     before = read(os.path.join(loc, 'course-test', 'index.html'), 'rb')
-    script_end = live.rindex('</script>')
+    script_end = live.rindex('</script>', 0, live.index('<script src="sailscoring.js?v='))   # the page's own script
     inject = lambda code: live[:script_end] + code + '\n' + live[script_end:]
     cases = {
         'tradboats.ie in a comment': live.replace('<head>', '<head>\n<!-- copied from tradboats.ie -->', 1),
@@ -1706,7 +1707,7 @@ def t32_v46(tmp):
     page = read(PAGE)
     code = build_test.strip_comments(page)
     g = lambda name, ok, detail='': report('32 .46: ' + name, ok, detail)
-    g('PAGE_VERSION 2026-10-06.46e', "const PAGE_VERSION='2026-10-06.46e';" in code)
+    g('PAGE_VERSION 2026-10-06.47', "const PAGE_VERSION='2026-10-06.47';" in code)
     # A123
     g('A123: it is red: the warning colour as its background',
       '.lineNotSet{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:6px;background:var(--warn);color:var(--paper);font-weight:700;font-size:.9rem}' in page)
@@ -1934,8 +1935,11 @@ def t34_line_rules_guards():
 
 
 def t35_sailscoring(tmp):
-    """Sail Scoring, Stage 1: sailscoring-test.js in the test build only, and the build's checks on it."""
-    ss = os.path.join(ROOT, 'pages', 'course', 'sailscoring-test.js')
+    """Sail Scoring: sailscoring.js on the live page, sailscoring-test.js made from it in the test build, and the
+    build's checks on both (A149)."""
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    import build_test
+    ss = os.path.join(ROOT, 'pages', 'course', 'sailscoring.js')
     live, js = read(PAGE), read(ss)
     v = re.search(r"const PAGE_VERSION='([^']+)';", live).group(1)
     g = lambda name, ok, detail='': report('35 Sail Scoring: ' + name, ok, detail)
@@ -1945,18 +1949,47 @@ def t35_sailscoring(tmp):
     if r.returncode:
         return
     test = read(os.path.join(out, 'course-test', 'index.html'))
-    tag = f'<script src="sailscoring-test.js?v={v}-test-ss7"></script>'
-    g('the live page does not name the file', 'sailscoring-test' not in live)
-    g('the test page loads it once, after the page\'s own script, just before </body>',
-      test.count('sailscoring-test') == 1 and test.count('</script>\n' + tag + '\n</body>') == 1, test[-200:])
-    g('copied byte for byte', read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb') == read(ss, 'rb'))
-    g('BUILD.txt names it', 'course-test/sailscoring-test.js sha256 ' in read(os.path.join(out, 'BUILD.txt')))
-    g('the redirect address is a fixed constant', "const REDIRECT_URI='https://tradboats.ie/course-test/';" in js
-      and 'location.href' not in js.split('*/', 1)[1])
+    tjs = read(os.path.join(out, 'course-test', 'sailscoring-test.js'))
+    ltag, tag = f'<script src="sailscoring.js?v={v}"></script>', f'<script src="sailscoring-test.js?v={v}-test-ss8"></script>'
+    g('the live page loads sailscoring.js once, after its own script, just before </body>, with its PAGE_VERSION',
+      live.count('sailscoring.js?v=') == 1 and live.count('</script>\n' + ltag + '\n</body>') == 1
+      and 'sailscoring-test' not in live, live[-200:])
+    g('the test page loads sailscoring-test.js instead, once, just before </body>',
+      test.count('sailscoring-test') == 1 and test.count('</script>\n' + tag + '\n</body>') == 1
+      and 'sailscoring.js?v=' not in test, test[-200:])
+    back = tjs
+    for a, b in build_test.SS_LINES:
+        back = back.replace(b, a)
+    g('the test file differs from sailscoring.js in exactly the four lines',
+      back == js and all(tjs.count(b) == 1 and a not in tjs for a, b in build_test.SS_LINES)
+      and all(js.count(a) == 1 for a, _ in build_test.SS_LINES))
+    g('the live lines: no prefix, not TEST, /course/, Royal Cork Yacht Club and ORC Ireland',
+      [a for a, _ in build_test.SS_LINES] == ["const STORE='';", "const TEST=false;",
+                                              "const REDIRECT_URI='https://tradboats.ie/course/';",
+                                              "const SEND_WS=['rcyc','orc-ireland'];"])
+    g('the test lines: test-, TEST, /course-test/, ORC Ireland only',
+      [b for _, b in build_test.SS_LINES] == ["const STORE='test-';", "const TEST=true;",
+                                              "const REDIRECT_URI='https://tradboats.ie/course-test/';",
+                                              "const SEND_WS=['orc-ireland'];"])
+    g('BUILD.txt names the test file', 'course-test/sailscoring-test.js sha256 ' in read(os.path.join(out, 'BUILD.txt')))
+    g('the redirect address is a fixed constant', 'location.href' not in js.split('*/', 1)[1])
+    g('the workspace stop and the TESTING rule, each once',
+      js.count("if(!wsOk(wsl))stops.push(") == 1 and js.count("if(TEST&&!String(ser.name).includes(SEND_TESTING))stops.push(") == 1)
+    g('the live wording: the panel is "Sail Scoring", "(test)" and "Test of" only on the test copy',
+      js.count("'<summary><h2>Sail Scoring'+(TEST?' (test)':'')+'</h2></summary>'") == 1
+      and js.count("(TEST?'Test of the Sail Scoring connection. ':'')") == 1 and 'Test copy is' not in js
+      and 'The test copy is connected' not in js)
     before = read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb')
     cases = {
         'a storage key without STORE': js.replace("localStorage.removeItem(PTR);", "localStorage.removeItem('x');"),
-        "STORE other than 'test-'": js.replace("const STORE='test-';", "const STORE='';"),
+        "the test copy's STORE in the live file": js.replace("const STORE='';", "const STORE='test-';"),
+        'TEST on in the live file': js.replace("const TEST=false;", "const TEST=true;"),
+        "the test copy's redirect in the live file": js.replace("tradboats.ie/course/'", "tradboats.ie/course-test/'"),
+        'another workspace allowed': js.replace("const SEND_WS=['rcyc','orc-ireland'];", "const SEND_WS=['rcyc','orc-ireland','other'];"),
+        'the workspace check by name, not slug': js.replace("SEND_WS.includes(String(list[0].slug))", "SEND_WS.includes(String(list[0].name))"),
+        'the workspace stop removed': js.replace("if(!wsOk(wsl))stops.push(", "if(false)stops.push("),
+        'the TESTING rule removed': js.replace("if(TEST&&!String(ser.name).includes(SEND_TESTING))", "if(false)"),
+        'tradboats.ie named twice': js.replace("const PENDING='pending';", "const PENDING='pending',H='tradboats.ie';"),
         '/marks named': js.replace("const PENDING='pending';", "const PENDING='/marks/pending';"),
         'PUT named outside the table': js.replace("const PENDING='pending';", "const PENDING='pending',M='PUT';"),
         'PATCH named outside the table': js.replace("const PENDING='pending';", "const PENDING='pending',M='PATCH';"),
@@ -1981,44 +2014,48 @@ def t35_sailscoring(tmp):
         r = run(PAGE, out, ss=p)
         g('refused: ' + name, text != js and r.returncode != 0 and 'REFUSED' in r.stdout
           and read(os.path.join(out, 'course-test', 'sailscoring-test.js'), 'rb') == before, r.stdout.strip()[:160])
-    p = os.path.join(tmp, 'bad35.html')
-    with open(p, 'w', encoding='utf-8', newline='') as f:
-        f.write(live.replace('<head>', '<head>\n<script src="sailscoring-test.js"></script>', 1))
-    r = run(p, out)
-    g('refused: a live page naming the file', r.returncode != 0 and 'REFUSED' in r.stdout, r.stdout.strip()[:160])
-    # Stage 2 Part A (A147): the class list is off in the live source and in nothing the live site gets, on in the test page
-    g('class list: the live page holds CLASS_LIST=false once and never true',
-      live.count('const CLASS_LIST=false;') == 1 and 'CLASS_LIST=true' not in live)
-    g('class list: the test page holds CLASS_LIST=true once and never false',
-      test.count('const CLASS_LIST=true;') == 1 and 'CLASS_LIST=false' not in test)
-    g('class list: the live page reads and saves it only behind the switch',
-      live.count("if(CLASS_LIST){try{const j=JSON.parse(localStorage.getItem(STORE+'class-list')") == 1
-      and live.count('if(CLASS_LIST)await pullClassList();') == 1 and live.count('if(CLASS_LIST)window.courseClassList=') == 1
-      and live.count('await pullClassList()') == 1 and live.count('window.courseClassList=') == 1)
-    g('class list: the panel never reaches marks.php itself', "action:'classes'" not in js and 'classes.json' in js)
-    # Stage 2 Part B (A148): the send is off in the live source, on in the test page, and the page's part only behind it
-    g('send: the live page holds SS_SEND=false once and never true',
-      live.count('const SS_SEND=false;') == 1 and 'SS_SEND=true' not in live)
-    g('send: the test page holds SS_SEND=true once and never false',
-      test.count('const SS_SEND=true;') == 1 and 'SS_SEND=false' not in test)
-    g('send: the live page offers the send only behind the switch',
-      live.count('if(SS_SEND)window.courseSailScoring=') == 1 and live.count('courseSailScoring') == 1
-      and live.count("action:'sailscoring'") == 1 and live.count('?type=sailscoring') == 1)
-    g('send: the panel never reaches marks.php itself', "action:'sailscoring'" not in js and 'type=sailscoring' not in js
-      and 'sailscoring-DAY.json' in js)
-    for name, text in {'CLASS_LIST=true in the live page': live.replace('const CLASS_LIST=false;', 'const CLASS_LIST=true;'),
-                       'no CLASS_LIST switch in the live page': live.replace('const CLASS_LIST=false;', ''),
-                       'two CLASS_LIST switches': live.replace('const CLASS_LIST=false;', 'const CLASS_LIST=false;const CLASS_LIST=false;'),
-                       'SS_SEND=true in the live page': live.replace('const SS_SEND=false;', 'const SS_SEND=true;'),
-                       'no SS_SEND switch in the live page': live.replace('const SS_SEND=false;', ''),
-                       'two SS_SEND switches': live.replace('const SS_SEND=false;', 'const SS_SEND=false;const SS_SEND=false;')}.items():
+    try:
+        t = build_test.build_ss(js)
+        g('the made test file passes its own checks and the live file fails them',
+          build_test.ss_problems(t, False) == [] and build_test.ss_problems(js, False) != []
+          and build_test.ss_problems(t, True) != [] and build_test.ss_problems(js, True) == [])
+    except build_test.Refused as e:
+        g('the made test file passes its own checks and the live file fails them', False, str(e))
+    pages = {
+        'a live page naming the test file': live.replace('<head>', '<head>\n<script src="sailscoring-test.js"></script>', 1),
+        'a live page without its sailscoring.js tag': live.replace(ltag + '\n', ''),
+        'a live page loading sailscoring.js twice': live.replace('<head>', '<head>\n' + ltag, 1),
+        'a tag not naming the PAGE_VERSION': live.replace(ltag, ltag.replace(v, v + 'x')),
+        'the tag not just before </body>': live.replace(ltag + '\n</body>', '</body>').replace('<body>', '<body>\n' + ltag, 1),
+        'CLASS_LIST=false in the live page': live.replace('const CLASS_LIST=true;', 'const CLASS_LIST=false;'),
+        'no CLASS_LIST switch in the live page': live.replace('const CLASS_LIST=true;', ''),
+        'two CLASS_LIST switches': live.replace('const CLASS_LIST=true;', 'const CLASS_LIST=true;const CLASS_LIST=true;'),
+        'SS_SEND=false in the live page': live.replace('const SS_SEND=true;', 'const SS_SEND=false;'),
+        'no SS_SEND switch in the live page': live.replace('const SS_SEND=true;', ''),
+        'two SS_SEND switches': live.replace('const SS_SEND=true;', 'const SS_SEND=true;const SS_SEND=true;'),
+    }
+    for name, text in pages.items():
         p = os.path.join(tmp, 'bad35c.html')
         with open(p, 'w', encoding='utf-8', newline='') as f:
             f.write(text)
         before = read(os.path.join(out, 'course-test', 'index.html'), 'rb')
         r = run(p, out)
-        g('refused: ' + name, r.returncode != 0 and 'REFUSED' in r.stdout
+        g('refused: ' + name, text != live and r.returncode != 0 and 'REFUSED' in r.stdout
           and read(os.path.join(out, 'course-test', 'index.html'), 'rb') == before, r.stdout.strip()[:160])
+    # Stage 2 Part A (A147) and Part B (A148): the page's parts only behind the switches, the panel never reaches marks.php
+    g('class list: the page reads and saves it only behind the switch',
+      live.count("if(CLASS_LIST){try{const j=JSON.parse(localStorage.getItem(STORE+'class-list')") == 1
+      and live.count('if(CLASS_LIST)await pullClassList();') == 1 and live.count('if(CLASS_LIST)window.courseClassList=') == 1
+      and live.count('await pullClassList()') == 1 and live.count('window.courseClassList=') == 1)
+    g('class list: the panel never reaches marks.php itself', "action:'classes'" not in js and 'classes.json' in js)
+    pcl = fn_body(live, 'async function pullClassList(').split('\nif(CLASS_LIST)window.courseClassList=')[0]
+    g('class list: read during the day\'s load, it draws nothing (the load draws when it ends, with the new day\'s start)',
+      'setClubList(j.list)' in pcl and 'render(' not in pcl, pcl)
+    g('send: the page offers the send only behind the switch',
+      live.count('if(SS_SEND)window.courseSailScoring=') == 1 and live.count('courseSailScoring') == 1
+      and live.count("action:'sailscoring'") == 1 and live.count('?type=sailscoring') == 1)
+    g('send: the panel never reaches marks.php itself', "action:'sailscoring'" not in js and 'type=sailscoring' not in js
+      and 'sailscoring-DAY.json' in js)
 
 
 def main():

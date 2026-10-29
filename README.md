@@ -175,6 +175,13 @@ there is refused with 403).
   No page uses it. A course save may carry
   `by` (who saved it); the course page does not send it.
 - The race key is also accepted as `?key=` in the address; neither page sends it.
+- *Sail Scoring.* The club's class list is `classes.json` (one for every day, its
+  replaced versions in `classes-history.json`), saved with action `classes` and read
+  with `GET ?type=classes`. Each day's link to Sail Scoring (which series, race and
+  start each page race and start was sent to, and each course's fingerprint) is
+  `sailscoring-YYYY-MM-DD.json`, with a history, saved with action `sailscoring` and
+  read with `GET ?type=sailscoring&date=`. Neither holds a token, and neither file
+  exists until the first save.
 
 ### Course page (`pages/course/course_v8.html`, served as `/course/`)
 
@@ -292,6 +299,19 @@ changes; if any cannot be sent the change of day stops ("Still on …"), and
   series as `"x-series"`. The name is the date, race and start, followed by any
   INCOMPLETE or STAND-IN warning. A start with no start time is not exported.
   Rounding sides are never sent.
+
+**Sail Scoring panel** (`pages/course/sailscoring.js`, served beside the page as
+`/course/sailscoring.js`, loaded by one script tag carrying the `PAGE_VERSION`). A
+closed panel at the foot of Setup, shown to everyone; only someone who connects
+can use it. Connect signs in to Sail Scoring (OAuth with PKCE, no secret; the
+tokens stay in this browser only). The panel reads the workspace's series, saves a
+series' classes as the club's class list (the class box then offers those names on
+every device), and sends the race day to a series the scorer picks: races and
+starts found or created, each start given its classes, gun time and the Copy for
+Sail Scoring course, after a review whose stops must all be clear. It writes only
+to the Royal Cork Yacht Club (`rcyc`) or ORC Ireland (`orc-ireland`) workspace,
+and never removes anything from Sail Scoring. The service worker does not keep the
+panel, so it is absent without signal.
 
 **Clear everything** (foot of Setup, tap twice) clears this device as a reload
 would; nothing is sent, and the first tap warns about anything unsent.
@@ -422,6 +442,7 @@ the page in headless Edge against `marks.php` on PHP 5.5:
 
     pages/course/course_v8.html  ->  /course/index.html
     pages/course/sw.js           ->  /course/sw.js       (upload before the page)
+    pages/course/sailscoring.js  ->  /course/sailscoring.js   (upload before the page)
     pages/record/sw.js           ->  /record/sw.js       (upload before the page)
     pages/record/index.html      ->  /record/index.html
     pages/marks/marks.php        ->  /marks/marks.php
@@ -453,13 +474,18 @@ copy.
 
     python scripts/build_test.py        ->  build/test/   (ignored by git)
     build/test/course-test/sw.js        ->  /course-test/sw.js      (upload before the page)
+    build/test/course-test/sailscoring-test.js  ->  /course-test/sailscoring-test.js   (before the page)
     build/test/course-test/index.html   ->  /course-test/index.html
     build/test/marks-test/marks.php     ->  /marks-test/marks.php
 
 `BUILD.txt` names where each built file came from. The test page differs from the
 live one only in its `key.js` path and `MARKS_BASE` (`/marks-test/`), `STORE`
 (`test-`, so it never shares browser storage with the live page), `-test` on
-`PAGE_VERSION`, "TEST" in the title, `noindex`, and a red banner.
+`PAGE_VERSION`, "TEST" in the title, `noindex`, a red banner, and loading
+`sailscoring-test.js` instead of `sailscoring.js`. That file differs from
+`sailscoring.js` in four lines only: `STORE` (`test-`), `TEST` (the test wording,
+and sending only to a series whose name holds TESTING), the sign-in return address
+(`/course-test/`) and the workspaces it sends to (ORC Ireland only).
 The test worker differs from the live one only in its `key.js` path
 (`/marks-test/key.js`); its saved copies are named for `/course-test/`, so the test
 and live copies never touch each other's.
@@ -523,7 +549,7 @@ seconds: the PHP folder and the local site's folder need exclusions.
 
    These backups hold real recorder names and phone ids: never share them.
 5. **Upload** in FileZilla, Binary mode: `marks.php` first if it changed, then
-   `/course/sw.js`, then the page. Download each back and compare its SHA-256 with
+   `/course/sw.js` and `/course/sailscoring.js` if they changed, then the page. Download each back and compare its SHA-256 with
    the file uploaded.
 6. **Check** in a private window by view-source: the new `PAGE_VERSION`,
    `MARKS_BASE='/marks/'` and `STORE=''`, and no test banner. Load a raced day and
@@ -536,7 +562,8 @@ seconds: the PHP folder and the local site's folder need exclusions.
 The detailed steps for each release are written to `build/release/` (not in git).
 
 **Rollback.** Upload the backed-up page and `sw.js` (and `marks.php`, if it was
-replaced) and restore the whole `/marks/data/` backup: an older page may not read
+replaced), delete on the server any file new in that release (such as
+`/course/sailscoring.js` for a page that never loaded it) and restore the whole `/marks/data/` backup: an older page may not read
 what a newer one saved. If the page rolled back to has no service worker, upload
 `pages/course/sw-kill.js` as `/course/sw.js` instead, so every device drops the
 newer page's saved copy. Anything saved after the backup is lost and must be

@@ -6,7 +6,9 @@
 The page is offline-first, so the snapshot from make_snapshot.py is embedded as
 one line, `const CARD={...};`, rather than fetched. This replaces exactly that
 line, and nothing else except PAGE_VERSION, which moves on so phones holding an
-old copy reload: to today's date and .1, or the next number if already today.
+old copy reload: to today's date and .1, or the next number if already today,
+and the Sail Scoring panel's script tag (sailscoring.js?v=PAGE_VERSION, STATUS
+A149), whose version moves with it so no browser keeps an old panel.
 
 Before writing it prints what changed in the snapshot, field by field, so a
 release can be checked (after a workbook-only change, expect just meta.source
@@ -18,8 +20,8 @@ byte-identical copy that is uploaded as /course/index.html. It is written from
 the same bytes as the page, in the same step, even when the snapshot is already
 current, so a copy left stale by an interrupted run is put right by the next.
 
-Refuses, and writes nothing, if the page does not have exactly one CARD line
-and one PAGE_VERSION, or if the result would not read back as the snapshot.
+Refuses, and writes nothing, if the page does not have exactly one CARD line,
+one PAGE_VERSION and one panel script tag naming that PAGE_VERSION, or if the result would not read back as the snapshot.
 """
 import argparse
 import datetime
@@ -33,6 +35,7 @@ from make_snapshot import SnapshotError, build, dumps  # noqa: E402
 
 CARD = 'const CARD='
 VERSION = re.compile(r"const PAGE_VERSION='(\d{4}-\d{2}-\d{2})\.(\d+)';")
+SS_TAG = '<script src="sailscoring.js?v={}"></script>'
 
 
 def changes(old, new, path=''):
@@ -87,6 +90,9 @@ def main():
         sys.exit(f'{a.page}: expected one line starting {CARD!r}, found {len(at)}; nothing written')
     if len(VERSION.findall(page)) != 1:
         sys.exit(f'{a.page}: expected one PAGE_VERSION; nothing written')
+    cur = '.'.join(VERSION.search(page).groups())
+    if page.count('sailscoring.js?v=') != 1 or page.count(SS_TAG.format(cur)) != 1:
+        sys.exit(f'{a.page}: expected one {SS_TAG.format(cur)}; nothing written')
     line = lines[at[0]]
     eol = '\r' if line.endswith('\r') else ''
     old = json.loads(line[len(CARD):].rstrip('\r').rstrip(';'))
@@ -115,6 +121,7 @@ def main():
     version = f'{today}.{int(n) + 1 if day == today else 1}'
     lines[at[0]] = CARD + dumps(snap) + ';' + eol
     out = VERSION.sub(f"const PAGE_VERSION='{version}';", '\n'.join(lines), count=1)
+    out = out.replace(SS_TAG.format(cur), SS_TAG.format(version))
 
     back = json.loads([x for x in out.split('\n') if x.startswith(CARD)][0][len(CARD):].rstrip('\r').rstrip(';'))
     if back != snap:

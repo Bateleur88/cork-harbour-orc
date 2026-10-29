@@ -493,7 +493,7 @@ const MARKS_BASE='/marks/', STORE='';
 /* ---------- always run the newest copy of this page ----------
    Browsers sometimes reuse an old saved copy. On opening, the page quietly checks the server's copy;
    if it is newer, it reloads from a fresh address. Change PAGE_VERSION whenever the file is updated. */
-const PAGE_VERSION='2026-10-06.46e';
+const PAGE_VERSION='2026-10-06.47';
 /* A65 (Pat, 16 October 2026): course saves (the day's series among them) and the direct fix actions (withdraw, correct,
    move to another race, Undo's and Remove Start's withdrawals) wait until this copy of the page has confirmed its version
    with the server since it was opened; new fixes (S.outbox) never wait, and nor does Send. Once confirmed it is never
@@ -877,13 +877,14 @@ function renderPicked(bm){const r=S.race, box=$('pickBank'), ids=new Set(bm.map(
       '<button type="button" class="pickX" data-unpick="'+esc(k)+'" aria-label="'+esc('Remove the '+lab+' chip'+(inUse?': '+inUse:''))+'"'+
         (inUse?' disabled title="'+esc(inUse)+'"':'')+'>×</button></span>';}).join('')+'</div>';}
 const CLASSES=['Class 1 Spinnaker','Class 2 Spinnaker','Class 3 Spinnaker','Class 1 Non Spinnaker','Class 2 Non Spinnaker','Class 3 Non Spinnaker'];
-/* A147 (Pat, 27 October 2026): the club's class list, saved from Sail Scoring by the scorer (the test page's Sail Scoring
-   panel) in marks.php's classes.json, read with the day's marks and kept on this device for no signal (STORE+'class-list').
-   CLASS_LIST is false here and true only in a test copy made by scripts/build_test.py: while it is false nothing reads,
-   fetches or keeps a list, clubList stays null and the class box is exactly as before. With a list the class box offers
+/* A147 (Pat, 27 October 2026): the club's class list, saved from Sail Scoring by the scorer (the page's Sail Scoring
+   panel, sailscoring.js) in marks.php's classes.json, read with the day's marks and kept on this device for no signal
+   (STORE+'class-list'). CLASS_LIST is true, live and on the test copy, from .47 (STATUS A149); while it is false nothing
+   reads, fetches or keeps a list, clubList stays null and the class box is exactly as before. With no list saved the
+   class box is also exactly as before. With a list the class box offers
    its class names, in its order, and every name is shown in full; a start holding a class not in the list keeps it,
    ticked, marked "not in the current class list". */
-const CLASS_LIST=false;
+const CLASS_LIST=true;
 let clubList=null;
 if(CLASS_LIST){try{const j=JSON.parse(localStorage.getItem(STORE+'class-list')||'null');if(j&&Array.isArray(j.classes))clubList=j;}catch(_){}}
 function classList(){return clubList?clubList.classes.map(c=>c.name):CLASSES;}
@@ -4602,22 +4603,24 @@ function cbLabel(){return 'Record committee boat here – Race '+S.race;}
 /* A refused reply throws 'server <status>' as before, with e.status and e.text, the
    server's own error text cut to 120 characters (shown escaped). ms: abandon the request after ms milliseconds, an
    AbortError ("no reply"); course saves (the day's series among them, A8) and the queue (sendOutbox) pass it. */
-/* A147: the club's class list from the server (null: none saved); with no signal the copy on this device stays. The test
-   page's Sail Scoring panel saves or removes it through window.courseClassList, after the page version is confirmed (A65). */
+/* A147: the club's class list from the server (null: none saved); with no signal the copy on this device stays. The
+   page's Sail Scoring panel saves or removes it through window.courseClassList, after the page version is confirmed (A65).
+   Read during the day's load, before the load has chosen the new day's start: the load draws the page when it ends, so
+   this draws nothing (a draw here would draw the old day's start number on the new day, and keep it as an empty start). */
 async function pullClassList(){
   try{const r=await keyFetch(ENDPOINT+'?type=classes',{}), j=await r.json();
-    if(r.ok&&j.ok&&(j.list===null||(j.list&&Array.isArray(j.list.classes)))){setClubList(j.list);render();}}catch(_){}}
+    if(r.ok&&j.ok&&(j.list===null||(j.list&&Array.isArray(j.list.classes))))setClubList(j.list);}catch(_){}}
 if(CLASS_LIST)window.courseClassList={get:()=>clubList,
   save:async list=>{
     if(!verOk&&!(await ensureVersion()))throw new Error(verStuck?'a newer page is on the server: tap Reload under Get latest marks':'the page version could not be checked: try again with signal');
     await postFix({action:'classes',list},OUTBOX_TIMEOUT_MS); setClubList(list); render();}};
-/* A148 (Pat, 28 October 2026): the test page's Sail Scoring panel sends the race day to Sail Scoring. SS_SEND is false
-   here and true only in a test copy made by scripts/build_test.py: while it is false nothing here runs and the panel is
-   given nothing. The page gives the panel, read only, what it would send: the day loaded, its series, and each race's
+/* A148 (Pat, 28 October 2026): the page's Sail Scoring panel (sailscoring.js) sends the race day to Sail Scoring. SS_SEND
+   is true, live and on the test copy, from .47 (STATUS A149); while it is false nothing here runs and the panel is given
+   nothing. The page gives the panel, read only, what it would send: the day loaded, its series, and each race's
    starts with their classes, start time and the Copy for Sail Scoring document (ccDoc, unchanged). It reads and saves
    the day's link to Sail Scoring (marks.php sailscoring-DAY.json), the save after the page version is confirmed (A65).
    The panel never reaches marks.php itself. */
-const SS_SEND=false;
+const SS_SEND=true;
 if(SS_SEND)window.courseSailScoring={
   day:()=>S.pulledDay&&$('day').value===S.pulledDay?S.pulledDay:'',
   series:()=>daySeries(),
@@ -5403,5 +5406,6 @@ if(S.pulledDay){const was=S.pulledDay, now=$('day').value;
     $('readStatus').className='status';pull(true);}}
 })();
 </script>
+<script src="sailscoring.js?v=2026-10-06.47"></script>
 </body>
 </html>
